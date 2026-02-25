@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Static vs Dynamic vs Continuous Batching</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#0a0a0f;color:#e2e8f0;overflow-x:hidden;scroll-behavior:smooth}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#0a0a0f}
+::-webkit-scrollbar-thumb{background:#6366f1;border-radius:3px}
+.section{min-height:100vh;padding:60px 40px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
+.section-counter{position:absolute;top:20px;left:40px;font-size:12px;color:#6366f1;font-weight:600;letter-spacing:2px;text-transform:uppercase}
+h1{font-size:clamp(2rem,5vw,3.5rem);font-weight:800;text-align:center;margin-bottom:10px;background:linear-gradient(135deg,#6366f1,#22d3ee);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+h2{font-size:clamp(1.5rem,3vw,2.2rem);font-weight:700;text-align:center;margin-bottom:20px;color:#e2e8f0}
+.subtitle{font-size:1.1rem;color:#94a3b8;text-align:center;max-width:700px;margin:0 auto 40px;line-height:1.7}
+.nav-dots{position:fixed;right:20px;top:50%;transform:translateY(-50%);z-index:100;display:flex;flex-direction:column;gap:12px}
+.nav-dot{width:10px;height:10px;border-radius:50%;background:#334155;cursor:pointer;transition:all .3s}
+.nav-dot.active{background:#6366f1;box-shadow:0 0 10px #6366f1}
+.progress-bar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6366f1,#22d3ee);z-index:200;transition:width .3s}
+.card{background:linear-gradient(135deg,#12121a,#1a1a2e);border:1px solid #1e293b;border-radius:16px;padding:30px;transition:all .3s}
+.card:hover{border-color:#6366f1;transform:translateY(-2px)}
+.gantt-container{width:100%;max-width:1200px;margin:0 auto}
+.three-panel{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;width:100%;max-width:1200px}
+@media(max-width:900px){.three-panel{grid-template-columns:1fr}}
+.panel{background:#12121a;border:1px solid #1e293b;border-radius:16px;padding:20px;min-height:400px;position:relative;overflow:hidden}
+.panel-title{font-size:1rem;font-weight:700;margin-bottom:15px;display:flex;align-items:center;gap:8px}
+.panel-title .dot{width:10px;height:10px;border-radius:50%}
+.timeline-area{position:relative;height:300px;overflow:hidden}
+.request-bar{position:absolute;height:28px;border-radius:4px;display:flex;align-items:center;padding:0 8px;font-size:11px;font-weight:600;transition:all .4s ease;opacity:0.9}
+.request-bar.waiting{opacity:0.4;border:2px dashed rgba(239,68,68,0.5)}
+.request-bar .wait-indicator{position:absolute;left:0;top:0;height:100%;background:rgba(239,68,68,0.3);border-radius:4px 0 0 4px}
+.controls-panel{background:#12121a;border:1px solid #1e293b;border-radius:16px;padding:30px;width:100%;max-width:1200px;margin-top:30px}
+.slider-group{display:flex;flex-wrap:wrap;gap:30px;align-items:center;justify-content:center}
+.slider-item{display:flex;flex-direction:column;gap:8px;min-width:200px}
+.slider-item label{font-size:13px;color:#94a3b8;font-weight:500}
+.slider-item input[type=range]{-webkit-appearance:none;height:6px;border-radius:3px;background:#1e293b;outline:none}
+.slider-item input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#6366f1;cursor:pointer}
+.slider-value{font-size:14px;font-weight:700;color:#22d3ee}
+.metrics-row{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;width:100%;max-width:1200px;margin-top:20px}
+.metric-card{background:#12121a;border:1px solid #1e293b;border-radius:12px;padding:20px;text-align:center}
+.metric-card .label{font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px}
+.metric-card .value{font-size:2rem;font-weight:800;margin-top:5px}
+.metric-card .sub{font-size:11px;color:#64748b;margin-top:3px}
+.metric-static .value{color:#f59e0b}
+.metric-dynamic .value{color:#6366f1}
+.metric-continuous .value{color:#22d3ee}
+.btn{padding:10px 24px;border-radius:8px;border:none;font-family:'Inter',sans-serif;font-weight:600;font-size:14px;cursor:pointer;transition:all .3s}
+.btn-primary{background:#6366f1;color:#fff}
+.btn-primary:hover{background:#818cf8;transform:translateY(-1px)}
+.btn-outline{background:transparent;border:1px solid #6366f1;color:#6366f1}
+.btn-outline:hover{background:#6366f1;color:#fff}
+.explanation-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;width:100%;max-width:1200px}
+@media(max-width:900px){.explanation-grid{grid-template-columns:1fr}}
+.explanation-card{padding:25px;border-radius:16px;background:#12121a;border:1px solid #1e293b}
+.explanation-card h3{font-size:1.1rem;margin-bottom:10px}
+.explanation-card p{font-size:14px;color:#94a3b8;line-height:1.7}
+.token-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;margin-top:15px}
+.token-cell{width:100%;aspect-ratio:1;border-radius:4px;transition:all .3s}
+.winner-banner{background:linear-gradient(135deg,rgba(34,211,238,0.1),rgba(99,102,241,0.1));border:1px solid #22d3ee;border-radius:16px;padding:40px;text-align:center;max-width:800px;width:100%}
+.winner-banner h2{color:#22d3ee}
+.comparison-table{width:100%;max-width:900px;border-collapse:collapse;margin-top:20px}
+.comparison-table th,.comparison-table td{padding:12px 20px;text-align:center;border-bottom:1px solid #1e293b;font-size:14px}
+.comparison-table th{color:#94a3b8;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:1px}
+.comparison-table td{color:#e2e8f0}
+.highlight-green{color:#10b981;font-weight:700}
+.highlight-red{color:#ef4444;font-weight:700}
+.highlight-yellow{color:#f59e0b;font-weight:700}
+.fade-in{opacity:0;transform:translateY(30px);transition:all .8s ease}
+.fade-in.visible{opacity:1;transform:translateY(0)}
+canvas{border-radius:12px}
+</style>
+</head>
+<body>
+<div class="progress-bar" id="progressBar"></div>
+<nav class="nav-dots" id="navDots"></nav>
+
+<!-- Section 1: Hero -->
+<div class="section" id="s1">
+<div class="section-counter">01 / 08 - Batching Strategies</div>
+<h1>Static vs Dynamic vs<br>Continuous Batching</h1>
+<p class="subtitle">How you batch requests makes the difference between 10 and 10,000 requests per second. Explore three strategies and see why continuous batching dominates LLM inference.</p>
+<div style="display:flex;gap:15px;margin-top:20px">
+<button class="btn btn-primary" onclick="document.getElementById('s2').scrollIntoView({behavior:'smooth'})">Start Exploring</button>
+</div>
+</div>
+
+<!-- Section 2: Three Panel Comparison -->
+<div class="section" id="s2">
+<div class="section-counter">02 / 08 - Side by Side</div>
+<h2>Three Batching Strategies</h2>
+<p class="subtitle">Watch how each strategy handles incoming requests differently</p>
+<div class="three-panel" id="threePanels">
+<div class="panel">
+<div class="panel-title"><span class="dot" style="background:#f59e0b"></span>Static Batching</div>
+<canvas id="canvasStatic" width="340" height="300"></canvas>
+</div>
+<div class="panel">
+<div class="panel-title"><span class="dot" style="background:#6366f1"></span>Dynamic Batching</div>
+<canvas id="canvasDynamic" width="340" height="300"></canvas>
+</div>
+<div class="panel">
+<div class="panel-title"><span class="dot" style="background:#22d3ee"></span>Continuous Batching</div>
+<canvas id="canvasContinuous" width="340" height="300"></canvas>
+</div>
+</div>
+<div style="margin-top:20px">
+<button class="btn btn-primary" id="runSimBtn" onclick="runSimulation()">Run Simulation</button>
+<button class="btn btn-outline" style="margin-left:10px" onclick="resetSimulation()">Reset</button>
+</div>
+</div>
+
+<!-- Section 3: Interactive Controls -->
+<div class="section" id="s3">
+<div class="section-counter">03 / 08 - Interactive Simulation</div>
+<h2>Adjust & Observe</h2>
+<p class="subtitle">Tune parameters and watch how metrics change across strategies</p>
+<div class="controls-panel">
+<div class="slider-group">
+<div class="slider-item">
+<label>Arrival Rate (req/sec)</label>
+<input type="range" id="arrivalRate" min="1" max="20" value="8" oninput="updateSliders()">
+<span class="slider-value" id="arrivalRateVal">8</span>
+</div>
+<div class="slider-item">
+<label>Batch Size</label>
+<input type="range" id="batchSize" min="2" max="16" value="4" oninput="updateSliders()">
+<span class="slider-value" id="batchSizeVal">4</span>
+</div>
+<div class="slider-item">
+<label>Dynamic Timeout (ms)</label>
+<input type="range" id="timeout" min="50" max="500" value="200" step="50" oninput="updateSliders()">
+<span class="slider-value" id="timeoutVal">200ms</span>
+</div>
+<div class="slider-item">
+<label>Avg Tokens per Request</label>
+<input type="range" id="avgTokens" min="10" max="200" value="80" step="10" oninput="updateSliders()">
+<span class="slider-value" id="avgTokensVal">80</span>
+</div>
+</div>
+</div>
+<div class="metrics-row">
+<div class="metric-card metric-static">
+<div class="label">Static Batching</div>
+<div class="value" id="metricStatic">--</div>
+<div class="sub">Avg latency (ms)</div>
+</div>
+<div class="metric-card metric-dynamic">
+<div class="label">Dynamic Batching</div>
+<div class="value" id="metricDynamic">--</div>
+<div class="sub">Avg latency (ms)</div>
+</div>
+<div class="metric-card metric-continuous">
+<div class="label">Continuous Batching</div>
+<div class="value" id="metricContinuous">--</div>
+<div class="sub">Avg latency (ms)</div>
+</div>
+</div>
+<div class="metrics-row" style="margin-top:10px">
+<div class="metric-card metric-static">
+<div class="label">Throughput</div>
+<div class="value" id="tpStatic">--</div>
+<div class="sub">tokens/sec</div>
+</div>
+<div class="metric-card metric-dynamic">
+<div class="label">Throughput</div>
+<div class="value" id="tpDynamic">--</div>
+<div class="sub">tokens/sec</div>
+</div>
+<div class="metric-card metric-continuous">
+<div class="label">Throughput</div>
+<div class="value" id="tpContinuous">--</div>
+<div class="sub">tokens/sec</div>
+</div>
+</div>
+</div>
+
+<!-- Section 4: Static Batching Deep Dive -->
+<div class="section" id="s4">
+<div class="section-counter">04 / 08 - Static Batching</div>
+<h2>Static Batching: The Simple Approach</h2>
+<p class="subtitle">Wait for a fixed batch size, then process all at once. Simple but wasteful.</p>
+<div class="gantt-container">
+<canvas id="canvasStaticDeep" width="1100" height="350"></canvas>
+</div>
+<div class="explanation-card" style="max-width:800px;margin-top:20px">
+<h3 style="color:#f59e0b">The Problem</h3>
+<p>Short requests finish early but must wait for the longest request in the batch. GPU sits idle while the batch fills up. Early arrivals experience long queue wait times.</p>
+<div style="display:flex;gap:20px;margin-top:15px;flex-wrap:wrap">
+<div style="padding:10px 15px;background:rgba(239,68,68,0.1);border-radius:8px;border:1px solid rgba(239,68,68,0.3)">
+<span style="color:#ef4444;font-weight:700">Wasted compute</span><br><span style="font-size:12px;color:#94a3b8">Short requests padded</span>
+</div>
+<div style="padding:10px 15px;background:rgba(239,68,68,0.1);border-radius:8px;border:1px solid rgba(239,68,68,0.3)">
+<span style="color:#ef4444;font-weight:700">High latency</span><br><span style="font-size:12px;color:#94a3b8">Wait for batch to fill</span>
+</div>
+<div style="padding:10px 15px;background:rgba(245,158,11,0.1);border-radius:8px;border:1px solid rgba(245,158,11,0.3)">
+<span style="color:#f59e0b;font-weight:700">Simple</span><br><span style="font-size:12px;color:#94a3b8">Easy to implement</span>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Section 5: Dynamic Batching -->
+<div class="section" id="s5">
+<div class="section-counter">05 / 08 - Dynamic Batching</div>
+<h2>Dynamic Batching: Adding a Timer</h2>
+<p class="subtitle">Either the batch fills OR a timeout expires -- whichever comes first.</p>
+<div class="gantt-container">
+<canvas id="canvasDynamicDeep" width="1100" height="350"></canvas>
+</div>
+<div class="explanation-card" style="max-width:800px;margin-top:20px">
+<h3 style="color:#6366f1">Better, But Still Batch-Level</h3>
+<p>The timeout prevents infinite waiting, but we still process entire batches together. Short requests still wait for the longest request, and the GPU idles between batches.</p>
+<div style="display:flex;gap:20px;margin-top:15px;flex-wrap:wrap">
+<div style="padding:10px 15px;background:rgba(16,185,129,0.1);border-radius:8px;border:1px solid rgba(16,185,129,0.3)">
+<span style="color:#10b981;font-weight:700">Bounded wait</span><br><span style="font-size:12px;color:#94a3b8">Timeout caps delay</span>
+</div>
+<div style="padding:10px 15px;background:rgba(239,68,68,0.1);border-radius:8px;border:1px solid rgba(239,68,68,0.3)">
+<span style="color:#ef4444;font-weight:700">Still padded</span><br><span style="font-size:12px;color:#94a3b8">Short reqs wait for long</span>
+</div>
+<div style="padding:10px 15px;background:rgba(245,158,11,0.1);border-radius:8px;border:1px solid rgba(245,158,11,0.3)">
+<span style="color:#f59e0b;font-weight:700">GPU gaps</span><br><span style="font-size:12px;color:#94a3b8">Idle between batches</span>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Section 6: Continuous Batching -->
+<div class="section" id="s6">
+<div class="section-counter">06 / 08 - Continuous Batching</div>
+<h2>Continuous Batching: Token by Token</h2>
+<p class="subtitle">Process at the token level. When a request finishes, immediately slot in a new one.</p>
+<div class="gantt-container">
+<canvas id="canvasContinuousDeep" width="1100" height="400"></canvas>
+</div>
+<div class="explanation-card" style="max-width:800px;margin-top:20px">
+<h3 style="color:#22d3ee">The LLM Sweet Spot</h3>
+<p>Since LLMs generate one token at a time anyway, we can check after every iteration. Finished requests leave immediately, new requests join immediately. GPU stays maximally utilized.</p>
+<div style="display:flex;gap:20px;margin-top:15px;flex-wrap:wrap">
+<div style="padding:10px 15px;background:rgba(16,185,129,0.1);border-radius:8px;border:1px solid rgba(16,185,129,0.3)">
+<span style="color:#10b981;font-weight:700">No padding</span><br><span style="font-size:12px;color:#94a3b8">Requests leave when done</span>
+</div>
+<div style="padding:10px 15px;background:rgba(16,185,129,0.1);border-radius:8px;border:1px solid rgba(16,185,129,0.3)">
+<span style="color:#10b981;font-weight:700">Max GPU util</span><br><span style="font-size:12px;color:#94a3b8">Always processing</span>
+</div>
+<div style="padding:10px 15px;background:rgba(16,185,129,0.1);border-radius:8px;border:1px solid rgba(16,185,129,0.3)">
+<span style="color:#10b981;font-weight:700">Low latency</span><br><span style="font-size:12px;color:#94a3b8">Minimal queue wait</span>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Section 7: Why Continuous Wins -->
+<div class="section" id="s7">
+<div class="section-counter">07 / 08 - Why Continuous Wins</div>
+<h2>Why Continuous Batching Dominates LLMs</h2>
+<p class="subtitle">The autoregressive nature of LLMs makes continuous batching the natural choice</p>
+<div class="explanation-grid">
+<div class="explanation-card">
+<h3 style="color:#f59e0b">Token-Level Generation</h3>
+<p>LLMs generate one token per forward pass. This creates a natural "check-in" point after every single token where we can add or remove requests from the batch.</p>
+<div class="token-grid" id="tokenGrid1"></div>
+</div>
+<div class="explanation-card">
+<h3 style="color:#6366f1">Variable Output Lengths</h3>
+<p>A "Yes" response takes 1 token. A code explanation might take 500. Static batching pads to max length. Continuous batching lets each finish independently.</p>
+<div style="margin-top:15px">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+<div style="width:30px;height:12px;background:#6366f1;border-radius:3px"></div>
+<span style="font-size:12px;color:#94a3b8">"Yes" (1 token)</span>
+</div>
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+<div style="width:150px;height:12px;background:#22d3ee;border-radius:3px"></div>
+<span style="font-size:12px;color:#94a3b8">Summary (50 tokens)</span>
+</div>
+<div style="display:flex;align-items:center;gap:10px">
+<div style="width:100%;height:12px;background:#f59e0b;border-radius:3px"></div>
+<span style="font-size:12px;color:#94a3b8;white-space:nowrap">Code (500 tokens)</span>
+</div>
+</div>
+</div>
+<div class="explanation-card">
+<h3 style="color:#22d3ee">Prefill vs Decode</h3>
+<p>Continuous batching handles prefill (compute-bound) and decode (memory-bound) phases differently, allowing new prefills to overlap with ongoing decodes for maximum throughput.</p>
+<div style="margin-top:15px;display:flex;gap:5px;flex-direction:column">
+<div style="padding:8px;background:rgba(99,102,241,0.2);border-radius:6px;font-size:12px"><strong style="color:#6366f1">Prefill:</strong> Process all input tokens at once (compute-bound)</div>
+<div style="padding:8px;background:rgba(34,211,238,0.2);border-radius:6px;font-size:12px"><strong style="color:#22d3ee">Decode:</strong> Generate one token at a time (memory-bound)</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Section 8: Summary -->
+<div class="section" id="s8">
+<div class="section-counter">08 / 08 - Summary</div>
+<h2>Comparison Summary</h2>
+<div class="winner-banner">
+<h2>Continuous Batching Wins</h2>
+<p style="color:#94a3b8;margin-top:10px">Used by vLLM, SGLang, TensorRT-LLM, and all modern LLM serving engines</p>
+</div>
+<table class="comparison-table" style="margin-top:30px">
+<tr><th></th><th style="color:#f59e0b">Static</th><th style="color:#6366f1">Dynamic</th><th style="color:#22d3ee">Continuous</th></tr>
+<tr><td>Queue Wait</td><td class="highlight-red">High</td><td class="highlight-yellow">Medium</td><td class="highlight-green">Low</td></tr>
+<tr><td>GPU Utilization</td><td class="highlight-red">Low</td><td class="highlight-yellow">Medium</td><td class="highlight-green">High</td></tr>
+<tr><td>Throughput</td><td class="highlight-red">Low</td><td class="highlight-yellow">Medium</td><td class="highlight-green">High</td></tr>
+<tr><td>Tail Latency</td><td class="highlight-red">Bad</td><td class="highlight-yellow">Better</td><td class="highlight-green">Best</td></tr>
+<tr><td>Implementation</td><td class="highlight-green">Simple</td><td class="highlight-yellow">Medium</td><td class="highlight-red">Complex</td></tr>
+<tr><td>Best For</td><td>Offline batch jobs</td><td>Traditional ML</td><td><strong style="color:#22d3ee">LLM Inference</strong></td></tr>
+</table>
+</div>
+
+<script>
+// Navigation
+const sections = document.querySelectorAll('.section');
+const navDots = document.getElementById('navDots');
+const progressBar = document.getElementById('progressBar');
+sections.forEach((s,i) => {
+  const dot = document.createElement('div');
+  dot.className = 'nav-dot';
+  dot.onclick = () => s.scrollIntoView({behavior:'smooth'});
+  navDots.appendChild(dot);
+});
+
+window.addEventListener('scroll', () => {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  progressBar.style.width = (scrollTop/docHeight*100)+'%';
+  sections.forEach((s,i) => {
+    const rect = s.getBoundingClientRect();
+    const dots = navDots.children;
+    if(rect.top < window.innerHeight/2 && rect.bottom > window.innerHeight/2) {
+      Array.from(dots).forEach(d=>d.classList.remove('active'));
+      dots[i].classList.add('active');
+    }
+  });
+  document.querySelectorAll('.fade-in').forEach(el => {
+    if(el.getBoundingClientRect().top < window.innerHeight*0.85) el.classList.add('visible');
+  });
+});
+
+// Colors for requests
+const reqColors = ['#6366f1','#22d3ee','#f59e0b','#10b981','#ef4444','#a855f7','#ec4899','#14b8a6','#f97316','#84cc16','#06b6d4','#e879f9'];
+
+// Simulation State
+let simRunning = false;
+let simFrame = 0;
+let animId = null;
+
+function updateSliders() {
+  document.getElementById('arrivalRateVal').textContent = document.getElementById('arrivalRate').value;
+  document.getElementById('batchSizeVal').textContent = document.getElementById('batchSize').value;
+  document.getElementById('timeoutVal').textContent = document.getElementById('timeout').value+'ms';
+  document.getElementById('avgTokensVal').textContent = document.getElementById('avgTokens').value;
+  computeMetrics();
+}
+
+function computeMetrics() {
+  const rate = +document.getElementById('arrivalRate').value;
+  const bs = +document.getElementById('batchSize').value;
+  const timeout = +document.getElementById('timeout').value;
+  const tokens = +document.getElementById('avgTokens').value;
+  const tokenTime = 15; // ms per token per request
+  // Static: wait for batch fill, then process longest
+  const fillTime = (bs / rate) * 1000;
+  const procTime = tokens * tokenTime;
+  const staticLat = Math.round(fillTime/2 + procTime);
+  const staticTP = Math.round((bs * tokens) / ((fillTime + procTime)/1000));
+  // Dynamic: min(fill, timeout) then process
+  const dynWait = Math.min(fillTime, timeout);
+  const dynBatch = Math.min(bs, Math.ceil(rate * dynWait / 1000));
+  const dynamicLat = Math.round(dynWait/2 + procTime);
+  const dynamicTP = Math.round((dynBatch * tokens) / ((dynWait + procTime)/1000));
+  // Continuous: almost no wait, token-level
+  const contLat = Math.round(20 + tokens * tokenTime * 0.7);
+  const contTP = Math.round(rate * tokens * 1.2);
+  document.getElementById('metricStatic').textContent = staticLat;
+  document.getElementById('metricDynamic').textContent = dynamicLat;
+  document.getElementById('metricContinuous').textContent = contLat;
+  document.getElementById('tpStatic').textContent = staticTP.toLocaleString();
+  document.getElementById('tpDynamic').textContent = dynamicTP.toLocaleString();
+  document.getElementById('tpContinuous').textContent = contTP.toLocaleString();
+}
+
+// Canvas Simulation
+function runSimulation() {
+  if(simRunning) return;
+  simRunning = true;
+  simFrame = 0;
+  document.getElementById('runSimBtn').textContent = 'Running...';
+  animateCanvases();
+}
+
+function resetSimulation() {
+  simRunning = false;
+  simFrame = 0;
+  if(animId) cancelAnimationFrame(animId);
+  document.getElementById('runSimBtn').textContent = 'Run Simulation';
+  ['canvasStatic','canvasDynamic','canvasContinuous'].forEach(id => {
+    const c = document.getElementById(id);
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0,0,c.width,c.height);
+  });
+}
+
+function animateCanvases() {
+  const bs = +document.getElementById('batchSize').value;
+  const rate = +document.getElementById('arrivalRate').value;
+  const totalFrames = 600;
+  simFrame++;
+  if(simFrame > totalFrames) {
+    simRunning = false;
+    document.getElementById('runSimBtn').textContent = 'Run Simulation';
+    return;
+  }
+  drawStaticCanvas(simFrame, totalFrames, bs, rate);
+  drawDynamicCanvas(simFrame, totalFrames, bs, rate);
+  drawContinuousCanvas(simFrame, totalFrames, bs, rate);
+  animId = requestAnimationFrame(animateCanvases);
+}
+
+function drawStaticCanvas(frame, total, bs, rate) {
+  const c = document.getElementById('canvasStatic');
+  const ctx = c.getContext('2d');
+  const w = c.width, h = c.height;
+  ctx.clearRect(0,0,w,h);
+  // Background grid
+  ctx.strokeStyle = '#1e293b';
+  ctx.lineWidth = 0.5;
+  for(let y=0;y<h;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+  // Time axis
+  ctx.fillStyle = '#64748b';
+  ctx.font = '10px Inter';
+  ctx.fillText('Time →', w-50, h-5);
+  // Generate requests
+  const interval = Math.round(total / (rate * total / 600));
+  const requests = [];
+  for(let i=0;i<12;i++){
+    requests.push({arrive: i * Math.round(60/rate), tokens: 20 + Math.random()*60, color: reqColors[i%reqColors.length]});
+  }
+  // Static: batch when bs requests accumulated
+  let batchStart = 0;
+  let lane = 0;
+  const barH = 22;
+  const laneGap = 28;
+  for(let i=0;i<requests.length;i++){
+    const r = requests[i];
+    if(i % bs === 0){
+      batchStart = r.arrive;
+      for(let j=i;j<Math.min(i+bs,requests.length);j++){
+        if(requests[j].arrive > batchStart) batchStart = requests[j].arrive;
+      }
+    }
+    const startX = Math.max(batchStart, r.arrive);
+    const procLen = r.tokens;
+    const maxProc = Math.max(...requests.slice(Math.floor(i/bs)*bs, Math.floor(i/bs)*bs+bs).map(r2=>r2.tokens));
+    const y = 15 + (i % bs) * laneGap + Math.floor(i/bs) * (bs * laneGap + 15);
+    if(y > h-20) continue;
+    const progress = Math.min(frame / total * 4, 1);
+    const drawEnd = Math.min(startX + maxProc, frame * (w / total));
+    // Wait time (red)
+    if(r.arrive < startX && frame * (w/total) > r.arrive) {
+      ctx.fillStyle = 'rgba(239,68,68,0.2)';
+      ctx.fillRect(r.arrive * (w/(total*0.7)), y, (startX - r.arrive) * (w/(total*0.7)), barH);
+    }
+    // Processing
+    if(frame * (w/total) > startX * (w/(total*0.7))) {
+      const px = startX * (w/(total*0.7));
+      const pw = Math.min(procLen * (w/(total*0.7)), frame * (w/total) - px);
+      if(pw > 0) {
+        ctx.fillStyle = r.color;
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.roundRect(px, y, Math.max(pw,0), barH, 3);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        // Padding (wasted)
+        if(procLen < maxProc && pw >= procLen * (w/(total*0.7))) {
+          ctx.fillStyle = 'rgba(239,68,68,0.15)';
+          const padStart = px + procLen * (w/(total*0.7));
+          const padEnd = Math.min((startX + maxProc) * (w/(total*0.7)), frame * (w/total));
+          if(padEnd > padStart) ctx.fillRect(padStart, y, padEnd - padStart, barH);
+        }
+      }
+    }
+  }
+}
+
+function drawDynamicCanvas(frame, total, bs, rate) {
+  const c = document.getElementById('canvasDynamic');
+  const ctx = c.getContext('2d');
+  const w = c.width, h = c.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.strokeStyle = '#1e293b';ctx.lineWidth = 0.5;
+  for(let y=0;y<h;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+  ctx.fillStyle = '#64748b';ctx.font = '10px Inter';ctx.fillText('Time →', w-50, h-5);
+  const requests = [];
+  for(let i=0;i<12;i++){
+    requests.push({arrive: i * Math.round(60/rate), tokens: 20 + Math.random()*60, color: reqColors[i%reqColors.length]});
+  }
+  const timeout = 40; // frames
+  const barH = 22, laneGap = 28;
+  let batchIdx = 0;
+  let i = 0;
+  while(i < requests.length) {
+    let batchReqs = [requests[i]];
+    let j = i+1;
+    while(j < requests.length && batchReqs.length < bs && (requests[j].arrive - requests[i].arrive) < timeout) {
+      batchReqs.push(requests[j]);
+      j++;
+    }
+    const batchStart = Math.max(...batchReqs.map(r=>r.arrive));
+    const maxProc = Math.max(...batchReqs.map(r=>r.tokens));
+    batchReqs.forEach((r,k) => {
+      const y = 15 + k * laneGap + batchIdx * (batchReqs.length * laneGap + 15);
+      if(y > h-20) return;
+      if(r.arrive < batchStart && frame * (w/total) > r.arrive) {
+        ctx.fillStyle = 'rgba(239,68,68,0.2)';
+        ctx.fillRect(r.arrive * (w/(total*0.7)), y, (batchStart - r.arrive) * (w/(total*0.7)), barH);
+      }
+      if(frame * (w/total) > batchStart * (w/(total*0.7))) {
+        const px = batchStart * (w/(total*0.7));
+        const pw = Math.min(r.tokens * (w/(total*0.7)), frame*(w/total)-px);
+        if(pw > 0) {
+          ctx.fillStyle = r.color;ctx.globalAlpha = 0.8;
+          ctx.beginPath();ctx.roundRect(px,y,Math.max(pw,0),barH,3);ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+      }
+    });
+    i = j;
+    batchIdx++;
+  }
+}
+
+function drawContinuousCanvas(frame, total, bs, rate) {
+  const c = document.getElementById('canvasContinuous');
+  const ctx = c.getContext('2d');
+  const w = c.width, h = c.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.strokeStyle = '#1e293b';ctx.lineWidth = 0.5;
+  for(let y=0;y<h;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+  ctx.fillStyle = '#64748b';ctx.font = '10px Inter';ctx.fillText('Time →', w-50, h-5);
+  const requests = [];
+  for(let i=0;i<12;i++){
+    requests.push({arrive: i * Math.round(50/rate), tokens: 15 + Math.random()*50, color: reqColors[i%reqColors.length]});
+  }
+  const barH = 20, laneGap = 25;
+  // Continuous: each request starts almost immediately upon arrival
+  requests.forEach((r,i) => {
+    const y = 15 + (i % 10) * laneGap;
+    if(y > h - 20) return;
+    const startX = r.arrive + 2; // minimal wait
+    if(frame * (w/total) > startX * (w/(total*0.6))) {
+      const px = startX * (w/(total*0.6));
+      const pw = Math.min(r.tokens * (w/(total*0.6)), frame*(w/total)-px);
+      if(pw > 0) {
+        ctx.fillStyle = r.color;ctx.globalAlpha = 0.85;
+        ctx.beginPath();ctx.roundRect(px,y,Math.max(pw,0),barH,3);ctx.fill();
+        ctx.globalAlpha = 1;
+        // Arrival marker
+        ctx.fillStyle = '#fff';ctx.globalAlpha = 0.6;
+        ctx.beginPath();ctx.arc(r.arrive*(w/(total*0.6)),y+barH/2,3,0,Math.PI*2);ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+  });
+}
+
+// Deep dive canvases
+function drawDeepDiveCanvases() {
+  drawStaticDeep();
+  drawDynamicDeep();
+  drawContinuousDeep();
+}
+
+function drawStaticDeep() {
+  const c = document.getElementById('canvasStaticDeep');
+  if(!c) return;
+  const ctx = c.getContext('2d');
+  const w = c.width, h = c.height;
+  ctx.clearRect(0,0,w,h);
+  // Background
+  ctx.fillStyle = '#0d0d15';
+  ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle = '#1e293b';ctx.lineWidth = 0.5;
+  for(let x=0;x<w;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}
+  for(let y=0;y<h;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+  // Labels
+  ctx.fillStyle = '#94a3b8';ctx.font = '11px Inter';
+  ctx.fillText('Batch 1', 10, 30);ctx.fillText('Batch 2', 10, 190);
+  ctx.fillStyle = '#64748b';ctx.fillText('Time →', w-60, h-10);
+  // Batch 1
+  const b1 = [{t:20,c:'#6366f1'},{t:60,c:'#22d3ee'},{t:45,c:'#f59e0b'},{t:80,c:'#10b981'}];
+  const maxT1 = 80;
+  b1.forEach((r,i) => {
+    const y = 40 + i*35;
+    // Wait (arrival stagger)
+    ctx.fillStyle = 'rgba(239,68,68,0.15)';
+    ctx.fillRect(100, y, i*40, 28);
+    // Processing bar
+    const px = 100 + i*40;
+    const pw = r.t * 6;
+    ctx.fillStyle = r.c;ctx.globalAlpha = 0.85;
+    ctx.beginPath();ctx.roundRect(px,y,pw,28,4);ctx.fill();ctx.globalAlpha = 1;
+    // Padding
+    if(r.t < maxT1) {
+      ctx.fillStyle = 'rgba(239,68,68,0.1)';
+      ctx.fillRect(px+pw, y, (maxT1-r.t)*6, 28);
+      ctx.setLineDash([4,4]);ctx.strokeStyle = '#ef4444';ctx.lineWidth = 1;
+      ctx.strokeRect(px+pw, y, (maxT1-r.t)*6, 28);
+      ctx.setLineDash([]);
+    }
+  });
+  // Wasted label
+  ctx.fillStyle = '#ef4444';ctx.font = 'bold 11px Inter';
+  ctx.fillText('← Wasted GPU (padding)', 700, 65);
+}
+
+function drawDynamicDeep() {
+  const c = document.getElementById('canvasDynamicDeep');
+  if(!c) return;
+  const ctx = c.getContext('2d');
+  const w = c.width, h = c.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle = '#0d0d15';ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle = '#1e293b';ctx.lineWidth = 0.5;
+  for(let x=0;x<w;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}
+  for(let y=0;y<h;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+  ctx.fillStyle = '#94a3b8';ctx.font = '11px Inter';
+  ctx.fillText('Batch 1 (filled)', 10, 30);
+  ctx.fillText('Batch 2 (timeout)', 10, 190);
+  ctx.fillStyle = '#64748b';ctx.fillText('Time →', w-60, h-10);
+  // Batch 1 - fills before timeout
+  const b1 = [{t:40,c:'#6366f1'},{t:70,c:'#22d3ee'},{t:30,c:'#f59e0b'}];
+  b1.forEach((r,i) => {
+    const y = 40 + i*35;
+    const px = 100 + i*20;
+    const pw = r.t * 5;
+    ctx.fillStyle = r.c;ctx.globalAlpha = 0.85;
+    ctx.beginPath();ctx.roundRect(px,y,pw,28,4);ctx.fill();ctx.globalAlpha = 1;
+  });
+  // Timeout indicator for batch 2
+  ctx.fillStyle = '#f59e0b';ctx.font = 'bold 11px Inter';
+  ctx.fillText('⏱ Timeout triggered', 100, 210);
+  const b2 = [{t:50,c:'#a855f7'},{t:25,c:'#ec4899'}];
+  b2.forEach((r,i) => {
+    const y = 220 + i*35;
+    const px = 120;
+    const pw = r.t * 5;
+    ctx.fillStyle = r.c;ctx.globalAlpha = 0.85;
+    ctx.beginPath();ctx.roundRect(px,y,pw,28,4);ctx.fill();ctx.globalAlpha = 1;
+  });
+}
+
+function drawContinuousDeep() {
+  const c = document.getElementById('canvasContinuousDeep');
+  if(!c) return;
+  const ctx = c.getContext('2d');
+  const w = c.width, h = c.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle = '#0d0d15';ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle = '#1e293b';ctx.lineWidth = 0.5;
+  for(let x=0;x<w;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}
+  for(let y=0;y<h;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+  // Slot labels
+  ctx.fillStyle = '#94a3b8';ctx.font = '11px Inter';
+  for(let i=0;i<6;i++) ctx.fillText('Slot '+(i+1), 10, 35+i*55);
+  // Token iteration lines
+  ctx.fillStyle = '#334155';ctx.font = '9px Inter';
+  for(let t=0;t<15;t++){
+    const x = 80 + t*65;
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(x, 10, 1, h-20);
+    ctx.fillStyle = '#475569';
+    ctx.fillText('iter '+t, x+2, h-5);
+  }
+  // Requests weaving in/out
+  const reqs = [
+    {slot:0,start:0,end:8,c:'#6366f1'},
+    {slot:1,start:0,end:5,c:'#22d3ee'},
+    {slot:2,start:1,end:10,c:'#f59e0b'},
+    {slot:3,start:2,end:6,c:'#10b981'},
+    {slot:4,start:3,end:12,c:'#a855f7'},
+    {slot:5,start:0,end:4,c:'#ec4899'},
+    {slot:1,start:6,end:11,c:'#ef4444'},
+    {slot:5,start:5,end:9,c:'#14b8a6'},
+    {slot:3,start:7,end:13,c:'#f97316'},
+    {slot:0,start:9,end:14,c:'#84cc16'},
+  ];
+  reqs.forEach(r => {
+    const y = 20 + r.slot * 55;
+    for(let t=r.start;t<r.end;t++){
+      const x = 80 + t*65 + 2;
+      ctx.fillStyle = r.c;
+      ctx.globalAlpha = 0.85;
+      ctx.beginPath();ctx.roundRect(x,y,60,40,4);ctx.fill();
+      ctx.globalAlpha = 1;
+      // Token number
+      ctx.fillStyle = '#fff';ctx.font = 'bold 10px Inter';
+      ctx.fillText('T'+(t-r.start+1), x+22, y+24);
+    }
+  });
+  // Arrows showing new requests entering
+  ctx.fillStyle = '#10b981';ctx.font = 'bold 10px Inter';
+  ctx.fillText('↓ New req enters freed slot', 420, h-15);
+}
+
+// Token grid animation
+function animateTokenGrid() {
+  const grid = document.getElementById('tokenGrid1');
+  if(!grid) return;
+  grid.innerHTML = '';
+  for(let i=0;i<64;i++){
+    const cell = document.createElement('div');
+    cell.className = 'token-cell';
+    cell.style.background = i < 32 ? reqColors[Math.floor(i/8)%reqColors.length] : '#1e293b';
+    cell.style.opacity = i < 32 ? '0.8' : '0.2';
+    cell.style.animationDelay = (i*30)+'ms';
+    grid.appendChild(cell);
+  }
+  // Animate
+  let step = 0;
+  setInterval(() => {
+    step = (step + 1) % 64;
+    const cells = grid.children;
+    for(let i=0;i<64;i++){
+      const active = (i+step) % 64 < 40;
+      cells[i].style.background = active ? reqColors[Math.floor(((i+step)%64)/8)%reqColors.length] : '#1e293b';
+      cells[i].style.opacity = active ? '0.7' : '0.2';
+    }
+  }, 300);
+}
+
+// Init
+updateSliders();
+computeMetrics();
+drawDeepDiveCanvases();
+animateTokenGrid();
+window.addEventListener('resize', drawDeepDiveCanvases);
+</script>
+</body>
+</html>

@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inference Engineering - Interactive Visual Guides</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #0a0a0f;
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+        .hero {
+            text-align: center;
+            padding: 80px 20px 60px;
+            background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #0a0a0f 100%);
+            position: relative;
+            overflow: hidden;
+        }
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
+        }
+        .hero h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #6366f1, #22d3ee);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 16px;
+            position: relative;
+        }
+        .hero .subtitle {
+            font-size: 1.3rem;
+            color: #94a3b8;
+            max-width: 700px;
+            margin: 0 auto 12px;
+            position: relative;
+        }
+        .hero .credit {
+            font-size: 0.95rem;
+            color: #64748b;
+            position: relative;
+        }
+        .hero .credit a { color: #6366f1; text-decoration: none; }
+        .hero .credit a:hover { text-decoration: underline; }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px 80px;
+        }
+        .section-title {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin: 48px 0 24px;
+            padding-left: 16px;
+            border-left: 4px solid #6366f1;
+        }
+        .section-title.visual { border-left-color: #22d3ee; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 20px;
+        }
+        .card {
+            background: #12121a;
+            border: 1px solid #1e1e2e;
+            border-radius: 16px;
+            padding: 28px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+            position: relative;
+            overflow: hidden;
+        }
+        .card:hover {
+            border-color: #6366f1;
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(99, 102, 241, 0.15);
+        }
+        .card .number {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #6366f1;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+        }
+        .card h3 {
+            font-size: 1.15rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+        .card p {
+            font-size: 0.88rem;
+            color: #94a3b8;
+            line-height: 1.6;
+        }
+        .card .tag {
+            display: inline-block;
+            margin-top: 14px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .tag.ch0 { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
+        .tag.ch2 { background: rgba(34, 211, 238, 0.15); color: #22d3ee; }
+        .tag.ch3 { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+        .tag.ch4 { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+        .tag.ch5 { background: rgba(244, 63, 94, 0.15); color: #f43f5e; }
+        .tag.ch6 { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+        .tag.ch7 { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+        .stats {
+            display: flex;
+            gap: 40px;
+            justify-content: center;
+            margin-top: 32px;
+            position: relative;
+        }
+        .stat { text-align: center; }
+        .stat .num {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #6366f1, #22d3ee);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .stat .label { font-size: 0.85rem; color: #64748b; margin-top: 4px; }
+        .badge {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 8px 20px;
+            border-radius: 24px;
+            font-size: 0.82rem;
+            font-weight: 500;
+            background: rgba(99,102,241,0.1);
+            border: 1px solid rgba(99,102,241,0.3);
+            color: #a5b4fc;
+            position: relative;
+        }
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            color: #475569;
+            font-size: 0.85rem;
+            border-top: 1px solid #1e1e2e;
+        }
+        footer a { color: #6366f1; text-decoration: none; }
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 2rem; }
+            .grid { grid-template-columns: 1fr; }
+            .stats { gap: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <h1>Inference Engineering</h1>
+        <p class="subtitle">Interactive Visual Guides for every key concept in modern AI inference</p>
+        <p class="credit">Based on <a href="#">"Inference Engineering"</a> by Philip Kiely &middot; Built by <a href="https://github.com/VizuaraAI">VizuaraAI</a></p>
+        <div class="stats">
+            <div class="stat"><div class="num">30</div><div class="label">Visual Guides</div></div>
+            <div class="stat"><div class="num">30</div><div class="label">Colab Notebooks</div></div>
+            <div class="stat"><div class="num">7</div><div class="label">Chapters</div></div>
+        </div>
+        <div class="badge">Scroll down to explore all guides</div>
+    </div>
+
+    <div class="container">
+        <h2 class="section-title">Chapter 0 &ndash; Inference Overview</h2>
+        <div class="grid">
+            <a class="card" href="01_inference_stack.html">
+                <div class="number">Visual Guide 01</div>
+                <h3>The Full Inference Stack</h3>
+                <p>Interactive 3-layer diagram: Runtime, Infrastructure, and Tooling. See how CUDA, PyTorch, inference engines, and Kubernetes all fit together.</p>
+                <span class="tag ch0">Chapter 0</span>
+            </a>
+        </div>
+
+        <h2 class="section-title">Chapter 2 &ndash; Models</h2>
+        <div class="grid">
+            <a class="card" href="02_llm_architecture.html">
+                <div class="number">Visual Guide 02</div>
+                <h3>LLM Architecture Deep Dive</h3>
+                <p>Animated forward pass through an LLM: tokenization, embedding, transformer blocks, and output layer.</p>
+                <span class="tag ch2">Chapter 2</span>
+            </a>
+            <a class="card" href="03_prefill_vs_decode.html">
+                <div class="number">Visual Guide 03</div>
+                <h3>Prefill vs Decode</h3>
+                <p>Split-screen animation of the two phases of LLM inference. See compute-bound prefill and memory-bound decode in action.</p>
+                <span class="tag ch2">Chapter 2</span>
+            </a>
+            <a class="card" href="04_attention_visualization.html">
+                <div class="number">Visual Guide 04</div>
+                <h3>How Attention Works</h3>
+                <p>Interactive attention heatmap. Click any word to see its attention pattern across Q, K, V matrices.</p>
+                <span class="tag ch2">Chapter 2</span>
+            </a>
+            <a class="card" href="05_mixture_of_experts.html">
+                <div class="number">Visual Guide 05</div>
+                <h3>Mixture of Experts</h3>
+                <p>Visualize expert routing: watch tokens flow to selected experts with interactive activation patterns.</p>
+                <span class="tag ch2">Chapter 2</span>
+            </a>
+            <a class="card" href="22_video_generation.html">
+                <div class="number">Visual Guide 22</div>
+                <h3>Video Generation: 3D Latent Space</h3>
+                <p>Animated 3D cube representing latent space (X, Y, T) with denoising over ~50 steps and Context Parallelism.</p>
+                <span class="tag ch2">Chapter 2</span>
+            </a>
+        </div>
+
+        <h2 class="section-title">Chapter 3 &ndash; Hardware</h2>
+        <div class="grid">
+            <a class="card" href="06_gpu_architecture.html">
+                <div class="number">Visual Guide 06</div>
+                <h3>GPU Architecture for Inference</h3>
+                <p>Interactive GPU chip diagram. Zoom into SMs, Tensor Cores, and the memory hierarchy.</p>
+                <span class="tag ch3">Chapter 3</span>
+            </a>
+            <a class="card" href="11_multi_gpu_communication.html">
+                <div class="number">Visual Guide 11</div>
+                <h3>Multi-GPU Communication</h3>
+                <p>Animated NVLink, NVSwitch, and InfiniBand topology. See bandwidth bottlenecks between and within nodes.</p>
+                <span class="tag ch3">Chapter 3</span>
+            </a>
+            <a class="card" href="28_gpu_generations.html">
+                <div class="number">Visual Guide 28</div>
+                <h3>GPU Generations: Hopper → Blackwell → Rubin</h3>
+                <p>Interactive timeline and comparison of NVIDIA GPU architectures with specs and features.</p>
+                <span class="tag ch3">Chapter 3</span>
+            </a>
+        </div>
+
+        <h2 class="section-title">Chapter 4 &ndash; Software</h2>
+        <div class="grid">
+            <a class="card" href="12_kernel_fusion.html">
+                <div class="number">Visual Guide 12</div>
+                <h3>Kernel Fusion</h3>
+                <p>Before/after animation showing eliminated memory round-trips when kernels are fused together.</p>
+                <span class="tag ch4">Chapter 4</span>
+            </a>
+            <a class="card" href="13_inference_engines.html">
+                <div class="number">Visual Guide 13</div>
+                <h3>vLLM vs SGLang vs TensorRT-LLM</h3>
+                <p>Interactive comparison and decision tree for choosing the right inference engine.</p>
+                <span class="tag ch4">Chapter 4</span>
+            </a>
+        </div>
+
+        <h2 class="section-title">Chapter 5 &ndash; Techniques</h2>
+        <div class="grid">
+            <a class="card" href="07_quantization_visual.html">
+                <div class="number">Visual Guide 07</div>
+                <h3>Quantization: Precision vs Performance</h3>
+                <p>Interactive bit-level visualization of FP32 → FP16 → FP8 → FP4 with dynamic range exploration.</p>
+                <span class="tag ch5">Chapter 5</span>
+            </a>
+            <a class="card" href="29_number_formats_bits.html">
+                <div class="number">Visual Guide 29</div>
+                <h3>Number Formats: Bits & Dynamic Range</h3>
+                <p>Type any number and see its binary representation across all formats. Watch precision degrade.</p>
+                <span class="tag ch5">Chapter 5</span>
+            </a>
+            <a class="card" href="08_speculative_decoding.html">
+                <div class="number">Visual Guide 08</div>
+                <h3>Speculative Decoding Explained</h3>
+                <p>Animated draft → verify → accept/reject flow with toggle between EAGLE, Medusa, and Draft-Target.</p>
+                <span class="tag ch5">Chapter 5</span>
+            </a>
+            <a class="card" href="16_speculative_methods.html">
+                <div class="number">Visual Guide 16</div>
+                <h3>EAGLE vs Medusa vs Draft-Target</h3>
+                <p>Three-panel animated comparison of all speculation methods with acceptance rate charts.</p>
+                <span class="tag ch5">Chapter 5</span>
+            </a>
+            <a class="card" href="17_prefix_caching.html">
+                <div class="number">Visual Guide 17</div>
+                <h3>Prefix Caching & KV Cache Reuse</h3>
+                <p>Animated requests showing cache hits/misses and how prefix matching saves TTFT.</p>
+                <span class="tag ch5">Chapter 5</span>
+            </a>
+            <a class="card" href="14_kv_cache_hierarchy.html">
+                <div class="number">Visual Guide 14</div>
+                <h3>KV Cache Storage Hierarchy</h3>
+                <p>Interactive G1-G4 memory pyramid with cache blocks moving between VRAM, RAM, SSD, and network.</p>
+                <span class="tag ch5">Chapter 5</span>
+            </a>
+            <a class="card" href="15_flashattention.html">
+                <div class="number">Visual Guide 15</div>
+                <h3>FlashAttention vs Standard Attention</h3>
+                <p>Side-by-side animation of memory access patterns: tiled SRAM computation vs full HBM round-trips.</p>
+                <span class="tag ch5">Chapter 5</span>
+            </a>
+            <a class="card" href="09_model_parallelism.html">
+                <div class="number">Visual Guide 09</div>
+                <h3>Model Parallelism: TP vs EP vs PP</h3>
+                <p>Interactive GPU grid: toggle between Tensor, Expert, and Pipeline Parallelism views.</p>
+                <span class="tag ch5">Chapter 5</span>
+            </a>
+            <a class="card" href="10_disaggregation.html">
+                <div class="number">Visual Guide 10</div>
+                <h3>Disaggregated Serving</h3>
+                <p>Animated prefill/decode engine separation with KV transfer and xPyD configuration slider.</p>
+                <span class="tag ch5">Chapter 5</span>
+            </a>
+            <a class="card" href="25_cache_aware_routing.html">
+                <div class="number">Visual Guide 25</div>
+                <h3>Cache-Aware Routing</h3>
+                <p>Watch requests route to replicas based on KV cache state vs naive round-robin.</p>
+                <span class="tag ch5">Chapter 5</span>
+            </a>
+        </div>
+
+        <h2 class="section-title">Chapter 6 &ndash; Modalities</h2>
+        <div class="grid">
+            <a class="card" href="23_voice_pipeline.html">
+                <div class="number">Visual Guide 23</div>
+                <h3>Voice AI Pipeline: ASR → LLM → TTS</h3>
+                <p>Animated end-to-end voice agent pipeline with streaming WebSocket connections.</p>
+                <span class="tag ch6">Chapter 6</span>
+            </a>
+        </div>
+
+        <h2 class="section-title">Chapter 7 &ndash; Production</h2>
+        <div class="grid">
+            <a class="card" href="21_batching_strategies.html">
+                <div class="number">Visual Guide 21</div>
+                <h3>Batching Strategies</h3>
+                <p>Three-panel animated timeline: Static vs Dynamic vs Continuous Batching with throughput metrics.</p>
+                <span class="tag ch7">Chapter 7</span>
+            </a>
+            <a class="card" href="19_autoscaling.html">
+                <div class="number">Visual Guide 19</div>
+                <h3>Autoscaling: GPUs to Traffic</h3>
+                <p>Animated traffic curve with replicas scaling up/down. Tune min/max replicas and concurrency.</p>
+                <span class="tag ch7">Chapter 7</span>
+            </a>
+            <a class="card" href="20_canary_deployment.html">
+                <div class="number">Visual Guide 20</div>
+                <h3>Canary Deployments</h3>
+                <p>Animated zero-downtime deployment: traffic gradually shifting from blue to green.</p>
+                <span class="tag ch7">Chapter 7</span>
+            </a>
+            <a class="card" href="24_cold_start_pipeline.html">
+                <div class="number">Visual Guide 24</div>
+                <h3>Cold Start Pipeline</h3>
+                <p>Timeline animation of replica boot: GPU procurement → image load → weights → engine startup.</p>
+                <span class="tag ch7">Chapter 7</span>
+            </a>
+            <a class="card" href="26_multi_cloud.html">
+                <div class="number">Visual Guide 26</div>
+                <h3>Multi-Cloud Architecture</h3>
+                <p>Interactive world map with control and workload planes, geo-aware routing, and failover.</p>
+                <span class="tag ch7">Chapter 7</span>
+            </a>
+            <a class="card" href="27_containerization.html">
+                <div class="number">Visual Guide 27</div>
+                <h3>Containerization for Inference</h3>
+                <p>Animated Docker layer diagram from base OS to inference engine with dependency pinning.</p>
+                <span class="tag ch7">Chapter 7</span>
+            </a>
+            <a class="card" href="30_reliability_failover.html">
+                <div class="number">Visual Guide 30</div>
+                <h3>Reliability & Failover</h3>
+                <p>GPU failure simulation with cascading effects, health monitoring, and multi-cloud failover.</p>
+                <span class="tag ch7">Chapter 7</span>
+            </a>
+        </div>
+    </div>
+
+    <footer>
+        <p>Built with care by <a href="https://github.com/VizuaraAI">VizuaraAI</a> &middot; Based on "Inference Engineering" by Philip Kiely &middot; 2026</p>
+    </footer>
+</body>
+</html>

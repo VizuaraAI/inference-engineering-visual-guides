@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Generation: 3D Latent Space (X, Y, T)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#0a0a0f;color:#e2e8f0;overflow-x:hidden;scroll-behavior:smooth}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#0a0a0f}
+::-webkit-scrollbar-thumb{background:#6366f1;border-radius:3px}
+.section{min-height:100vh;padding:60px 40px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.section-counter{position:absolute;top:20px;left:40px;font-size:12px;color:#6366f1;font-weight:600;letter-spacing:2px;text-transform:uppercase}
+h1{font-size:clamp(2rem,5vw,3.5rem);font-weight:800;text-align:center;margin-bottom:10px;background:linear-gradient(135deg,#6366f1,#22d3ee);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+h2{font-size:clamp(1.5rem,3vw,2.2rem);font-weight:700;text-align:center;margin-bottom:20px}
+.subtitle{font-size:1.1rem;color:#94a3b8;text-align:center;max-width:700px;margin:0 auto 40px;line-height:1.7}
+.nav-dots{position:fixed;right:20px;top:50%;transform:translateY(-50%);z-index:100;display:flex;flex-direction:column;gap:12px}
+.nav-dot{width:10px;height:10px;border-radius:50%;background:#334155;cursor:pointer;transition:all .3s}
+.nav-dot.active{background:#6366f1;box-shadow:0 0 10px #6366f1}
+.progress-bar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6366f1,#22d3ee);z-index:200;transition:width .3s}
+.card{background:linear-gradient(135deg,#12121a,#1a1a2e);border:1px solid #1e293b;border-radius:16px;padding:30px;transition:all .3s}
+.card:hover{border-color:#6366f1;transform:translateY(-2px)}
+canvas{border-radius:12px;display:block;margin:0 auto}
+.controls{display:flex;flex-wrap:wrap;gap:20px;justify-content:center;margin-top:20px;align-items:center}
+.slider-item{display:flex;flex-direction:column;gap:6px;min-width:180px}
+.slider-item label{font-size:12px;color:#94a3b8;font-weight:500}
+.slider-item input[type=range]{-webkit-appearance:none;height:6px;border-radius:3px;background:#1e293b}
+.slider-item input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#6366f1;cursor:pointer}
+.slider-value{font-size:14px;font-weight:700;color:#22d3ee}
+.btn{padding:10px 24px;border-radius:8px;border:none;font-family:'Inter',sans-serif;font-weight:600;cursor:pointer;transition:all .3s}
+.btn-primary{background:#6366f1;color:#fff;font-size:14px}
+.btn-primary:hover{background:#818cf8}
+.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;max-width:1100px;width:100%;margin-top:30px}
+.info-card{background:#12121a;border:1px solid #1e293b;border-radius:12px;padding:25px}
+.info-card h3{font-size:1rem;font-weight:700;margin-bottom:10px}
+.info-card p{font-size:13px;color:#94a3b8;line-height:1.6}
+.comparison-row{display:flex;gap:40px;align-items:center;justify-content:center;flex-wrap:wrap;margin-top:30px}
+.compare-box{text-align:center}
+.compare-box .label{font-size:14px;color:#94a3b8;margin-top:10px}
+.compare-box .size{font-size:2rem;font-weight:800}
+.metric-row{display:flex;gap:20px;justify-content:center;margin-top:20px;flex-wrap:wrap}
+.metric{background:#12121a;border:1px solid #1e293b;border-radius:12px;padding:15px 25px;text-align:center}
+.metric .val{font-size:1.8rem;font-weight:800;color:#f59e0b}
+.metric .lbl{font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px}
+.gpu-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:20px}
+.gpu-chip{width:80px;height:60px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border:2px solid;transition:all .5s}
+.ring-arrow{font-size:20px;color:#22d3ee;align-self:center}
+.step-indicator{display:flex;gap:15px;align-items:center;justify-content:center;margin-top:15px}
+.step-dot{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:#1e293b;color:#64748b;transition:all .3s}
+.step-dot.active{background:#6366f1;color:#fff}
+.error-bar{height:8px;border-radius:4px;margin:3px 0;transition:width 1s ease}
+</style>
+</head>
+<body>
+<div class="progress-bar" id="progressBar"></div>
+<nav class="nav-dots" id="navDots"></nav>
+
+<!-- S1: Hero -->
+<div class="section" id="s1">
+<div class="section-counter">01 / 08 - Video Generation</div>
+<h1>Video Generation:<br>3D Latent Space (X, Y, T)</h1>
+<p class="subtitle">Video generation extends image diffusion into the temporal dimension, creating a massive 3D latent space that demands enormous compute. Let's visualize this.</p>
+<button class="btn btn-primary" onclick="document.getElementById('s2').scrollIntoView({behavior:'smooth'})">Explore the Cube</button>
+</div>
+
+<!-- S2: 3D Cube -->
+<div class="section" id="s2">
+<div class="section-counter">02 / 08 - The Latent Cube</div>
+<h2>The 3D Latent Space</h2>
+<p class="subtitle">Width x Height x Time - each point in this cube is a latent value that gets denoised</p>
+<canvas id="cubeCanvas" width="700" height="500"></canvas>
+<div class="controls">
+<div class="slider-item">
+<label>Video Length (frames)</label>
+<input type="range" id="videoLength" min="16" max="128" value="32" step="16" oninput="updateCube()">
+<span class="slider-value" id="videoLengthVal">32</span>
+</div>
+<div class="slider-item">
+<label>Resolution</label>
+<input type="range" id="resolution" min="1" max="4" value="2" oninput="updateCube()">
+<span class="slider-value" id="resolutionVal">512x512</span>
+</div>
+</div>
+<div class="metric-row" style="margin-top:15px">
+<div class="metric"><div class="val" id="totalLatents">--</div><div class="lbl">Latent elements</div></div>
+<div class="metric"><div class="val" id="computeTime">--</div><div class="lbl">Est. compute (sec)</div></div>
+<div class="metric"><div class="val" id="memoryReq">--</div><div class="lbl">VRAM (GB)</div></div>
+</div>
+</div>
+
+<!-- S3: Denoising Animation -->
+<div class="section" id="s3">
+<div class="section-counter">03 / 08 - Denoising Process</div>
+<h2>Denoising: From Noise to Video</h2>
+<p class="subtitle">Watch the 3D latent cube gradually denoise over ~50 diffusion steps</p>
+<canvas id="denoiseCanvas" width="700" height="400"></canvas>
+<div class="controls">
+<div class="slider-item">
+<label>Denoising Step: <span id="denoiseStepVal" style="color:#22d3ee;font-weight:700">0 / 50</span></label>
+<input type="range" id="denoiseStep" min="0" max="50" value="0" oninput="updateDenoise()">
+</div>
+<button class="btn btn-primary" onclick="autoplayDenoise()">Autoplay Denoising</button>
+</div>
+</div>
+
+<!-- S4: 2D vs 3D -->
+<div class="section" id="s4">
+<div class="section-counter">04 / 08 - 2D vs 3D</div>
+<h2>Image (2D) vs Video (3D) Latent Space</h2>
+<p class="subtitle">Adding the time dimension explodes compute requirements</p>
+<div class="comparison-row">
+<div class="compare-box">
+<canvas id="canvas2D" width="200" height="200"></canvas>
+<div class="label">Image Generation</div>
+<div class="size" style="color:#6366f1">64 x 64</div>
+<p style="font-size:12px;color:#94a3b8">4,096 latent elements</p>
+</div>
+<div style="font-size:3rem;color:#f59e0b;font-weight:800">vs</div>
+<div class="compare-box">
+<canvas id="canvas3D" width="250" height="200"></canvas>
+<div class="label">Video Generation (5 sec)</div>
+<div class="size" style="color:#22d3ee">64 x 64 x 40</div>
+<p style="font-size:12px;color:#94a3b8">163,840 latent elements</p>
+</div>
+</div>
+<div class="info-grid" style="margin-top:30px;max-width:800px">
+<div class="info-card">
+<h3 style="color:#6366f1">Attention Complexity</h3>
+<p>Self-attention in images: O(n^2) where n = H*W = 4,096.<br><br>Self-attention in video: O(n^2) where n = H*W*T = 163,840.<br><br>That's <strong style="color:#ef4444">1,600x more compute</strong> for attention alone.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#f59e0b">Why Not Just Stack Frames?</h3>
+<p>Frame-by-frame generation causes temporal inconsistency: flickering, identity changes, physics violations. The model must attend across all three dimensions simultaneously for coherence.</p>
+</div>
+</div>
+</div>
+
+<!-- S5: Compute Intensive -->
+<div class="section" id="s5">
+<div class="section-counter">05 / 08 - Compute Demands</div>
+<h2>Why Video Gen Is So Compute-Intensive</h2>
+<p class="subtitle">Attention spans across the entire 3D volume</p>
+<canvas id="attentionCanvas" width="800" height="400"></canvas>
+<div class="info-grid" style="max-width:900px">
+<div class="info-card">
+<h3 style="color:#ef4444">Batch Size = 1</h3>
+<p>A single video generation request can consume an entire GPU node. You cannot batch multiple video requests on one GPU like you can with LLM requests.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#f59e0b">50 Denoising Steps</h3>
+<p>Each step requires a full forward pass through a multi-billion parameter UNet or DiT model. 50 steps x massive model = minutes per video.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#22d3ee">Memory Wall</h3>
+<p>The KV cache for 3D attention on a 5-second 720p video can exceed 40GB alone. This forces batch size = 1 on most hardware.</p>
+</div>
+</div>
+</div>
+
+<!-- S6: Context Parallelism -->
+<div class="section" id="s6">
+<div class="section-counter">06 / 08 - Context Parallelism</div>
+<h2>Context Parallelism: Splitting the Cube</h2>
+<p class="subtitle">Distribute the 3D latent space across 8 GPUs with ring attention</p>
+<canvas id="cpCanvas" width="900" height="350"></canvas>
+<div class="gpu-row" id="gpuRow">
+</div>
+<div class="controls">
+<button class="btn btn-primary" onclick="animateCP()">Animate Ring Attention</button>
+</div>
+<div class="info-card" style="max-width:700px;margin-top:20px">
+<h3 style="color:#22d3ee">How Ring Attention Works</h3>
+<p>Each GPU holds a slice of the latent cube along the time axis. During attention computation, KV pairs are passed around the ring so every GPU can attend to every position. Communication overlaps with computation for efficiency.</p>
+</div>
+</div>
+
+<!-- S7: Frame-by-Frame vs Holistic -->
+<div class="section" id="s7">
+<div class="section-counter">07 / 08 - Generation Approaches</div>
+<h2>Frame-by-Frame vs Holistic Generation</h2>
+<p class="subtitle">Why generating all frames together produces better results</p>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;max-width:900px;width:100%">
+<div class="info-card">
+<h3 style="color:#ef4444">Frame-by-Frame (Autoregressive)</h3>
+<p>Generate frame 1, then frame 2 conditioned on frame 1, etc.</p>
+<div style="margin-top:15px">
+<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">Error accumulation over frames:</div>
+<div id="errorBars">
+</div>
+</div>
+<p style="margin-top:15px;font-size:12px;color:#ef4444">Errors compound! By frame 100, the video has drifted significantly from the original intent.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#10b981">Holistic (Full 3D Diffusion)</h3>
+<p>Denoise the entire X x Y x T cube simultaneously.</p>
+<div style="margin-top:15px">
+<div style="font-size:12px;color:#94a3b8;margin-bottom:8px">Consistent quality across frames:</div>
+<div id="holisticBars">
+</div>
+</div>
+<p style="margin-top:15px;font-size:12px;color:#10b981">Every frame is refined together. Temporal consistency is built-in, not bolted on.</p>
+</div>
+</div>
+</div>
+
+<!-- S8: Summary -->
+<div class="section" id="s8">
+<div class="section-counter">08 / 08 - Key Takeaways</div>
+<h2>Key Takeaways</h2>
+<div class="info-grid" style="max-width:900px">
+<div class="info-card">
+<h3 style="color:#6366f1">3D Latent Space</h3>
+<p>Video adds time to the spatial latent, creating W x H x T volume that's orders of magnitude larger than images.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#22d3ee">Attention is the Bottleneck</h3>
+<p>3D attention with O((W*H*T)^2) complexity makes video generation the most compute-intensive generative AI workload.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#f59e0b">Batch Size = 1</h3>
+<p>A single video takes the whole node. No batching possible. This is fundamentally different from LLM serving economics.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#10b981">Context Parallelism</h3>
+<p>Ring attention distributes the cube across GPUs, making long video generation feasible on multi-GPU nodes.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#a855f7">Holistic > Sequential</h3>
+<p>Full 3D denoising avoids error accumulation that plagues frame-by-frame approaches.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#ec4899">Future: Longer Videos</h3>
+<p>Current limit ~10 sec. Scaling to minutes requires breakthrough in memory efficiency and parallelism strategies.</p>
+</div>
+</div>
+</div>
+
+<script>
+// Navigation
+const sections = document.querySelectorAll('.section');
+const navDots = document.getElementById('navDots');
+const progressBar = document.getElementById('progressBar');
+sections.forEach((s,i) => {
+  const dot = document.createElement('div');
+  dot.className = 'nav-dot';
+  dot.onclick = () => s.scrollIntoView({behavior:'smooth'});
+  navDots.appendChild(dot);
+});
+window.addEventListener('scroll', () => {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  progressBar.style.width = (scrollTop/docHeight*100)+'%';
+  sections.forEach((s,i) => {
+    const rect = s.getBoundingClientRect();
+    if(rect.top < window.innerHeight/2 && rect.bottom > window.innerHeight/2) {
+      Array.from(navDots.children).forEach(d=>d.classList.remove('active'));
+      navDots.children[i].classList.add('active');
+    }
+  });
+});
+
+// 3D Cube Drawing
+let cubeAngle = 0;
+function drawCube(ctx, w, h, wx, wy, wt, noiseLevel, label) {
+  ctx.clearRect(0,0,w,h);
+  const cx = w/2, cy = h/2;
+  const sx = wx * 1.5, sy = wy * 1.5, st = wt * 0.8;
+  const isoX = (x,y,z) => cx + (x - z) * 0.866;
+  const isoY = (x,y,z) => cy + (x + z) * 0.5 - y;
+  // Draw cube faces
+  // Bottom
+  ctx.fillStyle = 'rgba(99,102,241,0.15)';
+  ctx.beginPath();
+  ctx.moveTo(isoX(-sx,-sy,-st), isoY(-sx,-sy,-st));
+  ctx.lineTo(isoX(sx,-sy,-st), isoY(sx,-sy,-st));
+  ctx.lineTo(isoX(sx,-sy,st), isoY(sx,-sy,st));
+  ctx.lineTo(isoX(-sx,-sy,st), isoY(-sx,-sy,st));
+  ctx.closePath();ctx.fill();
+  // Left face
+  ctx.fillStyle = 'rgba(34,211,238,0.12)';
+  ctx.beginPath();
+  ctx.moveTo(isoX(-sx,-sy,-st), isoY(-sx,-sy,-st));
+  ctx.lineTo(isoX(-sx,sy,-st), isoY(-sx,sy,-st));
+  ctx.lineTo(isoX(-sx,sy,st), isoY(-sx,sy,st));
+  ctx.lineTo(isoX(-sx,-sy,st), isoY(-sx,-sy,st));
+  ctx.closePath();ctx.fill();
+  // Front face
+  ctx.fillStyle = 'rgba(245,158,11,0.12)';
+  ctx.beginPath();
+  ctx.moveTo(isoX(-sx,-sy,st), isoY(-sx,-sy,st));
+  ctx.lineTo(isoX(sx,-sy,st), isoY(sx,-sy,st));
+  ctx.lineTo(isoX(sx,sy,st), isoY(sx,sy,st));
+  ctx.lineTo(isoX(-sx,sy,st), isoY(-sx,sy,st));
+  ctx.closePath();ctx.fill();
+  // Edges
+  ctx.strokeStyle = '#6366f1';ctx.lineWidth = 1.5;
+  const edges = [
+    [[-sx,-sy,-st],[sx,-sy,-st]],[[-sx,-sy,-st],[-sx,sy,-st]],[[-sx,-sy,-st],[-sx,-sy,st]],
+    [[sx,sy,st],[sx,-sy,st]],[[sx,sy,st],[sx,sy,-st]],[[sx,sy,st],[-sx,sy,st]],
+    [[sx,-sy,-st],[sx,sy,-st]],[[sx,-sy,-st],[sx,-sy,st]],
+    [[-sx,sy,-st],[sx,sy,-st]],[[-sx,sy,-st],[-sx,sy,st]],
+    [[-sx,-sy,st],[sx,-sy,st]],[[-sx,sy,st],[sx,sy,st]]
+  ];
+  edges.forEach(([a,b]) => {
+    ctx.beginPath();ctx.moveTo(isoX(...a),isoY(...a));ctx.lineTo(isoX(...b),isoY(...b));ctx.stroke();
+  });
+  // Noise particles inside
+  if(noiseLevel > 0) {
+    const nParticles = Math.floor(noiseLevel * 200);
+    for(let i=0;i<nParticles;i++){
+      const px = (Math.random()*2-1)*sx*0.9;
+      const py = (Math.random()*2-1)*sy*0.9;
+      const pz = (Math.random()*2-1)*st*0.9;
+      ctx.fillStyle = `rgba(${100+Math.random()*155},${100+Math.random()*155},${200+Math.random()*55},${noiseLevel*0.5})`;
+      ctx.beginPath();ctx.arc(isoX(px,py,pz),isoY(px,py,pz),1.5,0,Math.PI*2);ctx.fill();
+    }
+  }
+  // Axis labels
+  ctx.fillStyle = '#6366f1';ctx.font = 'bold 13px Inter';
+  ctx.fillText('X (Width)', isoX(sx+15,-sy,-st), isoY(sx+15,-sy,-st));
+  ctx.fillStyle = '#22d3ee';
+  ctx.fillText('T (Time)', isoX(-sx,-sy,st+15), isoY(-sx,-sy,st+15)+15);
+  ctx.fillStyle = '#f59e0b';
+  ctx.fillText('Y (Height)', isoX(-sx,sy+15,-st)-30, isoY(-sx,sy+15,-st));
+  if(label) {
+    ctx.fillStyle = '#e2e8f0';ctx.font = '12px Inter';ctx.fillText(label, 20, 25);
+  }
+}
+
+function updateCube() {
+  const frames = +document.getElementById('videoLength').value;
+  const resIdx = +document.getElementById('resolution').value;
+  const resMap = {1:'256x256',2:'512x512',3:'720p',4:'1080p'};
+  const resPx = {1:256,2:512,3:720,4:1080};
+  const latentMap = {1:32,2:64,3:90,4:135};
+  document.getElementById('videoLengthVal').textContent = frames;
+  document.getElementById('resolutionVal').textContent = resMap[resIdx];
+  const latSize = latentMap[resIdx];
+  const latFrames = Math.round(frames / 4); // temporal compression
+  const total = latSize * latSize * latFrames;
+  document.getElementById('totalLatents').textContent = (total/1000000).toFixed(1)+'M';
+  const computeSec = (total / 163840) * 12;
+  document.getElementById('computeTime').textContent = computeSec.toFixed(1);
+  const memGB = (total * 4 * 2 / 1e9).toFixed(1);
+  document.getElementById('memoryReq').textContent = memGB;
+  const c = document.getElementById('cubeCanvas');
+  const ctx = c.getContext('2d');
+  const wx = Math.min(latSize/2, 100);
+  const wy = Math.min(latSize/2, 100);
+  const wt = Math.min(latFrames * 3, 150);
+  drawCube(ctx, c.width, c.height, wx, wy, wt, 0.6, `Latent: ${latSize}x${latSize}x${latFrames}`);
+}
+
+function updateDenoise() {
+  const step = +document.getElementById('denoiseStep').value;
+  document.getElementById('denoiseStepVal').textContent = step + ' / 50';
+  const c = document.getElementById('denoiseCanvas');
+  const ctx = c.getContext('2d');
+  const noise = 1 - step/50;
+  drawCube(ctx, c.width, c.height, 80, 80, 100, noise, `Denoising step: ${step}/50 (noise: ${(noise*100).toFixed(0)}%)`);
+  // Color shift as denoising progresses
+  if(step > 30) {
+    const cx2 = c.width/2, cy2 = c.height/2;
+    const grad = ctx.createRadialGradient(cx2,cy2,20,cx2,cy2,150);
+    grad.addColorStop(0, `rgba(34,211,238,${(step-30)/50*0.15})`);
+    grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,c.width,c.height);
+  }
+}
+
+let denoiseInterval = null;
+function autoplayDenoise() {
+  if(denoiseInterval) { clearInterval(denoiseInterval); denoiseInterval = null; return; }
+  const slider = document.getElementById('denoiseStep');
+  slider.value = 0;
+  denoiseInterval = setInterval(() => {
+    slider.value = +slider.value + 1;
+    updateDenoise();
+    if(+slider.value >= 50) clearInterval(denoiseInterval);
+  }, 120);
+}
+
+// 2D vs 3D
+function draw2Dvs3D() {
+  const c2 = document.getElementById('canvas2D');
+  const ctx2 = c2.getContext('2d');
+  ctx2.clearRect(0,0,200,200);
+  // 2D grid
+  ctx2.strokeStyle = '#6366f1';ctx2.lineWidth = 1;
+  for(let i=0;i<=8;i++){
+    ctx2.beginPath();ctx2.moveTo(20+i*20,20);ctx2.lineTo(20+i*20,180);ctx2.stroke();
+    ctx2.beginPath();ctx2.moveTo(20,20+i*20);ctx2.lineTo(180,20+i*20);ctx2.stroke();
+  }
+  for(let x=0;x<8;x++) for(let y=0;y<8;y++){
+    ctx2.fillStyle = `rgba(99,102,241,${0.2+Math.random()*0.4})`;
+    ctx2.fillRect(21+x*20,21+y*20,19,19);
+  }
+  const c3 = document.getElementById('canvas3D');
+  const ctx3 = c3.getContext('2d');
+  ctx3.clearRect(0,0,250,200);
+  drawCube(ctx3, 250, 200, 50, 50, 80, 0.3, '');
+}
+
+// Attention canvas
+function drawAttention() {
+  const c = document.getElementById('attentionCanvas');
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  ctx.fillStyle = '#0d0d15';ctx.fillRect(0,0,c.width,c.height);
+  // Draw grid of latent positions
+  const gridW = 20, gridH = 12;
+  const cellW = 30, cellH = 25;
+  const offX = 80, offY = 30;
+  for(let x=0;x<gridW;x++) for(let y=0;y<gridH;y++){
+    const isTime = x < 8;
+    ctx.fillStyle = isTime ? 'rgba(34,211,238,0.15)' : (x<14 ? 'rgba(99,102,241,0.15)' : 'rgba(245,158,11,0.15)');
+    ctx.fillRect(offX+x*cellW+1, offY+y*cellH+1, cellW-2, cellH-2);
+  }
+  // Highlight attention connections
+  const focusX = 10, focusY = 6;
+  ctx.fillStyle = 'rgba(239,68,68,0.6)';
+  ctx.fillRect(offX+focusX*cellW+1, offY+focusY*cellH+1, cellW-2, cellH-2);
+  // Draw attention lines
+  ctx.strokeStyle = 'rgba(239,68,68,0.15)';ctx.lineWidth = 0.5;
+  for(let x=0;x<gridW;x++) for(let y=0;y<gridH;y++){
+    if(x===focusX && y===focusY) continue;
+    if(Math.random() > 0.3) continue;
+    ctx.beginPath();
+    ctx.moveTo(offX+focusX*cellW+cellW/2, offY+focusY*cellH+cellH/2);
+    ctx.lineTo(offX+x*cellW+cellW/2, offY+y*cellH+cellH/2);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#94a3b8';ctx.font = '11px Inter';
+  ctx.fillText('Spatial (X,Y)', offX, offY+gridH*cellH+18);
+  ctx.fillText('← Temporal (T) →', offX+gridW*cellW-80, offY+gridH*cellH+18);
+  ctx.fillStyle = '#ef4444';ctx.font = 'bold 11px Inter';
+  ctx.fillText('Every position attends to every other position', offX, offY+gridH*cellH+35);
+  ctx.fillText('across ALL three dimensions (X, Y, T)', offX, offY+gridH*cellH+50);
+}
+
+// Context Parallelism
+function drawCP() {
+  const c = document.getElementById('cpCanvas');
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  const gpuColors = ['#6366f1','#22d3ee','#f59e0b','#10b981','#ef4444','#a855f7','#ec4899','#14b8a6'];
+  // Draw cube split into 8 slices along T
+  const sliceW = 90, sliceH = 200;
+  const startX = 50;
+  for(let i=0;i<8;i++){
+    const x = startX + i * (sliceW + 8);
+    ctx.fillStyle = gpuColors[i];
+    ctx.globalAlpha = 0.2;
+    ctx.fillRect(x, 60, sliceW, sliceH);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = gpuColors[i];ctx.lineWidth = 2;
+    ctx.strokeRect(x, 60, sliceW, sliceH);
+    ctx.fillStyle = '#fff';ctx.font = 'bold 11px Inter';
+    ctx.fillText(`GPU ${i}`, x + 25, 280);
+    ctx.fillStyle = '#94a3b8';ctx.font = '10px Inter';
+    ctx.fillText(`T=${i*5}-${(i+1)*5-1}`, x + 20, 295);
+  }
+  ctx.fillStyle = '#e2e8f0';ctx.font = 'bold 14px Inter';
+  ctx.fillText('Latent cube split along Time axis across 8 GPUs', 220, 35);
+  // Ring arrows
+  ctx.strokeStyle = '#22d3ee';ctx.lineWidth = 1.5;ctx.setLineDash([4,4]);
+  ctx.beginPath();
+  const ringY = 315;
+  ctx.moveTo(startX+45, ringY);
+  for(let i=1;i<8;i++){
+    ctx.lineTo(startX+i*(sliceW+8)+45, ringY);
+  }
+  ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle = '#22d3ee';ctx.font = '11px Inter';
+  ctx.fillText('Ring Attention: KV pairs passed around the ring', 260, 340);
+  // GPU chips
+  const gpuRow = document.getElementById('gpuRow');
+  gpuRow.innerHTML = '';
+  gpuColors.forEach((c,i) => {
+    const chip = document.createElement('div');
+    chip.className = 'gpu-chip';
+    chip.style.background = c+'20';
+    chip.style.borderColor = c;
+    chip.style.color = c;
+    chip.textContent = 'GPU '+i;
+    gpuRow.appendChild(chip);
+    if(i < 7) {
+      const arr = document.createElement('span');
+      arr.className = 'ring-arrow';
+      arr.textContent = '↔';
+      gpuRow.appendChild(arr);
+    }
+  });
+}
+
+let cpAnimating = false;
+function animateCP() {
+  if(cpAnimating) return;
+  cpAnimating = true;
+  const chips = document.querySelectorAll('.gpu-chip');
+  let step = 0;
+  const interval = setInterval(() => {
+    chips.forEach((c,i) => {
+      c.style.transform = (i === step % 8) ? 'scale(1.15)' : 'scale(1)';
+      c.style.boxShadow = (i === step % 8) ? '0 0 20px rgba(34,211,238,0.5)' : 'none';
+    });
+    step++;
+    if(step > 24) { clearInterval(interval); cpAnimating = false; chips.forEach(c=>{c.style.transform='scale(1)';c.style.boxShadow='none';}); }
+  }, 200);
+}
+
+// Error accumulation bars
+function drawErrorBars() {
+  const container = document.getElementById('errorBars');
+  container.innerHTML = '';
+  for(let i=0;i<10;i++){
+    const bar = document.createElement('div');
+    bar.className = 'error-bar';
+    bar.style.background = `linear-gradient(90deg, #ef4444, #f59e0b)`;
+    bar.style.width = '0%';
+    bar.style.opacity = '0.8';
+    container.appendChild(bar);
+    setTimeout(() => { bar.style.width = (15 + i*8 + Math.random()*5) + '%'; }, i*100);
+  }
+  const labels = document.createElement('div');
+  labels.style.cssText = 'display:flex;justify-content:space-between;font-size:10px;color:#64748b;margin-top:5px';
+  labels.innerHTML = '<span>Frame 1</span><span>Frame 100</span>';
+  container.appendChild(labels);
+  const container2 = document.getElementById('holisticBars');
+  container2.innerHTML = '';
+  for(let i=0;i<10;i++){
+    const bar = document.createElement('div');
+    bar.className = 'error-bar';
+    bar.style.background = '#10b981';
+    bar.style.width = '0%';
+    bar.style.opacity = '0.8';
+    container2.appendChild(bar);
+    setTimeout(() => { bar.style.width = (12 + Math.random()*5) + '%'; }, i*100);
+  }
+  const labels2 = document.createElement('div');
+  labels2.style.cssText = 'display:flex;justify-content:space-between;font-size:10px;color:#64748b;margin-top:5px';
+  labels2.innerHTML = '<span>Frame 1</span><span>Frame 100</span>';
+  container2.appendChild(labels2);
+}
+
+// Observer for animations
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if(e.isIntersecting) {
+      if(e.target.id === 's7') drawErrorBars();
+      if(e.target.id === 's5') drawAttention();
+    }
+  });
+}, {threshold:0.3});
+sections.forEach(s => observer.observe(s));
+
+// Init
+updateCube();
+updateDenoise();
+draw2Dvs3D();
+drawAttention();
+drawCP();
+drawErrorBars();
+</script>
+</body>
+</html>

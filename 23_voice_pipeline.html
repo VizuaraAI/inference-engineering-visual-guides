@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voice AI Pipeline: ASR → LLM → TTS</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#0a0a0f;color:#e2e8f0;overflow-x:hidden;scroll-behavior:smooth}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#0a0a0f}
+::-webkit-scrollbar-thumb{background:#6366f1;border-radius:3px}
+.section{min-height:100vh;padding:60px 40px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
+.section-counter{position:absolute;top:20px;left:40px;font-size:12px;color:#6366f1;font-weight:600;letter-spacing:2px;text-transform:uppercase}
+h1{font-size:clamp(2rem,5vw,3.5rem);font-weight:800;text-align:center;margin-bottom:10px;background:linear-gradient(135deg,#6366f1,#22d3ee);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+h2{font-size:clamp(1.5rem,3vw,2.2rem);font-weight:700;text-align:center;margin-bottom:20px}
+.subtitle{font-size:1.1rem;color:#94a3b8;text-align:center;max-width:700px;margin:0 auto 40px;line-height:1.7}
+.nav-dots{position:fixed;right:20px;top:50%;transform:translateY(-50%);z-index:100;display:flex;flex-direction:column;gap:12px}
+.nav-dot{width:10px;height:10px;border-radius:50%;background:#334155;cursor:pointer;transition:all .3s}
+.nav-dot.active{background:#6366f1;box-shadow:0 0 10px #6366f1}
+.progress-bar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#6366f1,#22d3ee);z-index:200;transition:width .3s}
+.pipeline-canvas{width:100%;max-width:1100px;margin:0 auto}
+canvas{border-radius:12px;display:block;margin:0 auto}
+.btn{padding:12px 28px;border-radius:10px;border:none;font-family:'Inter',sans-serif;font-weight:700;cursor:pointer;transition:all .3s;font-size:15px}
+.btn-primary{background:linear-gradient(135deg,#6366f1,#818cf8);color:#fff;box-shadow:0 4px 15px rgba(99,102,241,0.3)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(99,102,241,0.4)}
+.btn-primary:active{transform:scale(0.97)}
+.btn-primary.recording{background:linear-gradient(135deg,#ef4444,#f87171);box-shadow:0 4px 15px rgba(239,68,68,0.3);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 4px 15px rgba(239,68,68,0.3)}50%{box-shadow:0 4px 25px rgba(239,68,68,0.6)}}
+.stage-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;max-width:1100px;width:100%;margin-top:30px}
+.stage-card{background:#12121a;border:1px solid #1e293b;border-radius:12px;padding:20px;text-align:center;transition:all .5s;position:relative;overflow:hidden}
+.stage-card.active{border-color:#6366f1;box-shadow:0 0 20px rgba(99,102,241,0.2)}
+.stage-card .stage-icon{font-size:2rem;margin-bottom:10px}
+.stage-card h3{font-size:14px;font-weight:700;margin-bottom:5px}
+.stage-card p{font-size:12px;color:#94a3b8}
+.stage-card .latency{font-size:20px;font-weight:800;margin-top:8px}
+.stage-card .progress-fill{position:absolute;bottom:0;left:0;height:3px;background:#6366f1;transition:width .3s;width:0}
+.latency-bar{display:flex;max-width:1100px;width:100%;height:60px;border-radius:12px;overflow:hidden;margin-top:20px;background:#12121a;border:1px solid #1e293b}
+.latency-segment{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;transition:all 1s;height:100%}
+.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;max-width:1100px;width:100%;margin-top:30px}
+.info-card{background:#12121a;border:1px solid #1e293b;border-radius:12px;padding:25px}
+.info-card h3{font-size:1rem;font-weight:700;margin-bottom:10px}
+.info-card p{font-size:13px;color:#94a3b8;line-height:1.6}
+.waveform-container{position:relative;width:100%;max-width:1100px;height:80px;margin:10px auto;background:#0d0d15;border-radius:10px;overflow:hidden}
+.cascade-diagram{max-width:1000px;width:100%;margin:0 auto}
+.opt-tag{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;margin-top:8px}
+.pipeline-flow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;max-width:1100px;width:100%;margin-top:25px}
+.flow-node{padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;text-align:center;min-width:100px;transition:all .3s}
+.flow-arrow{color:#64748b;font-size:20px}
+.flow-node:hover{transform:scale(1.05)}
+.ws-line{display:flex;align-items:center;gap:10px;padding:8px 15px;background:#12121a;border-radius:8px;border-left:3px solid;margin:5px 0;font-size:13px}
+.total-latency{font-size:2.5rem;font-weight:800;text-align:center;margin-top:20px}
+</style>
+</head>
+<body>
+<div class="progress-bar" id="progressBar"></div>
+<nav class="nav-dots" id="navDots"></nav>
+
+<!-- S1: Hero -->
+<div class="section" id="s1">
+<div class="section-counter">01 / 08 - Voice Pipeline</div>
+<h1>Voice AI Pipeline:<br>ASR → LLM → TTS</h1>
+<p class="subtitle">The complete journey of voice-in, voice-out AI: from audio waveform through transcription, language understanding, response generation, to synthesized speech.</p>
+<button class="btn btn-primary" onclick="document.getElementById('s2').scrollIntoView({behavior:'smooth'})">Explore the Pipeline</button>
+</div>
+
+<!-- S2: Full Pipeline Visualization -->
+<div class="section" id="s2">
+<div class="section-counter">02 / 08 - End-to-End Pipeline</div>
+<h2>The Voice AI Pipeline</h2>
+<p class="subtitle">Click "Speak" to trigger the full pipeline animation</p>
+<div class="pipeline-flow">
+<div class="flow-node" id="fn-mic" style="background:rgba(239,68,68,0.2);border:1px solid #ef4444;color:#ef4444">Microphone</div>
+<div class="flow-arrow">→</div>
+<div class="flow-node" id="fn-vad" style="background:rgba(245,158,11,0.2);border:1px solid #f59e0b;color:#f59e0b">VAD</div>
+<div class="flow-arrow">→</div>
+<div class="flow-node" id="fn-asr" style="background:rgba(99,102,241,0.2);border:1px solid #6366f1;color:#6366f1">Whisper (ASR)</div>
+<div class="flow-arrow">→</div>
+<div class="flow-node" id="fn-llm" style="background:rgba(34,211,238,0.2);border:1px solid #22d3ee;color:#22d3ee">LLM</div>
+<div class="flow-arrow">→</div>
+<div class="flow-node" id="fn-tts" style="background:rgba(16,185,129,0.2);border:1px solid #10b981;color:#10b981">TTS</div>
+<div class="flow-arrow">→</div>
+<div class="flow-node" id="fn-speaker" style="background:rgba(168,85,247,0.2);border:1px solid #a855f7;color:#a855f7">Speaker</div>
+</div>
+<canvas id="pipelineCanvas" width="1100" height="300" style="margin-top:20px"></canvas>
+<button class="btn btn-primary" id="speakBtn" onclick="triggerPipeline()" style="margin-top:20px">Click to "Speak"</button>
+</div>
+
+<!-- S3: Stage Details -->
+<div class="section" id="s3">
+<div class="section-counter">03 / 08 - Pipeline Stages</div>
+<h2>Stage-by-Stage Breakdown</h2>
+<p class="subtitle">Each stage has its own latency characteristics and optimization opportunities</p>
+<div class="stage-cards" id="stageCards">
+<div class="stage-card" id="stage-vad">
+<div class="stage-icon" style="color:#f59e0b">VAD</div>
+<h3>Voice Activity Detection</h3>
+<p>Segments speech from silence, detects end of utterance</p>
+<div class="latency" style="color:#f59e0b">~20ms</div>
+<div class="opt-tag" style="background:rgba(245,158,11,0.15);color:#f59e0b">Silero VAD</div>
+<div class="progress-fill"></div>
+</div>
+<div class="stage-card" id="stage-asr">
+<div class="stage-icon" style="color:#6366f1">ASR</div>
+<h3>Speech-to-Text (Whisper)</h3>
+<p>Transcribes audio to text using Whisper model</p>
+<div class="latency" style="color:#6366f1">~200ms</div>
+<div class="opt-tag" style="background:rgba(99,102,241,0.15);color:#6366f1">MIG Partition</div>
+<div class="progress-fill"></div>
+</div>
+<div class="stage-card" id="stage-llm">
+<div class="stage-icon" style="color:#22d3ee">LLM</div>
+<h3>Language Model</h3>
+<p>Processes text, generates response (TTFT + decode)</p>
+<div class="latency" style="color:#22d3ee">~300ms</div>
+<div class="opt-tag" style="background:rgba(34,211,238,0.15);color:#22d3ee">KV Cache + Speculative</div>
+<div class="progress-fill"></div>
+</div>
+<div class="stage-card" id="stage-tts">
+<div class="stage-icon" style="color:#10b981">TTS</div>
+<h3>Text-to-Speech</h3>
+<p>Synthesizes natural-sounding audio from text</p>
+<div class="latency" style="color:#10b981">~150ms</div>
+<div class="opt-tag" style="background:rgba(16,185,129,0.15);color:#10b981">TensorRT Optimized</div>
+<div class="progress-fill"></div>
+</div>
+<div class="stage-card" id="stage-net">
+<div class="stage-icon" style="color:#a855f7">NET</div>
+<h3>Network + Audio</h3>
+<p>WebSocket transport, audio encoding/decoding</p>
+<div class="latency" style="color:#a855f7">~30ms</div>
+<div class="opt-tag" style="background:rgba(168,85,247,0.15);color:#a855f7">WebSocket Streaming</div>
+<div class="progress-fill"></div>
+</div>
+</div>
+<div class="total-latency">Total: <span style="color:#22d3ee">~700ms</span> <span style="font-size:1rem;color:#94a3b8">(end-to-end)</span></div>
+</div>
+
+<!-- S4: Latency Breakdown -->
+<div class="section" id="s4">
+<div class="section-counter">04 / 08 - Latency Breakdown</div>
+<h2>Latency Waterfall</h2>
+<p class="subtitle">Visualizing where time is spent in the pipeline</p>
+<canvas id="waterfallCanvas" width="1000" height="400"></canvas>
+<div class="latency-bar" style="margin-top:30px">
+<div class="latency-segment" style="width:3%;background:rgba(245,158,11,0.3);color:#f59e0b">VAD</div>
+<div class="latency-segment" style="width:28%;background:rgba(99,102,241,0.3);color:#6366f1">ASR (Whisper)</div>
+<div class="latency-segment" style="width:43%;background:rgba(34,211,238,0.3);color:#22d3ee">LLM (TTFT + Decode)</div>
+<div class="latency-segment" style="width:22%;background:rgba(16,185,129,0.3);color:#10b981">TTS</div>
+<div class="latency-segment" style="width:4%;background:rgba(168,85,247,0.3);color:#a855f7">Net</div>
+</div>
+<p style="text-align:center;font-size:13px;color:#64748b;margin-top:10px">The LLM dominates total latency. This is where most optimizations focus.</p>
+</div>
+
+<!-- S5: Streaming -->
+<div class="section" id="s5">
+<div class="section-counter">05 / 08 - Streaming</div>
+<h2>Streaming: WebSocket Connections</h2>
+<p class="subtitle">Streaming at each stage reduces perceived latency dramatically</p>
+<canvas id="streamCanvas" width="1000" height="350"></canvas>
+<div class="info-grid" style="max-width:800px;margin-top:20px">
+<div class="info-card">
+<h3 style="color:#6366f1">Without Streaming</h3>
+<p>Wait for ASR to finish all audio. Wait for LLM to generate full response. Wait for TTS to synthesize complete audio. Total: 700ms+ before user hears anything.</p>
+<div style="margin-top:10px">
+<div class="ws-line" style="border-color:#ef4444"><span style="color:#ef4444;font-weight:700">Sequential:</span> User waits for everything</div>
+</div>
+</div>
+<div class="info-card">
+<h3 style="color:#22d3ee">With Streaming</h3>
+<p>ASR streams partial transcripts. LLM streams tokens as generated. TTS starts on first sentence. User hears response in ~300ms.</p>
+<div style="margin-top:10px">
+<div class="ws-line" style="border-color:#10b981"><span style="color:#10b981;font-weight:700">Pipelined:</span> Stages overlap</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- S6: Cascading vs Speech-to-Speech -->
+<div class="section" id="s6">
+<div class="section-counter">06 / 08 - Architecture Comparison</div>
+<h2>Cascading vs Speech-to-Speech</h2>
+<p class="subtitle">Current cascade approach vs the future of end-to-end models</p>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;max-width:1000px;width:100%">
+<div class="info-card" style="border-color:#f59e0b">
+<h3 style="color:#f59e0b">Cascade Pipeline (Today)</h3>
+<div style="margin-top:15px">
+<div class="pipeline-flow" style="flex-direction:column;gap:5px;align-items:stretch">
+<div class="flow-node" style="background:rgba(239,68,68,0.15);border:1px solid #ef4444;color:#ef4444;font-size:12px">Audio Input</div>
+<div style="text-align:center;color:#64748b">↓</div>
+<div class="flow-node" style="background:rgba(99,102,241,0.15);border:1px solid #6366f1;color:#6366f1;font-size:12px">ASR (Whisper)</div>
+<div style="text-align:center;color:#64748b">↓ text</div>
+<div class="flow-node" style="background:rgba(34,211,238,0.15);border:1px solid #22d3ee;color:#22d3ee;font-size:12px">LLM (GPT-4o / Llama)</div>
+<div style="text-align:center;color:#64748b">↓ text</div>
+<div class="flow-node" style="background:rgba(16,185,129,0.15);border:1px solid #10b981;color:#10b981;font-size:12px">TTS (XTTS / VITS)</div>
+<div style="text-align:center;color:#64748b">↓</div>
+<div class="flow-node" style="background:rgba(168,85,247,0.15);border:1px solid #a855f7;color:#a855f7;font-size:12px">Audio Output</div>
+</div>
+</div>
+<div style="margin-top:15px;padding:10px;background:rgba(245,158,11,0.1);border-radius:8px">
+<p style="font-size:12px;color:#f59e0b"><strong>Pros:</strong> Use best model for each stage, easy to swap components</p>
+<p style="font-size:12px;color:#ef4444;margin-top:5px"><strong>Cons:</strong> Latency adds up, loses tone/emotion in text conversion</p>
+</div>
+</div>
+<div class="info-card" style="border-color:#22d3ee">
+<h3 style="color:#22d3ee">Speech-to-Speech (Future)</h3>
+<div style="margin-top:15px">
+<div class="pipeline-flow" style="flex-direction:column;gap:5px;align-items:stretch">
+<div class="flow-node" style="background:rgba(239,68,68,0.15);border:1px solid #ef4444;color:#ef4444;font-size:12px">Audio Input</div>
+<div style="text-align:center;color:#64748b">↓</div>
+<div class="flow-node" style="background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(34,211,238,0.15),rgba(16,185,129,0.15));border:2px solid #22d3ee;color:#22d3ee;font-size:12px;padding:25px">
+<strong>Single Multimodal Model</strong><br><span style="font-size:10px;color:#94a3b8">Audio → Understanding → Audio</span>
+</div>
+<div style="text-align:center;color:#64748b">↓</div>
+<div class="flow-node" style="background:rgba(168,85,247,0.15);border:1px solid #a855f7;color:#a855f7;font-size:12px">Audio Output</div>
+</div>
+</div>
+<div style="margin-top:15px;padding:10px;background:rgba(34,211,238,0.1);border-radius:8px">
+<p style="font-size:12px;color:#22d3ee"><strong>Pros:</strong> Lower latency, preserves emotion/tone, end-to-end optimized</p>
+<p style="font-size:12px;color:#ef4444;margin-top:5px"><strong>Cons:</strong> Still emerging, harder to debug, quality inconsistent</p>
+</div>
+</div>
+</div>
+</div>
+
+<!-- S7: Optimizations -->
+<div class="section" id="s7">
+<div class="section-counter">07 / 08 - Optimizations</div>
+<h2>Where Each Optimization Helps</h2>
+<p class="subtitle">Different techniques target different stages of the pipeline</p>
+<div class="info-grid">
+<div class="info-card">
+<h3 style="color:#6366f1">MIG for ASR</h3>
+<p>Whisper is a small model. Use Multi-Instance GPU (MIG) to partition one H100 into 7 instances, each running Whisper. One GPU handles 7 concurrent ASR requests.</p>
+<div style="margin-top:10px;display:flex;gap:4px">
+<div style="width:40px;height:30px;background:rgba(99,102,241,0.3);border:1px solid #6366f1;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#6366f1">W1</div>
+<div style="width:40px;height:30px;background:rgba(99,102,241,0.3);border:1px solid #6366f1;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#6366f1">W2</div>
+<div style="width:40px;height:30px;background:rgba(99,102,241,0.3);border:1px solid #6366f1;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#6366f1">W3</div>
+<div style="width:40px;height:30px;background:rgba(99,102,241,0.3);border:1px solid #6366f1;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#6366f1">...</div>
+<div style="width:40px;height:30px;background:rgba(99,102,241,0.3);border:1px solid #6366f1;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#6366f1">W7</div>
+</div>
+<p style="font-size:11px;color:#64748b;margin-top:5px">7 Whisper instances on 1 H100</p>
+</div>
+<div class="info-card">
+<h3 style="color:#22d3ee">KV Cache + Speculative for LLM</h3>
+<p>Prefix caching reuses system prompt KV cache across voice sessions. Speculative decoding accelerates response generation by 2-3x.</p>
+<div style="margin-top:10px;padding:8px;background:rgba(34,211,238,0.1);border-radius:6px;font-size:12px">
+<span style="color:#22d3ee">TTFT: 80ms → 40ms</span> (cached prefix)<br>
+<span style="color:#22d3ee">Decode: 50 tok/s → 120 tok/s</span> (speculative)
+</div>
+</div>
+<div class="info-card">
+<h3 style="color:#10b981">TensorRT for TTS</h3>
+<p>TTS models benefit enormously from TensorRT optimization. Compilation + graph fusion reduces TTS latency by 3-5x compared to PyTorch eager mode.</p>
+<div style="margin-top:10px">
+<div style="display:flex;align-items:center;gap:10px">
+<div style="flex:1;height:20px;background:rgba(239,68,68,0.3);border-radius:4px;display:flex;align-items:center;padding:0 8px;font-size:10px;color:#ef4444">PyTorch: 500ms</div>
+</div>
+<div style="display:flex;align-items:center;gap:10px;margin-top:5px">
+<div style="flex:0.25;height:20px;background:rgba(16,185,129,0.3);border-radius:4px;display:flex;align-items:center;padding:0 8px;font-size:10px;color:#10b981">TRT: 120ms</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- S8: Summary -->
+<div class="section" id="s8">
+<div class="section-counter">08 / 08 - Summary</div>
+<h2>Voice Pipeline: Key Takeaways</h2>
+<div class="info-grid" style="max-width:900px">
+<div class="info-card">
+<h3 style="color:#f59e0b">Target: sub-500ms</h3>
+<p>Human conversation expects responses within ~500ms. Every millisecond matters in voice AI to feel natural and responsive.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#6366f1">Streaming is Essential</h3>
+<p>Without streaming, users wait 700ms+. With streaming and pipelining, first audio output arrives in ~300ms.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#22d3ee">LLM Dominates Latency</h3>
+<p>The LLM stage (TTFT + decode) accounts for ~43% of total latency. This is where most optimization effort should focus.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#10b981">Right-Size Each Stage</h3>
+<p>Use MIG for ASR (small model, many instances), full GPU for LLM (large model), TensorRT for TTS (compilation wins).</p>
+</div>
+<div class="info-card">
+<h3 style="color:#a855f7">Future: End-to-End</h3>
+<p>Speech-to-speech models will eliminate the text bottleneck, preserving emotion and reducing latency. Still emerging technology.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#ec4899">WebSocket Everything</h3>
+<p>Every connection in the pipeline should be a WebSocket for bidirectional streaming. HTTP request/response adds unacceptable latency.</p>
+</div>
+</div>
+</div>
+
+<script>
+// Navigation
+const sections = document.querySelectorAll('.section');
+const navDots = document.getElementById('navDots');
+const progressBar = document.getElementById('progressBar');
+sections.forEach((s,i)=>{const d=document.createElement('div');d.className='nav-dot';d.onclick=()=>s.scrollIntoView({behavior:'smooth'});navDots.appendChild(d);});
+window.addEventListener('scroll',()=>{
+  const st=window.scrollY,dh=document.documentElement.scrollHeight-window.innerHeight;
+  progressBar.style.width=(st/dh*100)+'%';
+  sections.forEach((s,i)=>{const r=s.getBoundingClientRect();if(r.top<window.innerHeight/2&&r.bottom>window.innerHeight/2){Array.from(navDots.children).forEach(d=>d.classList.remove('active'));navDots.children[i].classList.add('active');}});
+});
+
+// Pipeline canvas animation
+let pipelineRunning = false;
+function triggerPipeline() {
+  if(pipelineRunning) return;
+  pipelineRunning = true;
+  const btn = document.getElementById('speakBtn');
+  btn.textContent = 'Processing...';
+  btn.classList.add('recording');
+  const c = document.getElementById('pipelineCanvas');
+  const ctx = c.getContext('2d');
+  const w = c.width, h = c.height;
+  const stages = [
+    {name:'Audio In',x:0,w:100,color:'#ef4444',dur:200},
+    {name:'VAD',x:110,w:50,color:'#f59e0b',dur:100},
+    {name:'ASR (Whisper)',x:170,w:200,color:'#6366f1',dur:600},
+    {name:'LLM',x:380,w:300,color:'#22d3ee',dur:900},
+    {name:'TTS',x:690,w:200,color:'#10b981',dur:500},
+    {name:'Audio Out',x:900,w:100,color:'#a855f7',dur:300},
+  ];
+  let frame = 0;
+  const totalFrames = 180;
+  const flowNodes = ['fn-mic','fn-vad','fn-asr','fn-llm','fn-tts','fn-speaker'];
+
+  function animate() {
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle = '#0d0d15';ctx.fillRect(0,0,w,h);
+    // Timeline base
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(30, h/2-2, w-60, 4);
+    // Draw stages
+    const progress = frame / totalFrames;
+    stages.forEach((s,i) => {
+      const stageStart = i / stages.length;
+      const stageEnd = (i+1) / stages.length;
+      const stageProgress = Math.max(0, Math.min(1, (progress - stageStart) / (stageEnd - stageStart)));
+      // Stage box
+      const y = 40 + (i%2) * 120;
+      const barY = h/2 - 20;
+      if(stageProgress > 0) {
+        ctx.fillStyle = s.color;ctx.globalAlpha = 0.2;
+        ctx.beginPath();ctx.roundRect(s.x+30, barY, s.w * stageProgress, 40, 6);ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = s.color;ctx.lineWidth = 2;
+        ctx.beginPath();ctx.roundRect(s.x+30, barY, s.w * stageProgress, 40, 6);ctx.stroke();
+        // Label
+        ctx.fillStyle = s.color;ctx.font = 'bold 12px Inter';
+        ctx.fillText(s.name, s.x+35, barY-8);
+        // Flowing dots
+        if(stageProgress > 0 && stageProgress < 1) {
+          for(let d=0;d<3;d++){
+            const dx = s.x + 30 + s.w * stageProgress - d*15;
+            if(dx > s.x+30) {
+              ctx.fillStyle = s.color;ctx.globalAlpha = 0.8 - d*0.2;
+              ctx.beginPath();ctx.arc(dx, h/2, 4, 0, Math.PI*2);ctx.fill();
+              ctx.globalAlpha = 1;
+            }
+          }
+        }
+        // Highlight flow node
+        if(stageProgress > 0.1 && stageProgress < 0.9) {
+          const el = document.getElementById(flowNodes[i]);
+          if(el) el.style.boxShadow = `0 0 15px ${s.color}40`;
+        } else {
+          const el = document.getElementById(flowNodes[i]);
+          if(el) el.style.boxShadow = 'none';
+        }
+      }
+    });
+    // Waveform input
+    if(progress < 0.25) {
+      ctx.strokeStyle = '#ef4444';ctx.lineWidth = 2;
+      ctx.beginPath();
+      for(let x=30;x<130;x++){
+        const amp = Math.sin(x*0.3+frame*0.2)*20*Math.sin(progress*Math.PI*4);
+        ctx.lineTo(x, 20+amp);
+      }
+      ctx.stroke();
+    }
+    // Waveform output
+    if(progress > 0.75) {
+      ctx.strokeStyle = '#a855f7';ctx.lineWidth = 2;
+      ctx.beginPath();
+      for(let x=900;x<1050;x++){
+        const amp = Math.sin(x*0.2+frame*0.15)*20*Math.sin((progress-0.75)*4*Math.PI);
+        ctx.lineTo(x, 20+amp);
+      }
+      ctx.stroke();
+    }
+    // Text flowing between stages
+    if(progress > 0.35 && progress < 0.65) {
+      ctx.fillStyle = '#e2e8f0';ctx.font = '11px Inter';
+      const textX = 380 + (progress-0.35)*600;
+      ctx.globalAlpha = 0.7;
+      ctx.fillText('"Hello, how can I help you today?"', Math.min(textX, 500), h/2 + 50);
+      ctx.globalAlpha = 1;
+    }
+    frame++;
+    if(frame <= totalFrames) {
+      requestAnimationFrame(animate);
+    } else {
+      pipelineRunning = false;
+      btn.textContent = 'Click to "Speak"';
+      btn.classList.remove('recording');
+      flowNodes.forEach(id => { const el=document.getElementById(id); if(el) el.style.boxShadow='none'; });
+    }
+  }
+  animate();
+}
+
+// Waterfall canvas
+function drawWaterfall() {
+  const c = document.getElementById('waterfallCanvas');
+  if(!c) return;
+  const ctx = c.getContext('2d');
+  const w = c.width, h = c.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle = '#0d0d15';ctx.fillRect(0,0,w,h);
+  // Grid
+  ctx.strokeStyle = '#1e293b';ctx.lineWidth = 0.5;
+  for(let x=100;x<w;x+=100){
+    ctx.beginPath();ctx.moveTo(x,20);ctx.lineTo(x,h-30);ctx.stroke();
+    ctx.fillStyle = '#475569';ctx.font = '10px Inter';
+    ctx.fillText(((x-100)/100*100)+'ms', x-15, h-10);
+  }
+  const stages = [
+    {name:'VAD',start:0,dur:20,color:'#f59e0b',y:40},
+    {name:'ASR (Whisper)',start:20,dur:200,color:'#6366f1',y:100},
+    {name:'LLM TTFT',start:220,dur:80,color:'#22d3ee',y:160},
+    {name:'LLM Decode',start:300,dur:220,color:'#06b6d4',y:220},
+    {name:'TTS',start:300,dur:150,color:'#10b981',y:280},
+    {name:'Network',start:0,dur:700,color:'#a855f7',y:340},
+  ];
+  stages.forEach(s => {
+    const x = 100 + s.start * (w-200)/700;
+    const bw = s.dur * (w-200)/700;
+    ctx.fillStyle = s.color;ctx.globalAlpha = 0.25;
+    ctx.beginPath();ctx.roundRect(x,s.y,bw,40,6);ctx.fill();
+    ctx.globalAlpha = 1;ctx.strokeStyle = s.color;ctx.lineWidth = 2;
+    ctx.beginPath();ctx.roundRect(x,s.y,bw,40,6);ctx.stroke();
+    ctx.fillStyle = '#e2e8f0';ctx.font = 'bold 12px Inter';
+    ctx.fillText(s.name, x+8, s.y+17);
+    ctx.fillStyle = s.color;ctx.font = '11px Inter';
+    ctx.fillText(s.dur+'ms', x+8, s.y+33);
+  });
+  // Streaming overlap arrow
+  ctx.setLineDash([4,4]);ctx.strokeStyle = '#10b981';ctx.lineWidth = 1;
+  ctx.beginPath();ctx.moveTo(100+300*(w-200)/700, 235);ctx.lineTo(100+300*(w-200)/700, 280);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#10b981';ctx.font = '10px Inter';
+  ctx.fillText('TTS starts as LLM streams tokens', 100+310*(w-200)/700, 270);
+}
+
+// Stream canvas
+function drawStream() {
+  const c = document.getElementById('streamCanvas');
+  if(!c) return;
+  const ctx = c.getContext('2d');
+  const w = c.width, h = c.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle = '#0d0d15';ctx.fillRect(0,0,w,h);
+  // Non-streaming
+  ctx.fillStyle = '#94a3b8';ctx.font = 'bold 13px Inter';
+  ctx.fillText('Without Streaming (Sequential)', 20, 30);
+  const seqStages = [
+    {name:'ASR',dur:200,color:'#6366f1'},
+    {name:'LLM',dur:300,color:'#22d3ee'},
+    {name:'TTS',dur:150,color:'#10b981'},
+  ];
+  let sx = 50;
+  seqStages.forEach(s => {
+    const bw = s.dur * 1.2;
+    ctx.fillStyle = s.color;ctx.globalAlpha = 0.3;
+    ctx.beginPath();ctx.roundRect(sx, 50, bw, 40, 6);ctx.fill();
+    ctx.globalAlpha = 1;ctx.strokeStyle = s.color;ctx.lineWidth = 2;
+    ctx.beginPath();ctx.roundRect(sx, 50, bw, 40, 6);ctx.stroke();
+    ctx.fillStyle = '#fff';ctx.font = '12px Inter';ctx.fillText(s.name+' '+s.dur+'ms', sx+10, 75);
+    sx += bw + 5;
+  });
+  ctx.fillStyle = '#ef4444';ctx.font = 'bold 12px Inter';
+  ctx.fillText('First audio: 650ms', sx+10, 75);
+  // With streaming
+  ctx.fillStyle = '#94a3b8';ctx.font = 'bold 13px Inter';
+  ctx.fillText('With Streaming (Pipelined)', 20, 160);
+  // Overlapping stages
+  const streamY = 180;
+  // ASR streams chunks
+  for(let i=0;i<4;i++){
+    ctx.fillStyle = '#6366f1';ctx.globalAlpha = 0.3;
+    ctx.beginPath();ctx.roundRect(50+i*55, streamY, 50, 30, 4);ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  ctx.fillStyle = '#6366f1';ctx.font = '10px Inter';ctx.fillText('ASR chunks', 50, streamY+50);
+  // LLM starts overlapping
+  for(let i=0;i<8;i++){
+    ctx.fillStyle = '#22d3ee';ctx.globalAlpha = 0.3;
+    ctx.beginPath();ctx.roundRect(160+i*40, streamY+40, 35, 30, 4);ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  ctx.fillStyle = '#22d3ee';ctx.font = '10px Inter';ctx.fillText('LLM tokens', 160, streamY+90);
+  // TTS starts overlapping with LLM
+  for(let i=0;i<5;i++){
+    ctx.fillStyle = '#10b981';ctx.globalAlpha = 0.3;
+    ctx.beginPath();ctx.roundRect(250+i*50, streamY+80, 45, 30, 4);ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  ctx.fillStyle = '#10b981';ctx.font = '10px Inter';ctx.fillText('TTS audio', 250, streamY+130);
+  // First audio marker
+  ctx.setLineDash([4,4]);ctx.strokeStyle = '#10b981';ctx.lineWidth = 2;
+  ctx.beginPath();ctx.moveTo(295, streamY);ctx.lineTo(295, streamY+115);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#10b981';ctx.font = 'bold 12px Inter';
+  ctx.fillText('First audio: ~300ms', 310, streamY + 60);
+  ctx.fillText('2x faster perceived latency!', 310, streamY + 78);
+}
+
+// Init
+drawWaterfall();
+drawStream();
+window.addEventListener('resize', () => { drawWaterfall(); drawStream(); });
+</script>
+</body>
+</html>

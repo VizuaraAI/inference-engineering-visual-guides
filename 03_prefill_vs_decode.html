@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prefill vs Decode - Visual Walkthrough</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0f;--bg-card:#12121a;--bg-card-hover:#1a1a2e;--border:#1e1e3a;--primary:#6366f1;--secondary:#22d3ee;--tertiary:#f59e0b;--success:#10b981;--text:#e2e8f0;--text-muted:#94a3b8;--text-dim:#64748b;--danger:#ef4444;--compute:#ef4444;--memory:#3b82f6}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;line-height:1.6;overflow-x:hidden}
+code,.mono{font-family:'JetBrains Mono',monospace}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.bg-grid{background-image:linear-gradient(rgba(99,102,241,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,0.03) 1px,transparent 1px);background-size:60px 60px}
+.bg-glow-1{position:fixed;top:15%;left:5%;width:600px;height:600px;background:radial-gradient(circle,rgba(239,68,68,0.06) 0%,transparent 70%);pointer-events:none;z-index:0}
+.bg-glow-2{position:fixed;bottom:10%;right:5%;width:500px;height:500px;background:radial-gradient(circle,rgba(59,130,246,0.06) 0%,transparent 70%);pointer-events:none;z-index:0}
+.progress-bar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--compute),var(--memory));z-index:1000;transition:width .3s}
+.nav{position:fixed;top:0;left:0;right:0;background:rgba(10,10,15,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);z-index:999;padding:0 2rem}
+.nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:60px}
+.nav-title{font-weight:700;font-size:.9rem}.nav-title span{color:var(--primary)}
+.nav-dots{display:flex;gap:8px}
+.nav-dot{width:10px;height:10px;border-radius:50%;background:var(--border);cursor:pointer;transition:all .3s;border:none}
+.nav-dot.active{background:var(--primary);box-shadow:0 0 10px var(--primary)}.nav-dot:hover{background:var(--primary);transform:scale(1.2)}
+.section{min-height:100vh;padding:100px 2rem 60px;display:flex;align-items:center;justify-content:center;position:relative;z-index:1}
+.section-content{max-width:1100px;width:100%;margin:0 auto;opacity:0;transform:translateY(40px);transition:all .8s cubic-bezier(.16,1,.3,1)}
+.section-content.visible{opacity:1;transform:translateY(0)}
+h1{font-size:3.5rem;font-weight:800;line-height:1.1;margin-bottom:1rem}
+h2{font-size:2.5rem;font-weight:700;line-height:1.2;margin-bottom:1rem}
+h3{font-size:1.3rem;font-weight:600;margin-bottom:.75rem}
+.gradient-text{background:linear-gradient(135deg,var(--compute),var(--memory));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.subtitle{font-size:1.15rem;color:var(--text-muted);max-width:700px;margin-bottom:2rem}
+.badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:100px;font-size:.8rem;font-weight:500;border:1px solid rgba(99,102,241,0.3);background:rgba(99,102,241,0.1);color:var(--primary);margin-bottom:1.5rem}
+.badge .pulse{width:8px;height:8px;border-radius:50%;background:var(--primary);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.3)}}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:1.5rem;transition:all .3s}
+
+/* Split screen comparison */
+.split-container{display:grid;grid-template-columns:1fr 1fr;gap:2rem;margin:2rem 0}
+.split-panel{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:1.5rem;position:relative;overflow:hidden}
+.split-panel.prefill{border-color:rgba(239,68,68,0.3)}
+.split-panel.decode{border-color:rgba(59,130,246,0.3)}
+.panel-header{display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem}
+.panel-badge{padding:4px 12px;border-radius:6px;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.badge-compute{background:rgba(239,68,68,0.15);color:var(--compute);border:1px solid rgba(239,68,68,0.3)}
+.badge-memory{background:rgba(59,130,246,0.15);color:var(--memory);border:1px solid rgba(59,130,246,0.3)}
+
+/* Token grid for prefill */
+.token-grid{display:flex;flex-wrap:wrap;gap:6px;margin:1rem 0}
+.tok{width:50px;height:32px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:600;transition:all .3s;opacity:.3}
+.tok.processed{opacity:1;transform:scale(1.05)}
+.tok-prefill{background:rgba(239,68,68,0.15);color:var(--compute);border:1px solid rgba(239,68,68,0.2)}
+.tok-prefill.processed{background:rgba(239,68,68,0.3);border-color:rgba(239,68,68,0.5);box-shadow:0 0 8px rgba(239,68,68,0.2)}
+.tok-decode{background:rgba(59,130,246,0.15);color:var(--memory);border:1px solid rgba(59,130,246,0.2)}
+.tok-decode.processed{background:rgba(59,130,246,0.3);border-color:rgba(59,130,246,0.5);box-shadow:0 0 8px rgba(59,130,246,0.2)}
+
+/* KV Cache visualization */
+.kv-cache{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1rem;margin:1rem 0}
+.kv-row{display:flex;gap:4px;margin:3px 0;align-items:center}
+.kv-label{width:20px;font-size:.6rem;font-weight:700;color:var(--text-dim)}
+.kv-block{height:16px;border-radius:3px;transition:all .4s;flex:1;max-width:24px}
+.kv-block.filled-k{background:rgba(245,158,11,0.5);border:1px solid rgba(245,158,11,0.7)}
+.kv-block.filled-v{background:rgba(16,185,129,0.5);border:1px solid rgba(16,185,129,0.7)}
+.kv-block.empty{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05)}
+
+/* Timeline */
+.timeline{position:relative;background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:2rem;margin:2rem 0}
+.timeline-track{height:40px;background:var(--bg);border-radius:8px;position:relative;overflow:hidden;margin:1rem 0}
+.timeline-segment{position:absolute;top:0;height:100%;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:600;transition:all .5s}
+.segment-prefill{background:rgba(239,68,68,0.2);border-right:2px solid var(--compute);color:var(--compute)}
+.segment-ttft{position:absolute;top:-25px;font-size:.7rem;font-weight:600;color:var(--tertiary);text-align:center}
+.segment-decode{background:rgba(59,130,246,0.2);color:var(--memory)}
+.timeline-markers{display:flex;justify-content:space-between;font-size:.7rem;color:var(--text-dim);margin-top:.5rem}
+
+/* Slider control */
+.control-panel{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:1.5rem;margin:1.5rem 0}
+.slider-row{display:flex;align-items:center;gap:1rem;margin:.75rem 0}
+.slider-label{min-width:140px;font-size:.85rem;font-weight:500}
+.range-slider{-webkit-appearance:none;flex:1;height:6px;border-radius:3px;background:var(--border);outline:none}
+.range-slider::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--primary);cursor:pointer;box-shadow:0 0 10px rgba(99,102,241,0.4)}
+.slider-value{min-width:80px;text-align:right;font-weight:600;font-size:.85rem}
+
+/* Metrics cards */
+.metrics-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin:1.5rem 0}
+.metric-card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:1.25rem;text-align:center;transition:all .3s}
+.metric-card:hover{transform:translateY(-2px);border-color:var(--primary)}
+.metric-value{font-size:1.8rem;font-weight:800;margin-bottom:.25rem}
+.metric-label{font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+
+/* Bottleneck analysis */
+.bottleneck{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin:1.5rem 0}
+.bottleneck-card{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:1.5rem;position:relative;overflow:hidden}
+.bottleneck-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.bottleneck-card.compute-bound::before{background:linear-gradient(90deg,var(--compute),rgba(239,68,68,0.3))}
+.bottleneck-card.memory-bound::before{background:linear-gradient(90deg,var(--memory),rgba(59,130,246,0.3))}
+
+canvas#particles{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
+
+@media(max-width:768px){
+  h1{font-size:2.2rem}h2{font-size:1.8rem}.section{padding:80px 1rem 40px}
+  .split-container{grid-template-columns:1fr}
+  .metrics-row{grid-template-columns:1fr 1fr}
+  .bottleneck{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body class="bg-grid">
+<div class="progress-bar" id="progressBar"></div>
+<div class="bg-glow-1"></div><div class="bg-glow-2"></div>
+<canvas id="particles"></canvas>
+
+<nav class="nav"><div class="nav-inner">
+  <div class="nav-title"><span>03</span> / Prefill vs Decode</div>
+  <div class="nav-dots" id="navDots"></div>
+</div></nav>
+
+<!-- Section 1: Title -->
+<div class="section" id="section-0">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Visual Walkthrough</div>
+    <h1>Prefill vs Decode<br><span class="gradient-text">Two Phases of Inference</span></h1>
+    <p class="subtitle">Every LLM inference request has two distinct phases with completely different performance characteristics. Understanding them is key to optimizing inference.</p>
+    <div style="display:flex;gap:1.5rem;margin-top:2rem;flex-wrap:wrap;">
+      <div style="padding:14px 20px;border-radius:12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);">
+        <div style="color:var(--compute);font-weight:700;font-size:1rem;">Prefill</div>
+        <div style="font-size:.8rem;color:var(--text-muted);">Compute-bound &bull; Parallel</div>
+      </div>
+      <div style="padding:14px 20px;border-radius:12px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);">
+        <div style="color:var(--memory);font-weight:700;font-size:1rem;">Decode</div>
+        <div style="font-size:.8rem;color:var(--text-muted);">Memory-bound &bull; Sequential</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 2: Side by Side -->
+<div class="section" id="section-1">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Comparison</div>
+    <h2>Two <span class="gradient-text">Phases</span></h2>
+    <p class="subtitle">Click "Start" to watch both phases animate simultaneously.</p>
+
+    <div style="text-align:center;margin-bottom:1rem;">
+      <button onclick="startDualAnimation()" id="dualBtn" style="padding:10px 24px;border-radius:10px;background:var(--primary);color:white;border:none;cursor:pointer;font-family:inherit;font-weight:600;font-size:.85rem;transition:all .3s;">&#x25B6; Start Animation</button>
+    </div>
+
+    <div class="split-container">
+      <!-- Prefill Panel -->
+      <div class="split-panel prefill">
+        <div class="panel-header">
+          <span class="panel-badge badge-compute">Prefill Phase</span>
+          <span style="font-size:.8rem;color:var(--text-muted);">Process all input tokens at once</span>
+        </div>
+        <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:.75rem;">All tokens processed <strong style="color:var(--compute);">in parallel</strong>:</div>
+        <div class="token-grid" id="prefillTokens">
+          <div class="tok tok-prefill" data-idx="0">The</div>
+          <div class="tok tok-prefill" data-idx="1">cat</div>
+          <div class="tok tok-prefill" data-idx="2">sat</div>
+          <div class="tok tok-prefill" data-idx="3">on</div>
+          <div class="tok tok-prefill" data-idx="4">the</div>
+          <div class="tok tok-prefill" data-idx="5">mat</div>
+          <div class="tok tok-prefill" data-idx="6">because</div>
+          <div class="tok tok-prefill" data-idx="7">it</div>
+          <div class="tok tok-prefill" data-idx="8">was</div>
+          <div class="tok tok-prefill" data-idx="9">tired</div>
+          <div class="tok tok-prefill" data-idx="10">and</div>
+          <div class="tok tok-prefill" data-idx="11">wanted</div>
+        </div>
+        <div style="margin-top:.75rem;padding:.75rem;background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.15);border-radius:8px;font-size:.78rem;">
+          <strong style="color:var(--compute);">One forward pass</strong> processes all 12 tokens. GPU compute units fully utilized. This is a <strong>compute-bound</strong> operation.
+        </div>
+      </div>
+
+      <!-- Decode Panel -->
+      <div class="split-panel decode">
+        <div class="panel-header">
+          <span class="panel-badge badge-memory">Decode Phase</span>
+          <span style="font-size:.8rem;color:var(--text-muted);">Generate tokens one at a time</span>
+        </div>
+        <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:.75rem;">Tokens generated <strong style="color:var(--memory);">sequentially</strong>:</div>
+        <div class="token-grid" id="decodeTokens">
+          <div class="tok tok-decode" data-idx="0">so</div>
+          <div class="tok tok-decode" data-idx="1">it</div>
+          <div class="tok tok-decode" data-idx="2">decided</div>
+          <div class="tok tok-decode" data-idx="3">to</div>
+          <div class="tok tok-decode" data-idx="4">take</div>
+          <div class="tok tok-decode" data-idx="5">a</div>
+          <div class="tok tok-decode" data-idx="6">long</div>
+          <div class="tok tok-decode" data-idx="7">nap</div>
+          <div class="tok tok-decode" data-idx="8">.</div>
+        </div>
+        <div style="margin-top:.75rem;padding:.75rem;background:rgba(59,130,246,0.05);border:1px solid rgba(59,130,246,0.15);border-radius:8px;font-size:.78rem;">
+          <strong style="color:var(--memory);">One forward pass per token.</strong> Each step reads all model weights from memory for just 1 token. This is a <strong>memory-bound</strong> operation.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 3: KV Cache -->
+<div class="section" id="section-2">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> KV Cache</div>
+    <h2>Building the <span class="gradient-text">KV Cache</span></h2>
+    <p class="subtitle">During prefill, Keys and Values for every layer are computed and stored. During decode, the KV cache is read and extended with each new token.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+      <div class="card">
+        <h3 style="color:var(--tertiary);font-size:1rem;">During Prefill</h3>
+        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:1rem;">KV cache is <strong>created</strong> for all input tokens at once</p>
+        <div class="kv-cache" id="kvPrefill">
+          <div style="display:flex;gap:1rem;margin-bottom:.5rem;">
+            <span style="font-size:.7rem;font-weight:600;color:var(--tertiary);">K = Keys</span>
+            <span style="font-size:.7rem;font-weight:600;color:var(--success);">V = Values</span>
+          </div>
+          <div style="font-size:.7rem;color:var(--text-dim);margin-bottom:.5rem;">Layer 1:</div>
+          <div class="kv-row">
+            <span class="kv-label">K</span>
+            <div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div>
+          </div>
+          <div class="kv-row">
+            <span class="kv-label">V</span>
+            <div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div>
+          </div>
+          <div style="font-size:.7rem;color:var(--text-dim);margin:.5rem 0;">Layer 2 ... Layer 80: (same)</div>
+        </div>
+        <div style="font-size:.78rem;color:var(--text-muted);">All 12 positions filled in <strong style="color:var(--compute);">one pass</strong></div>
+      </div>
+
+      <div class="card">
+        <h3 style="color:var(--memory);font-size:1rem;">During Decode</h3>
+        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:1rem;">KV cache is <strong>read</strong> (all past) and <strong>appended</strong> (new token)</p>
+        <div class="kv-cache" id="kvDecode">
+          <div style="display:flex;gap:1rem;margin-bottom:.5rem;">
+            <span style="font-size:.7rem;font-weight:600;color:var(--tertiary);">K = Keys</span>
+            <span style="font-size:.7rem;font-weight:600;color:var(--success);">V = Values</span>
+            <span style="font-size:.7rem;font-weight:600;color:var(--memory);">+ = New token</span>
+          </div>
+          <div style="font-size:.7rem;color:var(--text-dim);margin-bottom:.5rem;">Layer 1 (step 3 of decode):</div>
+          <div class="kv-row">
+            <span class="kv-label">K</span>
+            <div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div><div class="kv-block filled-k"></div>
+            <div class="kv-block filled-k" style="background:rgba(59,130,246,0.5);border-color:rgba(59,130,246,0.7);"></div>
+            <div class="kv-block filled-k" style="background:rgba(59,130,246,0.5);border-color:rgba(59,130,246,0.7);"></div>
+            <div class="kv-block" style="background:rgba(59,130,246,0.8);border:2px solid var(--memory);box-shadow:0 0 8px rgba(59,130,246,0.4);"></div>
+          </div>
+          <div class="kv-row">
+            <span class="kv-label">V</span>
+            <div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div><div class="kv-block filled-v"></div>
+            <div class="kv-block filled-v" style="background:rgba(59,130,246,0.4);border-color:rgba(59,130,246,0.6);"></div>
+            <div class="kv-block filled-v" style="background:rgba(59,130,246,0.4);border-color:rgba(59,130,246,0.6);"></div>
+            <div class="kv-block" style="background:rgba(59,130,246,0.8);border:2px solid var(--memory);box-shadow:0 0 8px rgba(59,130,246,0.4);"></div>
+          </div>
+        </div>
+        <div style="font-size:.78rem;color:var(--text-muted);">Read <strong>all past KV</strong>, append <strong style="color:var(--memory);">one new entry</strong> per step</div>
+      </div>
+    </div>
+
+    <div style="margin-top:1.5rem;padding:1rem;background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.2);border-radius:12px;">
+      <span style="color:var(--tertiary);font-weight:600;font-size:.9rem;">KV Cache Memory Formula:</span>
+      <div class="mono" style="font-size:.85rem;margin-top:.5rem;color:var(--text);">
+        KV_memory = 2 &times; num_layers &times; num_kv_heads &times; head_dim &times; seq_len &times; dtype_bytes
+      </div>
+      <div style="font-size:.8rem;color:var(--text-muted);margin-top:.5rem;">
+        For Llama 70B at 4K context in FP16: 2 &times; 80 &times; 8 &times; 128 &times; 4096 &times; 2 = <strong style="color:var(--tertiary);">~1.3 GB per request</strong>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 4: Timeline -->
+<div class="section" id="section-3">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Timeline</div>
+    <h2>TTFT and <span class="gradient-text">Throughput</span></h2>
+    <p class="subtitle">Two key metrics define inference performance: Time to First Token (TTFT) and output throughput (tokens per second).</p>
+
+    <div class="timeline">
+      <div style="display:flex;justify-content:space-between;margin-bottom:.5rem;">
+        <span style="font-size:.85rem;font-weight:600;color:var(--compute);">Prefill</span>
+        <span style="font-size:.85rem;font-weight:600;color:var(--memory);">Decode</span>
+      </div>
+      <div class="timeline-track" id="timelineTrack">
+        <div class="timeline-segment segment-prefill" id="prefillSeg" style="left:0;width:20%;">
+          Prefill
+          <div class="segment-ttft" style="left:100%;transform:translateX(-50%);">
+            <div style="height:20px;width:2px;background:var(--tertiary);margin:0 auto;"></div>
+            TTFT
+          </div>
+        </div>
+        <div class="timeline-segment segment-decode" id="decodeSeg" style="left:20%;width:80%;">
+          Decode (token by token)
+        </div>
+      </div>
+      <div class="timeline-markers">
+        <span>0ms</span>
+        <span id="ttftMarker">TTFT: ~200ms</span>
+        <span id="totalMarker">Total: ~2000ms</span>
+      </div>
+    </div>
+
+    <div class="metrics-row">
+      <div class="metric-card" style="border-color:rgba(239,68,68,0.2);">
+        <div class="metric-value" style="color:var(--compute);" id="ttftValue">200</div>
+        <div class="metric-label">TTFT (ms)</div>
+      </div>
+      <div class="metric-card" style="border-color:rgba(59,130,246,0.2);">
+        <div class="metric-value" style="color:var(--memory);" id="tpsValue">50</div>
+        <div class="metric-label">Tokens/sec</div>
+      </div>
+      <div class="metric-card" style="border-color:rgba(245,158,11,0.2);">
+        <div class="metric-value" style="color:var(--tertiary);" id="outputTokens">100</div>
+        <div class="metric-label">Output Tokens</div>
+      </div>
+      <div class="metric-card" style="border-color:rgba(16,185,129,0.2);">
+        <div class="metric-value" style="color:var(--success);" id="totalTime">2.2</div>
+        <div class="metric-label">Total Time (s)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 5: Interactive Controls -->
+<div class="section" id="section-4">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Interactive</div>
+    <h2>Experiment with <span class="gradient-text">Parameters</span></h2>
+    <p class="subtitle">Drag the sliders to see how input length and output length affect prefill time, TTFT, and total latency.</p>
+
+    <div class="control-panel">
+      <div class="slider-row">
+        <div class="slider-label" style="color:var(--compute);">Input Length</div>
+        <input type="range" min="100" max="32000" value="1000" class="range-slider" id="inputSlider" oninput="updateCalc()" style="accent-color:var(--compute);">
+        <div class="slider-value" id="inputValue" style="color:var(--compute);">1,000</div>
+      </div>
+      <div class="slider-row">
+        <div class="slider-label" style="color:var(--memory);">Output Length</div>
+        <input type="range" min="10" max="4000" value="100" class="range-slider" id="outputSlider" oninput="updateCalc()" style="accent-color:var(--memory);">
+        <div class="slider-value" id="outputValue" style="color:var(--memory);">100</div>
+      </div>
+      <div class="slider-row">
+        <div class="slider-label" style="color:var(--success);">Decode Speed</div>
+        <input type="range" min="10" max="200" value="50" class="range-slider" id="speedSlider" oninput="updateCalc()" style="accent-color:var(--success);">
+        <div class="slider-value" id="speedValue" style="color:var(--success);">50 tok/s</div>
+      </div>
+    </div>
+
+    <div class="metrics-row" id="calcMetrics">
+      <div class="metric-card" style="border-color:rgba(239,68,68,0.2);">
+        <div class="metric-value" style="color:var(--compute);font-size:1.5rem;" id="calcTTFT">200ms</div>
+        <div class="metric-label">TTFT (Prefill)</div>
+      </div>
+      <div class="metric-card" style="border-color:rgba(59,130,246,0.2);">
+        <div class="metric-value" style="color:var(--memory);font-size:1.5rem;" id="calcDecode">2.0s</div>
+        <div class="metric-label">Decode Time</div>
+      </div>
+      <div class="metric-card" style="border-color:rgba(16,185,129,0.2);">
+        <div class="metric-value" style="color:var(--success);font-size:1.5rem;" id="calcTotal">2.2s</div>
+        <div class="metric-label">Total Latency</div>
+      </div>
+      <div class="metric-card" style="border-color:rgba(245,158,11,0.2);">
+        <div class="metric-value" style="color:var(--tertiary);font-size:1.5rem;" id="calcRatio">9%</div>
+        <div class="metric-label">Prefill % of Total</div>
+      </div>
+    </div>
+
+    <!-- Visual timeline bar -->
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:1.25rem;margin-top:1rem;">
+      <div style="font-size:.8rem;color:var(--text-dim);margin-bottom:.5rem;">Latency Breakdown</div>
+      <div style="height:30px;border-radius:6px;overflow:hidden;display:flex;background:var(--bg);">
+        <div id="calcPrefillBar" style="background:rgba(239,68,68,0.3);height:100%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:600;color:var(--compute);transition:width .5s;min-width:30px;">Prefill</div>
+        <div id="calcDecodeBar" style="background:rgba(59,130,246,0.3);height:100%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:600;color:var(--memory);transition:width .5s;flex:1;">Decode</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 6: Bottleneck Analysis -->
+<div class="section" id="section-5">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Analysis</div>
+    <h2>Compute vs <span class="gradient-text">Memory Bound</span></h2>
+    <p class="subtitle">The fundamental difference between prefill and decode determines which GPU resource is the bottleneck.</p>
+
+    <div class="bottleneck">
+      <div class="bottleneck-card compute-bound">
+        <h3 style="color:var(--compute);font-size:1.1rem;">Prefill: Compute-Bound</h3>
+        <div style="display:flex;flex-direction:column;gap:.75rem;margin-top:1rem;">
+          <div style="display:flex;align-items:start;gap:.75rem;">
+            <div style="min-width:28px;height:28px;border-radius:6px;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;font-size:.8rem;color:var(--compute);">&#x26A1;</div>
+            <div>
+              <div style="font-size:.85rem;font-weight:600;">High arithmetic intensity</div>
+              <div style="font-size:.78rem;color:var(--text-muted);">Many tokens = large matrix multiplications. Tensor Cores are fully utilized.</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:start;gap:.75rem;">
+            <div style="min-width:28px;height:28px;border-radius:6px;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;font-size:.8rem;color:var(--compute);">&#x1F4CA;</div>
+            <div>
+              <div style="font-size:.85rem;font-weight:600;">Scales with input length</div>
+              <div style="font-size:.78rem;color:var(--text-muted);">Attention is O(n^2) in sequence length. Doubling input = ~4x compute for attention.</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:start;gap:.75rem;">
+            <div style="min-width:28px;height:28px;border-radius:6px;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;font-size:.8rem;color:var(--compute);">&#x2699;</div>
+            <div>
+              <div style="font-size:.85rem;font-weight:600;">Optimization: FlashAttention</div>
+              <div style="font-size:.78rem;color:var(--text-muted);">IO-aware attention reduces memory reads, keeping compute units fed with data.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bottleneck-card memory-bound">
+        <h3 style="color:var(--memory);font-size:1.1rem;">Decode: Memory-Bound</h3>
+        <div style="display:flex;flex-direction:column;gap:.75rem;margin-top:1rem;">
+          <div style="display:flex;align-items:start;gap:.75rem;">
+            <div style="min-width:28px;height:28px;border-radius:6px;background:rgba(59,130,246,0.15);display:flex;align-items:center;justify-content:center;font-size:.8rem;color:var(--memory);">&#x1F4BE;</div>
+            <div>
+              <div style="font-size:.85rem;font-weight:600;">Low arithmetic intensity</div>
+              <div style="font-size:.78rem;color:var(--text-muted);">Only 1 token per step. Must read entire model weights from HBM for tiny computation.</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:start;gap:.75rem;">
+            <div style="min-width:28px;height:28px;border-radius:6px;background:rgba(59,130,246,0.15);display:flex;align-items:center;justify-content:center;font-size:.8rem;color:var(--memory);">&#x1F680;</div>
+            <div>
+              <div style="font-size:.85rem;font-weight:600;">Bandwidth limited</div>
+              <div style="font-size:.78rem;color:var(--text-muted);">H100: 3.35 TB/s bandwidth. 70B model in FP16 = 140GB. Min ~42ms per token at full BW.</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:start;gap:.75rem;">
+            <div style="min-width:28px;height:28px;border-radius:6px;background:rgba(59,130,246,0.15);display:flex;align-items:center;justify-content:center;font-size:.8rem;color:var(--memory);">&#x1F4E6;</div>
+            <div>
+              <div style="font-size:.85rem;font-weight:600;">Optimization: Batching</div>
+              <div style="font-size:.78rem;color:var(--text-muted);">Batch multiple requests together to amortize weight reads across more tokens.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 7: Why it matters -->
+<div class="section" id="section-6">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Implications</div>
+    <h2>Why This <span class="gradient-text">Matters</span></h2>
+    <p class="subtitle">The prefill/decode split drives major architectural decisions in modern inference systems.</p>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-top:1.5rem;">
+      <div class="card" style="text-align:center;" onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <div style="font-size:2rem;margin-bottom:.75rem;">&#x2702;</div>
+        <h3 style="font-size:1rem;color:var(--primary);">Disaggregation</h3>
+        <p style="font-size:.8rem;color:var(--text-muted);">Separate prefill and decode to different GPU pools. Optimize each independently.</p>
+      </div>
+      <div class="card" style="text-align:center;" onmouseenter="this.style.borderColor='var(--secondary)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <div style="font-size:2rem;margin-bottom:.75rem;">&#x1F4E6;</div>
+        <h3 style="font-size:1rem;color:var(--secondary);">Continuous Batching</h3>
+        <p style="font-size:.8rem;color:var(--text-muted);">New requests join mid-batch. Don't wait for all decodes to finish before starting new prefills.</p>
+      </div>
+      <div class="card" style="text-align:center;" onmouseenter="this.style.borderColor='var(--tertiary)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <div style="font-size:2rem;margin-bottom:.75rem;">&#x1F52E;</div>
+        <h3 style="font-size:1rem;color:var(--tertiary);">Speculative Decode</h3>
+        <p style="font-size:.8rem;color:var(--text-muted);">Use a small draft model to propose tokens, verify in parallel with the large model.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 8: Summary -->
+<div class="section" id="section-7">
+  <div class="section-content" style="text-align:center;">
+    <div class="badge"><span class="pulse"></span> Summary</div>
+    <h2>Key <span class="gradient-text">Takeaways</span></h2>
+
+    <div style="display:inline-block;text-align:left;background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:2rem;max-width:700px;width:100%;margin-top:1rem;">
+      <div style="display:flex;flex-direction:column;gap:1rem;">
+        <div style="display:flex;align-items:start;gap:1rem;padding:.75rem 1rem;border-radius:10px;border-left:3px solid var(--compute);background:rgba(239,68,68,0.03);">
+          <div style="font-weight:700;color:var(--compute);min-width:20px;">1</div>
+          <div>
+            <strong style="color:var(--compute);">Prefill</strong>
+            <span style="color:var(--text-muted);font-size:.9rem;"> processes all input tokens in parallel. It is compute-bound and determines TTFT.</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:start;gap:1rem;padding:.75rem 1rem;border-radius:10px;border-left:3px solid var(--memory);background:rgba(59,130,246,0.03);">
+          <div style="font-weight:700;color:var(--memory);min-width:20px;">2</div>
+          <div>
+            <strong style="color:var(--memory);">Decode</strong>
+            <span style="color:var(--text-muted);font-size:.9rem;"> generates tokens one at a time. It is memory-bound and determines throughput (TPS).</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:start;gap:1rem;padding:.75rem 1rem;border-radius:10px;border-left:3px solid var(--tertiary);background:rgba(245,158,11,0.03);">
+          <div style="font-weight:700;color:var(--tertiary);min-width:20px;">3</div>
+          <div>
+            <strong style="color:var(--tertiary);">KV Cache</strong>
+            <span style="color:var(--text-muted);font-size:.9rem;"> is built during prefill and consumed during decode. It avoids recomputing past attention.</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:start;gap:1rem;padding:.75rem 1rem;border-radius:10px;border-left:3px solid var(--success);background:rgba(16,185,129,0.03);">
+          <div style="font-weight:700;color:var(--success);min-width:20px;">4</div>
+          <div>
+            <strong style="color:var(--success);">Different bottlenecks</strong>
+            <span style="color:var(--text-muted);font-size:.9rem;"> require different optimizations. This insight drives disaggregation, batching, and speculative decoding.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:2rem;display:flex;gap:1rem;justify-content:center;">
+      <a href="02_llm_architecture.html" style="color:var(--text-dim);text-decoration:none;font-size:.85rem;">&larr; LLM Architecture</a>
+      <a href="04_attention_visualization.html" style="color:var(--primary);text-decoration:none;font-size:.85rem;font-weight:600;">How Attention Works &rarr;</a>
+    </div>
+  </div>
+</div>
+
+<script>
+const sections=document.querySelectorAll('.section');
+const navDotsContainer=document.getElementById('navDots');
+const progressBar=document.getElementById('progressBar');
+sections.forEach((_,i)=>{const d=document.createElement('button');d.className='nav-dot';d.onclick=()=>sections[i].scrollIntoView({behavior:'smooth'});navDotsContainer.appendChild(d)});
+const navDots=document.querySelectorAll('.nav-dot');
+const observer=new IntersectionObserver(entries=>{entries.forEach(entry=>{if(entry.isIntersecting){entry.target.querySelector('.section-content').classList.add('visible');const idx=Array.from(sections).indexOf(entry.target);navDots.forEach((d,i)=>d.classList.toggle('active',i===idx))}})},{threshold:.3});
+sections.forEach(s=>observer.observe(s));
+window.addEventListener('scroll',()=>{const s=window.scrollY;const d=document.documentElement.scrollHeight-window.innerHeight;progressBar.style.width=(s/d)*100+'%'});
+
+// Dual animation
+let dualAnimating=false;
+function startDualAnimation(){
+  if(dualAnimating)return;
+  dualAnimating=true;
+  const prefillToks=document.querySelectorAll('#prefillTokens .tok');
+  const decodeToks=document.querySelectorAll('#decodeTokens .tok');
+  const btn=document.getElementById('dualBtn');
+  btn.style.opacity='0.5';
+
+  // Reset
+  prefillToks.forEach(t=>t.classList.remove('processed'));
+  decodeToks.forEach(t=>t.classList.remove('processed'));
+
+  // Prefill: all at once after small delay
+  setTimeout(()=>{
+    prefillToks.forEach(t=>t.classList.add('processed'));
+  },300);
+
+  // Decode: one at a time
+  decodeToks.forEach((t,i)=>{
+    setTimeout(()=>{
+      t.classList.add('processed');
+      if(i===decodeToks.length-1){
+        dualAnimating=false;
+        btn.style.opacity='1';
+      }
+    },600 + i*350);
+  });
+}
+
+// Calculator
+function updateCalc(){
+  const inputLen=parseInt(document.getElementById('inputSlider').value);
+  const outputLen=parseInt(document.getElementById('outputSlider').value);
+  const speed=parseInt(document.getElementById('speedSlider').value);
+
+  document.getElementById('inputValue').textContent=inputLen.toLocaleString();
+  document.getElementById('outputValue').textContent=outputLen.toLocaleString();
+  document.getElementById('speedValue').textContent=speed+' tok/s';
+
+  // TTFT scales roughly with input length (simplified model)
+  const ttft=Math.round(50 + inputLen * 0.15); // ms
+  const decodeTime=outputLen/speed; // seconds
+  const totalTime=ttft/1000+decodeTime;
+  const prefillPct=Math.round((ttft/1000)/totalTime*100);
+
+  document.getElementById('calcTTFT').textContent=ttft>=1000?(ttft/1000).toFixed(1)+'s':ttft+'ms';
+  document.getElementById('calcDecode').textContent=decodeTime.toFixed(1)+'s';
+  document.getElementById('calcTotal').textContent=totalTime.toFixed(1)+'s';
+  document.getElementById('calcRatio').textContent=prefillPct+'%';
+
+  // Update bars
+  document.getElementById('calcPrefillBar').style.width=Math.max(prefillPct,5)+'%';
+
+  // Update main metrics too
+  document.getElementById('ttftValue').textContent=ttft>=1000?(ttft/1000).toFixed(1)+'s':ttft;
+  document.getElementById('tpsValue').textContent=speed;
+  document.getElementById('outputTokens').textContent=outputLen;
+  document.getElementById('totalTime').textContent=totalTime.toFixed(1);
+
+  // Update timeline
+  const prefillWidth=Math.max(Math.min(prefillPct,60),8);
+  document.getElementById('prefillSeg').style.width=prefillWidth+'%';
+  document.getElementById('decodeSeg').style.left=prefillWidth+'%';
+  document.getElementById('decodeSeg').style.width=(100-prefillWidth)+'%';
+  document.getElementById('ttftMarker').textContent='TTFT: '+(ttft>=1000?(ttft/1000).toFixed(1)+'s':ttft+'ms');
+  document.getElementById('totalMarker').textContent='Total: '+totalTime.toFixed(1)+'s';
+}
+updateCalc();
+
+// Particles
+const canvas=document.getElementById('particles');const ctx=canvas.getContext('2d');let particles=[];
+function resizeCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight}
+resizeCanvas();window.addEventListener('resize',resizeCanvas);
+class Particle{constructor(){this.reset()}reset(){this.x=Math.random()*canvas.width;this.y=Math.random()*canvas.height;this.size=Math.random()*1.5+0.5;this.speedX=(Math.random()-0.5)*0.3;this.speedY=(Math.random()-0.5)*0.3;this.opacity=Math.random()*0.2+0.05;const c=['239,68,68','59,130,246','245,158,11'];this.color=c[Math.floor(Math.random()*c.length)]}update(){this.x+=this.speedX;this.y+=this.speedY;if(this.x<0||this.x>canvas.width||this.y<0||this.y>canvas.height)this.reset()}draw(){ctx.beginPath();ctx.arc(this.x,this.y,this.size,0,Math.PI*2);ctx.fillStyle=`rgba(${this.color},${this.opacity})`;ctx.fill()}}
+for(let i=0;i<40;i++)particles.push(new Particle());
+function animP(){ctx.clearRect(0,0,canvas.width,canvas.height);particles.forEach(p=>{p.update();p.draw()});requestAnimationFrame(animP)}animP();
+setTimeout(()=>{document.querySelector('#section-0 .section-content').classList.add('visible')},100);
+</script>
+</body>
+</html>

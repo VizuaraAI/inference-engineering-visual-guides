@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Architecture Deep Dive - Visual Walkthrough</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0f;--bg-card:#12121a;--bg-card-hover:#1a1a2e;--border:#1e1e3a;--primary:#6366f1;--secondary:#22d3ee;--tertiary:#f59e0b;--success:#10b981;--text:#e2e8f0;--text-muted:#94a3b8;--text-dim:#64748b;--danger:#ef4444}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;line-height:1.6;overflow-x:hidden}
+code,.mono{font-family:'JetBrains Mono',monospace}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+.bg-grid{background-image:linear-gradient(rgba(99,102,241,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,0.03) 1px,transparent 1px);background-size:60px 60px}
+.bg-glow-1{position:fixed;top:15%;left:5%;width:600px;height:600px;background:radial-gradient(circle,rgba(99,102,241,0.08) 0%,transparent 70%);pointer-events:none;z-index:0}
+.bg-glow-2{position:fixed;bottom:10%;right:5%;width:500px;height:500px;background:radial-gradient(circle,rgba(34,211,238,0.06) 0%,transparent 70%);pointer-events:none;z-index:0}
+
+.progress-bar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--primary),var(--secondary));z-index:1000;transition:width .3s}
+.nav{position:fixed;top:0;left:0;right:0;background:rgba(10,10,15,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);z-index:999;padding:0 2rem}
+.nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:60px}
+.nav-title{font-weight:700;font-size:.9rem}.nav-title span{color:var(--primary)}
+.nav-dots{display:flex;gap:8px}
+.nav-dot{width:10px;height:10px;border-radius:50%;background:var(--border);cursor:pointer;transition:all .3s;border:none}
+.nav-dot.active{background:var(--primary);box-shadow:0 0 10px var(--primary)}
+.nav-dot:hover{background:var(--primary);transform:scale(1.2)}
+
+.section{min-height:100vh;padding:100px 2rem 60px;display:flex;align-items:center;justify-content:center;position:relative;z-index:1}
+.section-content{max-width:1100px;width:100%;margin:0 auto;opacity:0;transform:translateY(40px);transition:all .8s cubic-bezier(.16,1,.3,1)}
+.section-content.visible{opacity:1;transform:translateY(0)}
+
+h1{font-size:3.5rem;font-weight:800;line-height:1.1;margin-bottom:1rem}
+h2{font-size:2.5rem;font-weight:700;line-height:1.2;margin-bottom:1rem}
+h3{font-size:1.3rem;font-weight:600;margin-bottom:.75rem}
+.gradient-text{background:linear-gradient(135deg,var(--primary),var(--secondary));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.subtitle{font-size:1.15rem;color:var(--text-muted);max-width:700px;margin-bottom:2rem}
+.badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:100px;font-size:.8rem;font-weight:500;border:1px solid rgba(99,102,241,0.3);background:rgba(99,102,241,0.1);color:var(--primary);margin-bottom:1.5rem}
+.badge .pulse{width:8px;height:8px;border-radius:50%;background:var(--primary);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.3)}}
+
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:1.5rem;transition:all .3s}
+.card:hover{border-color:var(--primary);transform:translateY(-2px)}
+
+/* Architecture SVG */
+.arch-container{position:relative;margin:2rem auto;max-width:900px}
+.arch-svg{width:100%;height:auto}
+
+/* Token flow animation */
+.token-flow{display:flex;align-items:center;gap:4px;padding:1rem;overflow-x:auto;margin:1rem 0}
+.token{display:inline-flex;align-items:center;justify-content:center;padding:6px 14px;border-radius:8px;font-size:.8rem;font-weight:600;white-space:nowrap;transition:all .4s;cursor:default;border:1px solid transparent}
+.token-input{background:rgba(99,102,241,0.15);color:var(--primary);border-color:rgba(99,102,241,0.3)}
+.token-special{background:rgba(245,158,11,0.15);color:var(--tertiary);border-color:rgba(245,158,11,0.3)}
+.token-output{background:rgba(16,185,129,0.15);color:var(--success);border-color:rgba(16,185,129,0.3)}
+.token.active{transform:scale(1.1);box-shadow:0 0 15px rgba(99,102,241,0.3)}
+
+/* Layer slider */
+.slider-container{margin:2rem 0;text-align:center}
+.layer-slider{-webkit-appearance:none;width:100%;max-width:500px;height:6px;border-radius:3px;background:var(--border);outline:none;transition:all .3s}
+.layer-slider::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--primary);cursor:pointer;box-shadow:0 0 12px rgba(99,102,241,0.5)}
+.slider-label{font-size:1rem;font-weight:600;color:var(--secondary);margin-bottom:.5rem}
+
+/* Transformer block */
+.transformer-block{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:1.5rem;margin:1rem 0;transition:all .5s;position:relative;overflow:hidden}
+.transformer-block.highlight{border-color:var(--primary);box-shadow:0 0 30px rgba(99,102,241,0.15)}
+.transformer-block::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--primary),var(--secondary));opacity:0;transition:opacity .3s}
+.transformer-block.highlight::before{opacity:1}
+
+.block-row{display:flex;align-items:stretch;gap:1rem;margin:.75rem 0}
+.block-component{flex:1;padding:1rem;border-radius:12px;border:1px solid var(--border);background:var(--bg);text-align:center;transition:all .3s;cursor:pointer;position:relative}
+.block-component:hover{transform:translateY(-2px);border-color:var(--primary)}
+.block-component.expanded{border-color:var(--secondary);background:rgba(34,211,238,0.03)}
+.block-component h4{font-size:.85rem;font-weight:600;margin-bottom:.25rem}
+.block-component p{font-size:.72rem;color:var(--text-muted)}
+.block-detail{max-height:0;overflow:hidden;transition:max-height .4s;font-size:.78rem;color:var(--text-muted);text-align:left;padding:0 .5rem}
+.block-component.expanded .block-detail{max-height:200px;padding-top:.75rem}
+
+/* Config panel */
+.config-panel{background:#0d1117;border:1px solid var(--border);border-radius:12px;padding:1.25rem;font-size:.8rem;line-height:1.8}
+.config-key{color:var(--secondary)}
+.config-val{color:var(--tertiary)}
+.config-comment{color:#6a737d}
+
+/* Pipeline stages */
+.pipeline{display:flex;align-items:center;gap:.25rem;flex-wrap:wrap;justify-content:center;margin:1.5rem 0}
+.pipe-stage{padding:.75rem 1.25rem;border-radius:12px;border:1px solid var(--border);background:var(--bg-card);font-size:.82rem;font-weight:500;transition:all .5s;position:relative}
+.pipe-stage.active{border-color:var(--secondary);background:rgba(34,211,238,0.08);color:var(--secondary);box-shadow:0 0 20px rgba(34,211,238,0.15)}
+.pipe-arrow{color:var(--text-dim);font-size:.9rem}
+
+/* Logits visualization */
+.logits-bar-container{display:flex;flex-direction:column;gap:.4rem;margin:1rem 0}
+.logits-row{display:flex;align-items:center;gap:.75rem}
+.logits-token{width:80px;text-align:right;font-size:.8rem;font-weight:500;color:var(--text-muted)}
+.logits-bar-bg{flex:1;height:24px;background:var(--bg-card);border-radius:6px;overflow:hidden;position:relative}
+.logits-bar{height:100%;border-radius:6px;transition:width 1s cubic-bezier(.16,1,.3,1);display:flex;align-items:center;justify-content:flex-end;padding-right:8px;font-size:.7rem;font-weight:600}
+.logits-prob{width:50px;font-size:.78rem;color:var(--text-muted);text-align:left}
+
+/* Animated flow line */
+@keyframes flowRight{0%{transform:translateX(-100%)}100%{transform:translateX(400%)}}
+.flow-line{position:absolute;height:2px;width:60px;background:linear-gradient(90deg,transparent,var(--secondary),transparent);animation:flowRight 2s linear infinite;opacity:.4}
+
+@keyframes fadeInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+
+canvas#particles{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
+
+@media(max-width:768px){
+  h1{font-size:2.2rem}h2{font-size:1.8rem}
+  .section{padding:80px 1rem 40px}
+  .block-row{flex-direction:column}
+  .pipeline{flex-direction:column;align-items:stretch}
+  .pipe-arrow{transform:rotate(90deg);text-align:center}
+}
+</style>
+</head>
+<body class="bg-grid">
+<div class="progress-bar" id="progressBar"></div>
+<div class="bg-glow-1"></div>
+<div class="bg-glow-2"></div>
+<canvas id="particles"></canvas>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-title"><span>02</span> / LLM Architecture Deep Dive</div>
+    <div class="nav-dots" id="navDots"></div>
+  </div>
+</nav>
+
+<!-- Section 1: Title -->
+<div class="section" id="section-0">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Visual Walkthrough</div>
+    <h1>LLM Architecture<br><span class="gradient-text">Deep Dive</span></h1>
+    <p class="subtitle">Follow a forward pass through a Large Language Model &mdash; from raw text to generated tokens. Understand every component along the way.</p>
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:1.5rem;">
+      <div style="padding:10px 18px;border-radius:10px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);font-size:.82rem;">
+        <span style="color:var(--primary);font-weight:600;">Tokenization</span>
+      </div>
+      <div style="padding:10px 18px;border-radius:10px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);font-size:.82rem;">
+        <span style="color:var(--secondary);font-weight:600;">Embedding</span>
+      </div>
+      <div style="padding:10px 18px;border-radius:10px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);font-size:.82rem;">
+        <span style="color:var(--tertiary);font-weight:600;">Transformer Blocks</span>
+      </div>
+      <div style="padding:10px 18px;border-radius:10px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);font-size:.82rem;">
+        <span style="color:var(--success);font-weight:600;">Output &amp; Sampling</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 2: Tokenization -->
+<div class="section" id="section-1">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Step 1</div>
+    <h2>Text to <span class="gradient-text">Tokens</span></h2>
+    <p class="subtitle">Before the model sees anything, raw text must be split into tokens &mdash; subword units from a fixed vocabulary (typically 32K-128K tokens).</p>
+
+    <div class="card" style="margin-bottom:1.5rem;">
+      <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:1rem;">Input text:</div>
+      <div style="font-size:1.2rem;font-weight:600;padding:1rem;background:var(--bg);border-radius:10px;border:1px solid var(--border);">
+        "The transformer architecture revolutionized NLP"
+      </div>
+    </div>
+
+    <div style="text-align:center;color:var(--text-dim);margin:1rem 0;font-size:1.5rem;">&#x2193; Tokenizer (BPE / SentencePiece)</div>
+
+    <div class="card">
+      <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:1rem;">Tokenized output:</div>
+      <div class="token-flow" id="tokenFlow">
+        <span class="token token-special">&lt;bos&gt;</span>
+        <span class="token token-input">The</span>
+        <span class="token token-input">_trans</span>
+        <span class="token token-input">former</span>
+        <span class="token token-input">_architecture</span>
+        <span class="token token-input">_revolution</span>
+        <span class="token token-input">ized</span>
+        <span class="token token-input">_NL</span>
+        <span class="token token-input">P</span>
+      </div>
+      <div style="display:flex;gap:2rem;margin-top:1rem;flex-wrap:wrap;">
+        <div style="font-size:.8rem;color:var(--text-muted);">
+          <span style="color:var(--tertiary);font-weight:600;">9 tokens</span> from 7 words
+        </div>
+        <div style="font-size:.8rem;color:var(--text-muted);">
+          <span style="color:var(--primary);font-weight:600;">Vocab size:</span> 128,256 (Llama 3)
+        </div>
+        <div style="font-size:.8rem;color:var(--text-muted);">
+          Each token &rarr; integer ID (e.g., "The" = <span class="mono" style="color:var(--secondary);">791</span>)
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 3: Embedding -->
+<div class="section" id="section-2">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Step 2</div>
+    <h2>Token <span class="gradient-text">Embeddings</span></h2>
+    <p class="subtitle">Each token ID is mapped to a dense vector using a learned embedding table. Position information is also encoded.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+      <div class="card">
+        <h3 style="color:var(--primary);font-size:1rem;">Token Embedding</h3>
+        <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:1rem;">Lookup table: vocab_size &times; hidden_dim</p>
+        <div style="display:flex;flex-direction:column;gap:.5rem;">
+          <div style="display:flex;align-items:center;gap:.75rem;">
+            <span class="token token-input" style="min-width:70px;justify-content:center;">The</span>
+            <span style="color:var(--text-dim);">&rarr;</span>
+            <div style="flex:1;height:24px;background:linear-gradient(90deg,rgba(99,102,241,0.3),rgba(34,211,238,0.3),rgba(99,102,241,0.1));border-radius:4px;position:relative;overflow:hidden;">
+              <div class="flow-line" style="top:11px;"></div>
+            </div>
+            <span class="mono" style="font-size:.7rem;color:var(--text-dim);white-space:nowrap;">[d=8192]</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:.75rem;">
+            <span class="token token-input" style="min-width:70px;justify-content:center;">_trans</span>
+            <span style="color:var(--text-dim);">&rarr;</span>
+            <div style="flex:1;height:24px;background:linear-gradient(90deg,rgba(34,211,238,0.3),rgba(99,102,241,0.3),rgba(34,211,238,0.1));border-radius:4px;position:relative;overflow:hidden;">
+              <div class="flow-line" style="top:11px;animation-delay:.5s;"></div>
+            </div>
+            <span class="mono" style="font-size:.7rem;color:var(--text-dim);white-space:nowrap;">[d=8192]</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:.75rem;">
+            <span class="token token-input" style="min-width:70px;justify-content:center;">former</span>
+            <span style="color:var(--text-dim);">&rarr;</span>
+            <div style="flex:1;height:24px;background:linear-gradient(90deg,rgba(99,102,241,0.2),rgba(245,158,11,0.3),rgba(99,102,241,0.1));border-radius:4px;position:relative;overflow:hidden;">
+              <div class="flow-line" style="top:11px;animation-delay:1s;"></div>
+            </div>
+            <span class="mono" style="font-size:.7rem;color:var(--text-dim);white-space:nowrap;">[d=8192]</span>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--secondary);font-size:1rem;">Positional Encoding (RoPE)</h3>
+        <p style="font-size:.85rem;color:var(--text-muted);margin-bottom:1rem;">Rotary Position Embedding encodes sequence order</p>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:1rem;font-size:.78rem;line-height:1.6;">
+          <div style="color:var(--text-muted);margin-bottom:.5rem;">Unlike absolute position embeddings, RoPE:</div>
+          <div style="display:flex;flex-direction:column;gap:.4rem;">
+            <div style="display:flex;align-items:center;gap:.5rem;">
+              <span style="color:var(--success);">&#x2713;</span>
+              <span>Encodes <em>relative</em> positions via rotation matrices</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:.5rem;">
+              <span style="color:var(--success);">&#x2713;</span>
+              <span>Applied to Q and K in attention (not values)</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:.5rem;">
+              <span style="color:var(--success);">&#x2713;</span>
+              <span>Naturally extends to longer sequences</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:.5rem;">
+              <span style="color:var(--success);">&#x2713;</span>
+              <span>Used by Llama, Mistral, and most modern LLMs</span>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:1rem;padding:.75rem;background:rgba(34,211,238,0.05);border:1px solid rgba(34,211,238,0.2);border-radius:8px;font-size:.78rem;">
+          <span class="mono" style="color:var(--secondary);">x_embedded = tok_embed(ids) + pos_embed</span>
+          <br><span style="color:var(--text-dim);">Shape: [batch, seq_len, 8192]</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 4: Transformer Blocks -->
+<div class="section" id="section-3">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Step 3</div>
+    <h2>Transformer <span class="gradient-text">Blocks</span></h2>
+    <p class="subtitle">The heart of the LLM: stacked transformer blocks, each containing attention and feed-forward layers. Use the slider to explore different layers.</p>
+
+    <div class="slider-container">
+      <div class="slider-label">Layer: <span id="layerNum">1</span> / 80</div>
+      <input type="range" min="1" max="80" value="1" class="layer-slider" id="layerSlider" oninput="updateLayer(this.value)">
+      <div style="display:flex;justify-content:space-between;max-width:500px;margin:.5rem auto;font-size:.7rem;color:var(--text-dim);">
+        <span>Early (pattern matching)</span>
+        <span>Middle (reasoning)</span>
+        <span>Late (output formation)</span>
+      </div>
+    </div>
+
+    <div class="transformer-block highlight" id="transformerBlock">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <h3 style="color:var(--primary);margin:0;font-size:1rem;">Transformer Block <span id="blockNum">1</span></h3>
+        <span class="mono" style="font-size:.75rem;color:var(--text-dim);" id="blockDesc">Early layers: basic syntax &amp; pattern recognition</span>
+      </div>
+
+      <!-- RMSNorm + Attention -->
+      <div class="block-row">
+        <div class="block-component" onclick="toggleBlock(this)">
+          <h4 style="color:var(--tertiary);">RMSNorm</h4>
+          <p>Pre-normalization</p>
+          <div class="block-detail">
+            <strong style="color:var(--text);">Root Mean Square Normalization</strong><br>
+            Normalizes hidden states before attention. Simpler and faster than LayerNorm (no mean subtraction). Used in Llama, Mistral.
+            <br><span class="mono" style="color:var(--secondary);font-size:.7rem;">norm(x) = x / RMS(x) * gamma</span>
+          </div>
+        </div>
+        <div class="block-component" onclick="toggleBlock(this)" style="flex:3;">
+          <h4 style="color:var(--primary);">Multi-Head Self-Attention</h4>
+          <p>Q, K, V projections &rarr; attention scores &rarr; output projection</p>
+          <div class="block-detail">
+            <strong style="color:var(--text);">Grouped-Query Attention (GQA)</strong><br>
+            Instead of separate K,V heads per query head, groups of query heads share K,V heads. Llama 3 70B uses 64 query heads and 8 KV heads (8:1 ratio). This reduces KV cache size by 8x while maintaining quality.
+            <br><span class="mono" style="color:var(--secondary);font-size:.7rem;">attn = softmax(Q @ K.T / sqrt(d_k)) @ V</span>
+          </div>
+        </div>
+        <div class="block-component" onclick="toggleBlock(this)">
+          <h4 style="color:var(--success);">+ Residual</h4>
+          <p>Skip connection</p>
+          <div class="block-detail">
+            <strong style="color:var(--text);">Residual Connection</strong><br>
+            Output is added to the input: <span class="mono" style="color:var(--secondary);">x = x + attn(norm(x))</span>. Enables gradient flow through deep networks and preserves information from earlier layers.
+          </div>
+        </div>
+      </div>
+
+      <!-- RMSNorm + FFN -->
+      <div class="block-row">
+        <div class="block-component" onclick="toggleBlock(this)">
+          <h4 style="color:var(--tertiary);">RMSNorm</h4>
+          <p>Pre-normalization</p>
+          <div class="block-detail">
+            Second normalization before the FFN layer. Same technique as above, separate learned parameters.
+          </div>
+        </div>
+        <div class="block-component" onclick="toggleBlock(this)" style="flex:3;">
+          <h4 style="color:var(--secondary);">Feed-Forward Network (SwiGLU)</h4>
+          <p>Gate projection &rarr; SiLU activation &rarr; down projection</p>
+          <div class="block-detail">
+            <strong style="color:var(--text);">SwiGLU Activation</strong><br>
+            Modern FFN uses gated linear units: <span class="mono" style="color:var(--secondary);">FFN(x) = (W_gate(x) * SiLU(W_up(x))) @ W_down</span>
+            <br>This is where most parameters live. For a 70B model: hidden_dim=8192 &rarr; intermediate=28672. Each FFN block has ~700M parameters.
+          </div>
+        </div>
+        <div class="block-component" onclick="toggleBlock(this)">
+          <h4 style="color:var(--success);">+ Residual</h4>
+          <p>Skip connection</p>
+          <div class="block-detail">
+            Again: <span class="mono" style="color:var(--secondary);">x = x + ffn(norm(x))</span>. The residual stream carries information from all previous layers.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 5: Config -->
+<div class="section" id="section-4">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Model Config</div>
+    <h2>config.json <span class="gradient-text">Decoded</span></h2>
+    <p class="subtitle">Every model ships with a config.json. Here's what the numbers mean for Llama 3.1 70B.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+      <div class="config-panel">
+        <span class="config-comment">// Llama 3.1 70B config.json</span><br>
+        {<br>
+        &nbsp;&nbsp;<span class="config-key">"hidden_size"</span>: <span class="config-val">8192</span>,<br>
+        &nbsp;&nbsp;<span class="config-key">"intermediate_size"</span>: <span class="config-val">28672</span>,<br>
+        &nbsp;&nbsp;<span class="config-key">"num_hidden_layers"</span>: <span class="config-val">80</span>,<br>
+        &nbsp;&nbsp;<span class="config-key">"num_attention_heads"</span>: <span class="config-val">64</span>,<br>
+        &nbsp;&nbsp;<span class="config-key">"num_key_value_heads"</span>: <span class="config-val">8</span>,<br>
+        &nbsp;&nbsp;<span class="config-key">"vocab_size"</span>: <span class="config-val">128256</span>,<br>
+        &nbsp;&nbsp;<span class="config-key">"max_position_embeddings"</span>: <span class="config-val">131072</span>,<br>
+        &nbsp;&nbsp;<span class="config-key">"rope_theta"</span>: <span class="config-val">500000.0</span>,<br>
+        &nbsp;&nbsp;<span class="config-key">"rms_norm_eps"</span>: <span class="config-val">1e-05</span>,<br>
+        &nbsp;&nbsp;<span class="config-key">"torch_dtype"</span>: <span class="config-val">"bfloat16"</span><br>
+        }
+      </div>
+      <div style="display:flex;flex-direction:column;gap:1rem;">
+        <div class="card" style="padding:1rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:.85rem;font-weight:600;color:var(--primary);">hidden_size = 8192</span>
+            <span style="font-size:.75rem;color:var(--text-dim);">d_model</span>
+          </div>
+          <p style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem;">Width of every hidden state. Larger = more capacity per layer.</p>
+        </div>
+        <div class="card" style="padding:1rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:.85rem;font-weight:600;color:var(--secondary);">num_hidden_layers = 80</span>
+            <span style="font-size:.75rem;color:var(--text-dim);">depth</span>
+          </div>
+          <p style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem;">80 transformer blocks stacked sequentially. Each adds reasoning capacity.</p>
+        </div>
+        <div class="card" style="padding:1rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:.85rem;font-weight:600;color:var(--tertiary);">GQA ratio: 64 / 8 = 8:1</span>
+            <span style="font-size:.75rem;color:var(--text-dim);">efficiency</span>
+          </div>
+          <p style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem;">8 query heads share 1 KV head. Reduces KV cache size by 8x vs MHA.</p>
+        </div>
+        <div class="card" style="padding:1rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:.85rem;font-weight:600;color:var(--success);">context = 131,072 tokens</span>
+            <span style="font-size:.75rem;color:var(--text-dim);">128K</span>
+          </div>
+          <p style="font-size:.78rem;color:var(--text-muted);margin-top:.25rem;">Maximum sequence length. Uses RoPE with theta=500K for long-context.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 6: Forward Pass Pipeline -->
+<div class="section" id="section-5">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Full Pipeline</div>
+    <h2>The Forward <span class="gradient-text">Pass</span></h2>
+    <p class="subtitle">Watch the complete forward pass from input to output. Click "Animate" to see data flow through each stage.</p>
+
+    <div class="pipeline" id="pipeline">
+      <div class="pipe-stage" data-pipe="0">Input Text</div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-stage" data-pipe="1">Tokenizer</div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-stage" data-pipe="2">Embedding</div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-stage" data-pipe="3">80x Transformer</div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-stage" data-pipe="4">RMSNorm</div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-stage" data-pipe="5">LM Head</div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-stage" data-pipe="6">Logits</div>
+      <div class="pipe-arrow">&rarr;</div>
+      <div class="pipe-stage" data-pipe="7">Sampling</div>
+    </div>
+
+    <div style="text-align:center;margin:1rem 0;">
+      <button onclick="animatePipeline()" id="pipeBtn" style="padding:10px 24px;border-radius:10px;background:var(--primary);color:white;border:none;cursor:pointer;font-family:inherit;font-weight:600;font-size:.85rem;transition:all .3s;">&#x25B6; Animate Forward Pass</button>
+    </div>
+    <div id="pipeDesc" style="text-align:center;font-size:.85rem;color:var(--text-muted);min-height:2.5rem;"></div>
+  </div>
+</div>
+
+<!-- Section 7: Output Layer -->
+<div class="section" id="section-6">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Step 4</div>
+    <h2>Logits to <span class="gradient-text">Tokens</span></h2>
+    <p class="subtitle">The final layer projects hidden states back to vocabulary size, producing logits that are converted to probabilities via softmax.</p>
+
+    <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:1.5rem;">
+      <div>
+        <h3 style="color:var(--success);font-size:1rem;margin-bottom:1rem;">Top Token Probabilities</h3>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:1.25rem;">
+          <div style="font-size:.8rem;color:var(--text-dim);margin-bottom:.75rem;">After: "The cat sat on the" &rarr; next token prediction:</div>
+          <div class="logits-bar-container" id="logitsViz">
+            <div class="logits-row">
+              <div class="logits-token">mat</div>
+              <div class="logits-bar-bg"><div class="logits-bar" style="width:0%;background:linear-gradient(90deg,var(--success),rgba(16,185,129,0.5));" data-width="72">72%</div></div>
+              <div class="logits-prob">0.72</div>
+            </div>
+            <div class="logits-row">
+              <div class="logits-token">floor</div>
+              <div class="logits-bar-bg"><div class="logits-bar" style="width:0%;background:linear-gradient(90deg,var(--primary),rgba(99,102,241,0.5));" data-width="12">12%</div></div>
+              <div class="logits-prob">0.12</div>
+            </div>
+            <div class="logits-row">
+              <div class="logits-token">table</div>
+              <div class="logits-bar-bg"><div class="logits-bar" style="width:0%;background:linear-gradient(90deg,var(--secondary),rgba(34,211,238,0.5));" data-width="8">8%</div></div>
+              <div class="logits-prob">0.08</div>
+            </div>
+            <div class="logits-row">
+              <div class="logits-token">couch</div>
+              <div class="logits-bar-bg"><div class="logits-bar" style="width:0%;background:linear-gradient(90deg,var(--tertiary),rgba(245,158,11,0.5));" data-width="4">4%</div></div>
+              <div class="logits-prob">0.04</div>
+            </div>
+            <div class="logits-row">
+              <div class="logits-token">bed</div>
+              <div class="logits-bar-bg"><div class="logits-bar" style="width:0%;background:linear-gradient(90deg,var(--danger),rgba(239,68,68,0.5));" data-width="2">2%</div></div>
+              <div class="logits-prob">0.02</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h3 style="color:var(--secondary);font-size:1rem;margin-bottom:1rem;">Sampling Strategy</h3>
+        <div style="display:flex;flex-direction:column;gap:.75rem;">
+          <div class="card" style="padding:1rem;cursor:pointer;" onclick="this.classList.toggle('highlight-card')" onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)'">
+            <h4 style="font-size:.9rem;color:var(--primary);">Greedy (temperature=0)</h4>
+            <p style="font-size:.78rem;color:var(--text-muted);">Always pick the highest probability token. Deterministic but repetitive.</p>
+          </div>
+          <div class="card" style="padding:1rem;cursor:pointer;" onmouseenter="this.style.borderColor='var(--secondary)'" onmouseleave="this.style.borderColor='var(--border)'">
+            <h4 style="font-size:.9rem;color:var(--secondary);">Top-p (nucleus sampling)</h4>
+            <p style="font-size:.78rem;color:var(--text-muted);">Sample from smallest set of tokens whose cumulative probability exceeds p. Balances diversity and coherence.</p>
+          </div>
+          <div class="card" style="padding:1rem;cursor:pointer;" onmouseenter="this.style.borderColor='var(--tertiary)'" onmouseleave="this.style.borderColor='var(--border)'">
+            <h4 style="font-size:.9rem;color:var(--tertiary);">Temperature scaling</h4>
+            <p style="font-size:.78rem;color:var(--text-muted);">Divide logits by temperature before softmax. Higher T = more random, lower T = more focused.</p>
+          </div>
+          <div class="card" style="padding:1rem;cursor:pointer;" onmouseenter="this.style.borderColor='var(--success)'" onmouseleave="this.style.borderColor='var(--border)'">
+            <h4 style="font-size:.9rem;color:var(--success);">Top-k filtering</h4>
+            <p style="font-size:.78rem;color:var(--text-muted);">Only consider the top k tokens. Simple but effective for constraining outputs.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 8: Summary -->
+<div class="section" id="section-7">
+  <div class="section-content" style="text-align:center;">
+    <div class="badge"><span class="pulse"></span> Summary</div>
+    <h2>Architecture <span class="gradient-text">Overview</span></h2>
+    <p class="subtitle" style="margin:0 auto 2rem;">A modern LLM is a stack of identical transformer blocks. Understanding this architecture is the foundation for all inference optimization.</p>
+
+    <div style="display:inline-block;text-align:left;background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:2rem;max-width:650px;width:100%;">
+      <div style="display:flex;flex-direction:column;gap:.75rem;">
+        <div style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;border-radius:8px;background:rgba(99,102,241,0.05);border-left:3px solid var(--primary);">
+          <span style="font-size:1.1rem;min-width:24px;text-align:center;">1</span>
+          <div><span style="font-weight:600;color:var(--primary);">Tokenize</span> <span style="color:var(--text-muted);font-size:.85rem;">&mdash; text to integer IDs via BPE</span></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;border-radius:8px;background:rgba(34,211,238,0.05);border-left:3px solid var(--secondary);">
+          <span style="font-size:1.1rem;min-width:24px;text-align:center;">2</span>
+          <div><span style="font-weight:600;color:var(--secondary);">Embed</span> <span style="color:var(--text-muted);font-size:.85rem;">&mdash; IDs to dense vectors + RoPE positions</span></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;border-radius:8px;background:rgba(245,158,11,0.05);border-left:3px solid var(--tertiary);">
+          <span style="font-size:1.1rem;min-width:24px;text-align:center;">3</span>
+          <div><span style="font-weight:600;color:var(--tertiary);">Transform</span> <span style="color:var(--text-muted);font-size:.85rem;">&mdash; 80x (attention + FFN + residual)</span></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;border-radius:8px;background:rgba(16,185,129,0.05);border-left:3px solid var(--success);">
+          <span style="font-size:1.1rem;min-width:24px;text-align:center;">4</span>
+          <div><span style="font-weight:600;color:var(--success);">Output</span> <span style="color:var(--text-muted);font-size:.85rem;">&mdash; project to vocab, softmax, sample</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:2rem;display:flex;gap:1rem;justify-content:center;">
+      <a href="01_inference_stack.html" style="color:var(--text-dim);text-decoration:none;font-size:.85rem;">&larr; Inference Stack</a>
+      <a href="03_prefill_vs_decode.html" style="color:var(--primary);text-decoration:none;font-size:.85rem;font-weight:600;">Prefill vs Decode &rarr;</a>
+    </div>
+  </div>
+</div>
+
+<script>
+// Navigation
+const sections = document.querySelectorAll('.section');
+const navDotsContainer = document.getElementById('navDots');
+const progressBar = document.getElementById('progressBar');
+
+sections.forEach((_,i)=>{
+  const dot = document.createElement('button');
+  dot.className = 'nav-dot';
+  dot.onclick = () => sections[i].scrollIntoView({behavior:'smooth'});
+  navDotsContainer.appendChild(dot);
+});
+const navDots = document.querySelectorAll('.nav-dot');
+
+const observer = new IntersectionObserver(entries=>{
+  entries.forEach(entry=>{
+    if(entry.isIntersecting){
+      entry.target.querySelector('.section-content').classList.add('visible');
+      const idx = Array.from(sections).indexOf(entry.target);
+      navDots.forEach((d,i)=>d.classList.toggle('active',i===idx));
+      // Trigger logits animation when section 6 is visible
+      if(idx === 6) animateLogits();
+    }
+  });
+},{threshold:0.3});
+sections.forEach(s=>observer.observe(s));
+
+window.addEventListener('scroll',()=>{
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  progressBar.style.width = (scrollTop/docHeight)*100 + '%';
+});
+
+// Layer slider
+function updateLayer(val) {
+  document.getElementById('layerNum').textContent = val;
+  document.getElementById('blockNum').textContent = val;
+  const desc = document.getElementById('blockDesc');
+  if (val <= 20) desc.textContent = 'Early layers: basic syntax & pattern recognition';
+  else if (val <= 50) desc.textContent = 'Middle layers: semantic understanding & reasoning';
+  else if (val <= 70) desc.textContent = 'Deep layers: complex reasoning & knowledge recall';
+  else desc.textContent = 'Final layers: output formation & token prediction';
+
+  // Visual feedback on the transformer block
+  const block = document.getElementById('transformerBlock');
+  const hue = (val / 80) * 120; // green to red hue shift
+  block.style.borderColor = `hsl(${240 + hue}, 70%, 60%)`;
+}
+
+// Toggle block components
+function toggleBlock(el) {
+  const wasExpanded = el.classList.contains('expanded');
+  el.parentElement.querySelectorAll('.block-component').forEach(c => c.classList.remove('expanded'));
+  if (!wasExpanded) el.classList.add('expanded');
+}
+
+// Pipeline animation
+const pipeDescs = [
+  'Raw text: "The transformer architecture revolutionized NLP"',
+  'BPE tokenizer splits text into 9 subword tokens',
+  'Token IDs mapped to 8192-dimensional vectors + RoPE',
+  '80 transformer blocks: attention + FFN + residuals',
+  'Final RMSNorm normalizes the output hidden states',
+  'Linear projection: 8192 dims -> 128,256 vocab logits',
+  'Raw scores (logits) for every token in vocabulary',
+  'Temperature + top-p sampling selects the next token'
+];
+let pipeAnimating = false;
+
+function animatePipeline() {
+  if(pipeAnimating) return;
+  pipeAnimating = true;
+  const stages = document.querySelectorAll('.pipe-stage');
+  const desc = document.getElementById('pipeDesc');
+  const btn = document.getElementById('pipeBtn');
+  btn.style.opacity = '0.5';
+  stages.forEach(s => s.classList.remove('active'));
+  desc.textContent = '';
+
+  let step = 0;
+  function next() {
+    if(step < stages.length) {
+      stages[step].classList.add('active');
+      desc.textContent = pipeDescs[step];
+      step++;
+      setTimeout(next, 700);
+    } else {
+      pipeAnimating = false;
+      btn.style.opacity = '1';
+      setTimeout(()=>{
+        stages.forEach(s => s.classList.remove('active'));
+        desc.textContent = '';
+      }, 3000);
+    }
+  }
+  next();
+}
+
+// Logits animation
+let logitsAnimated = false;
+function animateLogits() {
+  if(logitsAnimated) return;
+  logitsAnimated = true;
+  document.querySelectorAll('.logits-bar').forEach(bar => {
+    const w = bar.getAttribute('data-width');
+    setTimeout(() => { bar.style.width = w + '%'; }, 300);
+  });
+}
+
+// Particles
+const canvas = document.getElementById('particles');
+const ctx = canvas.getContext('2d');
+let particles = [];
+function resizeCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight}
+resizeCanvas(); window.addEventListener('resize',resizeCanvas);
+
+class Particle{
+  constructor(){this.reset()}
+  reset(){
+    this.x=Math.random()*canvas.width;this.y=Math.random()*canvas.height;
+    this.size=Math.random()*1.5+0.5;
+    this.speedX=(Math.random()-0.5)*0.3;this.speedY=(Math.random()-0.5)*0.3;
+    this.opacity=Math.random()*0.25+0.05;
+    const c=['99,102,241','34,211,238','245,158,11'];
+    this.color=c[Math.floor(Math.random()*c.length)];
+  }
+  update(){
+    this.x+=this.speedX;this.y+=this.speedY;
+    if(this.x<0||this.x>canvas.width||this.y<0||this.y>canvas.height)this.reset();
+  }
+  draw(){
+    ctx.beginPath();ctx.arc(this.x,this.y,this.size,0,Math.PI*2);
+    ctx.fillStyle=`rgba(${this.color},${this.opacity})`;ctx.fill();
+  }
+}
+for(let i=0;i<40;i++)particles.push(new Particle());
+function animP(){ctx.clearRect(0,0,canvas.width,canvas.height);particles.forEach(p=>{p.update();p.draw()});requestAnimationFrame(animP)}
+animP();
+
+setTimeout(()=>{document.querySelector('#section-0 .section-content').classList.add('visible')},100);
+</script>
+</body>
+</html>

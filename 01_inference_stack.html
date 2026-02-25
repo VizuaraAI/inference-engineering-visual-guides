@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Full Inference Stack - Visual Walkthrough</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #0a0a0f;
+  --bg-card: #12121a;
+  --bg-card-hover: #1a1a2e;
+  --border: #1e1e3a;
+  --primary: #6366f1;
+  --secondary: #22d3ee;
+  --tertiary: #f59e0b;
+  --success: #10b981;
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+  --danger: #ef4444;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', system-ui, sans-serif;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* Background effects */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(99,102,241,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99,102,241,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+.bg-glow-1 {
+  position: fixed; top: 20%; left: 10%;
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+.bg-glow-2 {
+  position: fixed; bottom: 10%; right: 10%;
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(34,211,238,0.06) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+/* Progress bar */
+.progress-bar {
+  position: fixed; top: 0; left: 0; height: 3px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  z-index: 1000; transition: width 0.3s ease;
+}
+
+/* Navigation */
+.nav {
+  position: fixed; top: 0; left: 0; right: 0;
+  background: rgba(10,10,15,0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  z-index: 999; padding: 0 2rem;
+}
+.nav-inner {
+  max-width: 1200px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 60px;
+}
+.nav-title { font-weight: 700; font-size: 0.9rem; color: var(--text); }
+.nav-title span { color: var(--primary); }
+.nav-dots { display: flex; gap: 8px; }
+.nav-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--border); cursor: pointer;
+  transition: all 0.3s ease; border: none;
+}
+.nav-dot.active { background: var(--primary); box-shadow: 0 0 10px var(--primary); }
+.nav-dot:hover { background: var(--primary); transform: scale(1.2); }
+
+/* Sections */
+.section {
+  min-height: 100vh; padding: 100px 2rem 60px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative; z-index: 1;
+}
+.section-content {
+  max-width: 1100px; width: 100%; margin: 0 auto;
+  opacity: 0; transform: translateY(40px);
+  transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.section-content.visible { opacity: 1; transform: translateY(0); }
+
+/* Typography */
+h1 { font-size: 3.5rem; font-weight: 800; line-height: 1.1; margin-bottom: 1rem; }
+h2 { font-size: 2.5rem; font-weight: 700; line-height: 1.2; margin-bottom: 1rem; }
+h3 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; }
+.gradient-text {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.subtitle { font-size: 1.2rem; color: var(--text-muted); max-width: 700px; margin-bottom: 2rem; }
+.badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 16px; border-radius: 100px;
+  font-size: 0.8rem; font-weight: 500;
+  border: 1px solid rgba(99,102,241,0.3);
+  background: rgba(99,102,241,0.1);
+  color: var(--primary); margin-bottom: 1.5rem;
+}
+.badge .pulse {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--primary);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.3); }
+}
+
+/* Stack Diagram */
+.stack-container {
+  display: flex; flex-direction: column; gap: 0;
+  perspective: 1000px; margin-top: 2rem;
+}
+.stack-layer {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem 2rem;
+  cursor: pointer;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative; overflow: hidden;
+}
+.stack-layer:hover {
+  border-color: var(--primary);
+  transform: translateX(8px);
+}
+.stack-layer.expanded {
+  border-color: var(--primary);
+  background: var(--bg-card-hover);
+}
+.stack-layer::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  opacity: 0; transition: opacity 0.4s;
+}
+.stack-layer.expanded::before { opacity: 1; }
+
+.layer-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem;
+}
+.layer-header-left { display: flex; align-items: center; gap: 1rem; }
+.layer-icon {
+  width: 48px; height: 48px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem; flex-shrink: 0;
+}
+.layer-title { font-size: 1.1rem; font-weight: 600; }
+.layer-subtitle { font-size: 0.85rem; color: var(--text-muted); }
+.layer-arrow {
+  font-size: 1.2rem; color: var(--text-dim);
+  transition: transform 0.3s;
+}
+.stack-layer.expanded .layer-arrow { transform: rotate(90deg); }
+
+.layer-content {
+  max-height: 0; overflow: hidden;
+  transition: max-height 0.5s cubic-bezier(0.16, 1, 0.3, 1), padding 0.5s;
+}
+.stack-layer.expanded .layer-content {
+  max-height: 600px; padding-top: 1.5rem;
+}
+
+.components-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+.component-card {
+  background: rgba(99,102,241,0.05);
+  border: 1px solid rgba(99,102,241,0.15);
+  border-radius: 12px; padding: 1rem;
+  transition: all 0.3s; position: relative;
+}
+.component-card:hover {
+  border-color: rgba(99,102,241,0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(99,102,241,0.1);
+}
+.component-card h4 {
+  font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem;
+}
+.component-card p {
+  font-size: 0.78rem; color: var(--text-muted); line-height: 1.4;
+}
+.component-tag {
+  display: inline-block; padding: 2px 8px; border-radius: 6px;
+  font-size: 0.65rem; font-weight: 600; margin-top: 0.5rem;
+}
+
+/* Connectors between layers */
+.stack-connector {
+  display: flex; justify-content: center; padding: 4px 0;
+  position: relative; z-index: 2;
+}
+.connector-line {
+  width: 2px; height: 30px; position: relative;
+  background: linear-gradient(to bottom, var(--primary), var(--secondary));
+  border-radius: 2px;
+}
+.connector-dot {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--secondary);
+  animation: flowDown 1.5s ease-in-out infinite;
+}
+@keyframes flowDown {
+  0% { top: 0; opacity: 0; }
+  50% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* Flow Animation Section */
+.flow-container {
+  position: relative; margin-top: 2rem;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 16px; padding: 2rem; overflow: hidden;
+}
+.flow-stages {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.5rem; flex-wrap: wrap;
+}
+.flow-stage {
+  flex: 1; min-width: 120px; text-align: center;
+  padding: 1rem; border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  transition: all 0.5s;
+  position: relative;
+}
+.flow-stage.active {
+  border-color: var(--secondary);
+  background: rgba(34,211,238,0.05);
+  box-shadow: 0 0 20px rgba(34,211,238,0.15);
+}
+.flow-stage .stage-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
+.flow-stage .stage-label { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); }
+.flow-stage.active .stage-label { color: var(--secondary); }
+
+.flow-arrow {
+  color: var(--text-dim); font-size: 1rem;
+  flex-shrink: 0; transition: color 0.3s;
+}
+.flow-arrow.active { color: var(--secondary); }
+
+.flow-packet {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--secondary);
+  box-shadow: 0 0 15px var(--secondary);
+  opacity: 0; z-index: 10;
+}
+
+/* Tooltip */
+.tooltip-container { position: relative; }
+.tooltip {
+  position: absolute; bottom: calc(100% + 10px); left: 50%;
+  transform: translateX(-50%) scale(0.9);
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border);
+  border-radius: 10px; padding: 0.75rem 1rem;
+  font-size: 0.8rem; color: var(--text);
+  white-space: nowrap; opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 100;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+.tooltip::after {
+  content: ''; position: absolute;
+  top: 100%; left: 50%; transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--border);
+}
+.tooltip-container:hover .tooltip {
+  opacity: 1; transform: translateX(-50%) scale(1);
+}
+
+/* Comparison table */
+.comparison-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 1rem; margin-top: 2rem;
+}
+.compare-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px; padding: 1.5rem;
+  transition: all 0.3s;
+  position: relative; overflow: hidden;
+}
+.compare-card:hover {
+  border-color: var(--primary);
+  transform: translateY(-4px);
+}
+.compare-card h4 { font-size: 1rem; margin-bottom: 0.5rem; }
+.compare-label {
+  font-size: 0.7rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  margin-bottom: 0.75rem;
+}
+.compare-items { display: flex; flex-direction: column; gap: 0.5rem; }
+.compare-item {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.8rem; color: var(--text-muted);
+}
+.compare-item .dot {
+  width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+}
+
+/* Code block */
+.code-block {
+  background: #0d1117; border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.25rem; margin-top: 1rem;
+  overflow-x: auto; font-size: 0.8rem; line-height: 1.7;
+}
+.code-block .comment { color: #6a737d; }
+.code-block .keyword { color: #ff7b72; }
+.code-block .string { color: #a5d6ff; }
+.code-block .function { color: #d2a8ff; }
+.code-block .number { color: #79c0ff; }
+
+/* Particle canvas */
+#particles { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  h1 { font-size: 2.2rem; }
+  h2 { font-size: 1.8rem; }
+  .section { padding: 80px 1rem 40px; }
+  .comparison-grid { grid-template-columns: 1fr; }
+  .components-grid { grid-template-columns: 1fr; }
+  .flow-stages { flex-direction: column; }
+  .flow-arrow { transform: rotate(90deg); }
+}
+</style>
+</head>
+<body class="bg-grid">
+
+<div class="progress-bar" id="progressBar"></div>
+<div class="bg-glow-1"></div>
+<div class="bg-glow-2"></div>
+<canvas id="particles"></canvas>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-title"><span>01</span> / The Full Inference Stack</div>
+    <div class="nav-dots" id="navDots"></div>
+  </div>
+</nav>
+
+<!-- Section 1: Title -->
+<div class="section" id="section-0">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Visual Walkthrough</div>
+    <h1>The Full<br><span class="gradient-text">Inference Stack</span></h1>
+    <p class="subtitle">
+      Understanding the complete technology stack that powers LLM inference &mdash;
+      from low-level GPU operations to high-level orchestration tooling.
+    </p>
+    <div style="display:flex;gap:1rem;margin-top:2rem;flex-wrap:wrap;">
+      <div style="padding:12px 20px;border-radius:12px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);font-size:0.85rem;">
+        <span style="color:var(--primary);font-weight:600;">3 Layers</span>
+        <span style="color:var(--text-muted);"> to understand</span>
+      </div>
+      <div style="padding:12px 20px;border-radius:12px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);font-size:0.85rem;">
+        <span style="color:var(--secondary);font-weight:600;">12+ Components</span>
+        <span style="color:var(--text-muted);"> in the ecosystem</span>
+      </div>
+      <div style="padding:12px 20px;border-radius:12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);font-size:0.85rem;">
+        <span style="color:var(--tertiary);font-weight:600;">Interactive</span>
+        <span style="color:var(--text-muted);"> exploration</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 2: Overview -->
+<div class="section" id="section-1">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Overview</div>
+    <h2>Why a <span class="gradient-text">Stack?</span></h2>
+    <p class="subtitle">
+      Just like web development has frontend, backend, and infrastructure layers,
+      LLM inference has a layered architecture. Each layer abstracts complexity from the one above.
+    </p>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;margin-top:2rem;">
+      <div style="text-align:center;padding:2rem;background:var(--bg-card);border:1px solid var(--border);border-radius:16px;transition:all 0.3s;" onmouseenter="this.style.borderColor='var(--tertiary)';this.style.transform='translateY(-4px)'" onmouseleave="this.style.borderColor='var(--border)';this.style.transform='none'">
+        <div style="font-size:2.5rem;margin-bottom:1rem;">&#x1F527;</div>
+        <h3 style="color:var(--tertiary);font-size:1.1rem;">Tooling Layer</h3>
+        <p style="font-size:0.85rem;color:var(--text-muted);">Orchestration, routing, guardrails, and developer tools</p>
+      </div>
+      <div style="text-align:center;padding:2rem;background:var(--bg-card);border:1px solid var(--border);border-radius:16px;transition:all 0.3s;" onmouseenter="this.style.borderColor='var(--success)';this.style.transform='translateY(-4px)'" onmouseleave="this.style.borderColor='var(--border)';this.style.transform='none'">
+        <div style="font-size:2.5rem;margin-bottom:1rem;">&#x2601;</div>
+        <h3 style="color:var(--success);font-size:1.1rem;">Infrastructure Layer</h3>
+        <p style="font-size:0.85rem;color:var(--text-muted);">Kubernetes, autoscaling, load balancing, multi-cloud</p>
+      </div>
+      <div style="text-align:center;padding:2rem;background:var(--bg-card);border:1px solid var(--border);border-radius:16px;transition:all 0.3s;" onmouseenter="this.style.borderColor='var(--primary)';this.style.transform='translateY(-4px)'" onmouseleave="this.style.borderColor='var(--border)';this.style.transform='none'">
+        <div style="font-size:2.5rem;margin-bottom:1rem;">&#x26A1;</div>
+        <h3 style="color:var(--primary);font-size:1.1rem;">Runtime Layer</h3>
+        <p style="font-size:0.85rem;color:var(--text-muted);">CUDA, PyTorch, inference engines, kernel compilation</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 3: Interactive Stack -->
+<div class="section" id="section-2">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Interactive Diagram</div>
+    <h2>Explore the <span class="gradient-text">Stack</span></h2>
+    <p class="subtitle">Click each layer to expand and discover the components within.</p>
+
+    <div class="stack-container" id="stackContainer">
+      <!-- Tooling Layer -->
+      <div class="stack-layer" data-layer="tooling" onclick="toggleLayer(this)">
+        <div class="layer-header">
+          <div class="layer-header-left">
+            <div class="layer-icon" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);color:var(--tertiary);">&#x1F527;</div>
+            <div>
+              <div class="layer-title" style="color:var(--tertiary);">Tooling &amp; Orchestration</div>
+              <div class="layer-subtitle">Developer-facing tools and serving frameworks</div>
+            </div>
+          </div>
+          <div class="layer-arrow">&#x25B6;</div>
+        </div>
+        <div class="layer-content">
+          <div class="components-grid">
+            <div class="component-card tooltip-container" style="border-color:rgba(245,158,11,0.2);">
+              <div class="tooltip">API gateway for model serving with batching, routing, and scaling</div>
+              <h4 style="color:var(--tertiary);">vLLM / TRT-LLM</h4>
+              <p>High-throughput inference servers with PagedAttention and continuous batching</p>
+              <span class="component-tag" style="background:rgba(245,158,11,0.15);color:var(--tertiary);">Serving</span>
+            </div>
+            <div class="component-card tooltip-container" style="border-color:rgba(245,158,11,0.2);">
+              <div class="tooltip">Intelligent request routing across model replicas</div>
+              <h4 style="color:var(--tertiary);">Router / Gateway</h4>
+              <p>Load balancing, request routing, and API management for inference endpoints</p>
+              <span class="component-tag" style="background:rgba(245,158,11,0.15);color:var(--tertiary);">Routing</span>
+            </div>
+            <div class="component-card tooltip-container" style="border-color:rgba(245,158,11,0.2);">
+              <div class="tooltip">Safety filters and output validation</div>
+              <h4 style="color:var(--tertiary);">Guardrails</h4>
+              <p>Content filtering, output validation, safety classifiers, and rate limiting</p>
+              <span class="component-tag" style="background:rgba(245,158,11,0.15);color:var(--tertiary);">Safety</span>
+            </div>
+            <div class="component-card tooltip-container" style="border-color:rgba(245,158,11,0.2);">
+              <div class="tooltip">Prompt caching and prefix sharing for faster responses</div>
+              <h4 style="color:var(--tertiary);">Prefix Cache</h4>
+              <p>Share computed KV caches across requests with common system prompts</p>
+              <span class="component-tag" style="background:rgba(245,158,11,0.15);color:var(--tertiary);">Optimization</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stack-connector"><div class="connector-line"><div class="connector-dot"></div></div></div>
+
+      <!-- Infrastructure Layer -->
+      <div class="stack-layer" data-layer="infra" onclick="toggleLayer(this)">
+        <div class="layer-header">
+          <div class="layer-header-left">
+            <div class="layer-icon" style="background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);color:var(--success);">&#x2601;</div>
+            <div>
+              <div class="layer-title" style="color:var(--success);">Infrastructure</div>
+              <div class="layer-subtitle">Deployment, scaling, and resource management</div>
+            </div>
+          </div>
+          <div class="layer-arrow">&#x25B6;</div>
+        </div>
+        <div class="layer-content">
+          <div class="components-grid">
+            <div class="component-card tooltip-container" style="border-color:rgba(16,185,129,0.2);">
+              <div class="tooltip">Container orchestration for GPU workloads</div>
+              <h4 style="color:var(--success);">Kubernetes + GPU Operator</h4>
+              <p>Schedule GPU pods, manage NVIDIA device plugins, and handle node pools</p>
+              <span class="component-tag" style="background:rgba(16,185,129,0.15);color:var(--success);">Orchestration</span>
+            </div>
+            <div class="component-card tooltip-container" style="border-color:rgba(16,185,129,0.2);">
+              <div class="tooltip">Dynamic scaling based on request queue depth</div>
+              <h4 style="color:var(--success);">Autoscaling (HPA/KEDA)</h4>
+              <p>Scale replicas based on GPU utilization, queue depth, or custom metrics</p>
+              <span class="component-tag" style="background:rgba(16,185,129,0.15);color:var(--success);">Scaling</span>
+            </div>
+            <div class="component-card tooltip-container" style="border-color:rgba(16,185,129,0.2);">
+              <div class="tooltip">Multi-cloud GPU provisioning for cost optimization</div>
+              <h4 style="color:var(--success);">Multi-Cloud / Spot</h4>
+              <p>AWS, GCP, Azure, CoreWeave &mdash; spot instances and reserved capacity</p>
+              <span class="component-tag" style="background:rgba(16,185,129,0.15);color:var(--success);">Cloud</span>
+            </div>
+            <div class="component-card tooltip-container" style="border-color:rgba(16,185,129,0.2);">
+              <div class="tooltip">Metrics, logging, and distributed tracing</div>
+              <h4 style="color:var(--success);">Observability</h4>
+              <p>Prometheus + Grafana for latency, throughput, GPU utilization monitoring</p>
+              <span class="component-tag" style="background:rgba(16,185,129,0.15);color:var(--success);">Monitoring</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stack-connector"><div class="connector-line"><div class="connector-dot"></div></div></div>
+
+      <!-- Runtime Layer -->
+      <div class="stack-layer" data-layer="runtime" onclick="toggleLayer(this)">
+        <div class="layer-header">
+          <div class="layer-header-left">
+            <div class="layer-icon" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);color:var(--primary);">&#x26A1;</div>
+            <div>
+              <div class="layer-title" style="color:var(--primary);">Runtime</div>
+              <div class="layer-subtitle">Low-level execution, GPU kernels, and model compilation</div>
+            </div>
+          </div>
+          <div class="layer-arrow">&#x25B6;</div>
+        </div>
+        <div class="layer-content">
+          <div class="components-grid">
+            <div class="component-card tooltip-container" style="border-color:rgba(99,102,241,0.2);">
+              <div class="tooltip">NVIDIA's parallel computing platform for GPU programming</div>
+              <h4 style="color:var(--primary);">CUDA / cuDNN</h4>
+              <p>GPU kernel execution, memory management, and optimized math libraries</p>
+              <span class="component-tag" style="background:rgba(99,102,241,0.15);color:var(--primary);">GPU</span>
+            </div>
+            <div class="component-card tooltip-container" style="border-color:rgba(99,102,241,0.2);">
+              <div class="tooltip">Deep learning framework with automatic differentiation</div>
+              <h4 style="color:var(--primary);">PyTorch</h4>
+              <p>Model definition, tensor operations, and the foundation for inference engines</p>
+              <span class="component-tag" style="background:rgba(99,102,241,0.15);color:var(--primary);">Framework</span>
+            </div>
+            <div class="component-card tooltip-container" style="border-color:rgba(99,102,241,0.2);">
+              <div class="tooltip">Compiles PyTorch models into optimized GPU code</div>
+              <h4 style="color:var(--primary);">torch.compile / Dynamo</h4>
+              <p>Graph capture, operator fusion, and automatic kernel optimization</p>
+              <span class="component-tag" style="background:rgba(99,102,241,0.15);color:var(--primary);">Compiler</span>
+            </div>
+            <div class="component-card tooltip-container" style="border-color:rgba(99,102,241,0.2);">
+              <div class="tooltip">Custom CUDA kernels for attention and memory operations</div>
+              <h4 style="color:var(--primary);">FlashAttention / Custom Kernels</h4>
+              <p>IO-aware attention, fused operations, and hardware-specific optimizations</p>
+              <span class="component-tag" style="background:rgba(99,102,241,0.15);color:var(--primary);">Kernels</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 4: Data Flow -->
+<div class="section" id="section-3">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Data Flow</div>
+    <h2>Request <span class="gradient-text">Journey</span></h2>
+    <p class="subtitle">Watch a user request travel through the entire inference stack, from API call to generated token.</p>
+
+    <div class="flow-container">
+      <div class="flow-stages" id="flowStages">
+        <div class="flow-stage" data-step="0">
+          <div class="stage-icon">&#x1F4AC;</div>
+          <div class="stage-label">User Request</div>
+        </div>
+        <div class="flow-arrow">&#x2192;</div>
+        <div class="flow-stage" data-step="1">
+          <div class="stage-icon">&#x1F6E1;</div>
+          <div class="stage-label">API Gateway</div>
+        </div>
+        <div class="flow-arrow">&#x2192;</div>
+        <div class="flow-stage" data-step="2">
+          <div class="stage-icon">&#x2696;</div>
+          <div class="stage-label">Load Balancer</div>
+        </div>
+        <div class="flow-arrow">&#x2192;</div>
+        <div class="flow-stage" data-step="3">
+          <div class="stage-icon">&#x1F4E6;</div>
+          <div class="stage-label">Batch Scheduler</div>
+        </div>
+        <div class="flow-arrow">&#x2192;</div>
+        <div class="flow-stage" data-step="4">
+          <div class="stage-icon">&#x1F9E0;</div>
+          <div class="stage-label">Model Engine</div>
+        </div>
+        <div class="flow-arrow">&#x2192;</div>
+        <div class="flow-stage" data-step="5">
+          <div class="stage-icon">&#x26A1;</div>
+          <div class="stage-label">GPU Kernels</div>
+        </div>
+        <div class="flow-arrow">&#x2192;</div>
+        <div class="flow-stage" data-step="6">
+          <div class="stage-icon">&#x2728;</div>
+          <div class="stage-label">Token Output</div>
+        </div>
+      </div>
+      <div style="margin-top:1.5rem;text-align:center;">
+        <button id="flowBtn" onclick="startFlowAnimation()" style="padding:10px 24px;border-radius:10px;background:var(--primary);color:white;border:none;cursor:pointer;font-family:inherit;font-weight:600;font-size:0.85rem;transition:all 0.3s;">
+          &#x25B6; Animate Request Flow
+        </button>
+      </div>
+      <div id="flowDescription" style="margin-top:1rem;text-align:center;font-size:0.85rem;color:var(--text-muted);min-height:2rem;transition:all 0.3s;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 5: Runtime Deep Dive -->
+<div class="section" id="section-4">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Runtime Layer</div>
+    <h2>CUDA to <span class="gradient-text">Tokens</span></h2>
+    <p class="subtitle">The runtime layer is where math meets metal. Here's how a forward pass executes on GPU hardware.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:2rem;">
+      <div>
+        <h3 style="color:var(--primary);font-size:1rem;margin-bottom:1rem;">Execution Pipeline</h3>
+        <div style="display:flex;flex-direction:column;gap:0.75rem;">
+          <div class="runtime-step" style="display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;transition:all 0.3s;" onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)'">
+            <div style="width:36px;height:36px;border-radius:8px;background:rgba(99,102,241,0.2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--primary);font-size:0.85rem;flex-shrink:0;">1</div>
+            <div>
+              <div style="font-weight:600;font-size:0.9rem;">Python &rarr; TorchDynamo</div>
+              <div style="font-size:0.78rem;color:var(--text-muted);">Graph capture from eager-mode PyTorch</div>
+            </div>
+          </div>
+          <div class="runtime-step" style="display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;transition:all 0.3s;" onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)'">
+            <div style="width:36px;height:36px;border-radius:8px;background:rgba(99,102,241,0.2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--primary);font-size:0.85rem;flex-shrink:0;">2</div>
+            <div>
+              <div style="font-weight:600;font-size:0.9rem;">TorchInductor Backend</div>
+              <div style="font-size:0.78rem;color:var(--text-muted);">Operator fusion and Triton kernel generation</div>
+            </div>
+          </div>
+          <div class="runtime-step" style="display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;transition:all 0.3s;" onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)'">
+            <div style="width:36px;height:36px;border-radius:8px;background:rgba(99,102,241,0.2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--primary);font-size:0.85rem;flex-shrink:0;">3</div>
+            <div>
+              <div style="font-weight:600;font-size:0.9rem;">CUDA Kernels Launch</div>
+              <div style="font-size:0.78rem;color:var(--text-muted);">Compiled kernels dispatched to GPU SMs</div>
+            </div>
+          </div>
+          <div class="runtime-step" style="display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;transition:all 0.3s;" onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)'">
+            <div style="width:36px;height:36px;border-radius:8px;background:rgba(99,102,241,0.2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--primary);font-size:0.85rem;flex-shrink:0;">4</div>
+            <div>
+              <div style="font-weight:600;font-size:0.9rem;">Tensor Core MMA</div>
+              <div style="font-size:0.78rem;color:var(--text-muted);">Matrix multiply-accumulate on hardware units</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h3 style="color:var(--secondary);font-size:1rem;margin-bottom:1rem;">Code Example</h3>
+        <div class="code-block">
+<span class="comment"># torch.compile captures the computation graph</span>
+<span class="keyword">import</span> torch
+
+<span class="keyword">@</span><span class="function">torch.compile</span>(mode=<span class="string">"max-autotune"</span>)
+<span class="keyword">def</span> <span class="function">forward_pass</span>(input_ids, model):
+    <span class="comment"># TorchDynamo captures this as a graph</span>
+    embeddings = model.embed(input_ids)
+
+    <span class="keyword">for</span> layer <span class="keyword">in</span> model.layers:
+        <span class="comment"># Each layer: attention + FFN</span>
+        embeddings = layer(embeddings)
+
+    <span class="comment"># Output logits</span>
+    logits = model.lm_head(embeddings)
+    <span class="keyword">return</span> logits
+
+<span class="comment"># TorchInductor generates optimized</span>
+<span class="comment"># Triton/CUDA kernels automatically</span>
+        </div>
+        <div style="margin-top:1rem;padding:1rem;background:rgba(34,211,238,0.05);border:1px solid rgba(34,211,238,0.2);border-radius:10px;font-size:0.8rem;">
+          <span style="color:var(--secondary);font-weight:600;">Key Insight:</span>
+          <span style="color:var(--text-muted);"> torch.compile fuses multiple operations into single GPU kernels, reducing memory round-trips and increasing throughput.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 6: Infrastructure -->
+<div class="section" id="section-5">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Infrastructure</div>
+    <h2>Scaling <span class="gradient-text">Inference</span></h2>
+    <p class="subtitle">Infrastructure handles the hard problems: GPU scheduling, autoscaling, and multi-cloud deployment.</p>
+
+    <div class="comparison-grid">
+      <div class="compare-card" onmouseenter="this.style.borderColor='var(--success)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <div class="compare-label" style="color:var(--success);">Kubernetes</div>
+        <h4>GPU-Aware Scheduling</h4>
+        <div class="compare-items">
+          <div class="compare-item"><div class="dot" style="background:var(--success);"></div>NVIDIA GPU Operator</div>
+          <div class="compare-item"><div class="dot" style="background:var(--success);"></div>Multi-Instance GPU (MIG)</div>
+          <div class="compare-item"><div class="dot" style="background:var(--success);"></div>Topology-aware placement</div>
+          <div class="compare-item"><div class="dot" style="background:var(--success);"></div>Pod priority &amp; preemption</div>
+        </div>
+      </div>
+      <div class="compare-card" onmouseenter="this.style.borderColor='var(--secondary)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <div class="compare-label" style="color:var(--secondary);">Autoscaling</div>
+        <h4>Dynamic Capacity</h4>
+        <div class="compare-items">
+          <div class="compare-item"><div class="dot" style="background:var(--secondary);"></div>Queue-depth triggers</div>
+          <div class="compare-item"><div class="dot" style="background:var(--secondary);"></div>GPU utilization thresholds</div>
+          <div class="compare-item"><div class="dot" style="background:var(--secondary);"></div>Predictive scaling (ML-based)</div>
+          <div class="compare-item"><div class="dot" style="background:var(--secondary);"></div>Scale-to-zero for cost savings</div>
+        </div>
+      </div>
+      <div class="compare-card" onmouseenter="this.style.borderColor='var(--tertiary)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <div class="compare-label" style="color:var(--tertiary);">Multi-Cloud</div>
+        <h4>GPU Availability</h4>
+        <div class="compare-items">
+          <div class="compare-item"><div class="dot" style="background:var(--tertiary);"></div>AWS (p5, p4d instances)</div>
+          <div class="compare-item"><div class="dot" style="background:var(--tertiary);"></div>GCP (a3, a2 VMs)</div>
+          <div class="compare-item"><div class="dot" style="background:var(--tertiary);"></div>CoreWeave, Lambda, etc.</div>
+          <div class="compare-item"><div class="dot" style="background:var(--tertiary);"></div>Spot instance fallback</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 7: Tooling -->
+<div class="section" id="section-6">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Tooling</div>
+    <h2>Serving <span class="gradient-text">Frameworks</span></h2>
+    <p class="subtitle">The tooling layer provides the developer interface: model serving, batching strategies, and optimization knobs.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-top:2rem;">
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:1.5rem;transition:all 0.3s;" onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <h3 style="color:var(--primary);font-size:1.1rem;">vLLM</h3>
+        <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:1rem;">The most popular open-source inference engine</p>
+        <div class="code-block" style="font-size:0.75rem;">
+<span class="comment"># Start vLLM server</span>
+<span class="function">vllm serve</span> meta-llama/Llama-3.1-70B \
+  --tensor-parallel-size <span class="number">4</span> \
+  --max-model-len <span class="number">32768</span> \
+  --enable-prefix-caching \
+  --gpu-memory-utilization <span class="number">0.95</span>
+        </div>
+        <div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap;">
+          <span style="padding:4px 10px;border-radius:6px;background:rgba(99,102,241,0.1);color:var(--primary);font-size:0.7rem;font-weight:600;">PagedAttention</span>
+          <span style="padding:4px 10px;border-radius:6px;background:rgba(99,102,241,0.1);color:var(--primary);font-size:0.7rem;font-weight:600;">Continuous Batching</span>
+          <span style="padding:4px 10px;border-radius:6px;background:rgba(99,102,241,0.1);color:var(--primary);font-size:0.7rem;font-weight:600;">Prefix Caching</span>
+        </div>
+      </div>
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:1.5rem;transition:all 0.3s;" onmouseenter="this.style.borderColor='var(--success)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <h3 style="color:var(--success);font-size:1.1rem;">TensorRT-LLM</h3>
+        <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:1rem;">NVIDIA's optimized inference library</p>
+        <div class="code-block" style="font-size:0.75rem;">
+<span class="comment"># Build TRT-LLM engine</span>
+<span class="function">trtllm-build</span> \
+  --model_dir ./llama-70b \
+  --output_dir ./engine \
+  --tp_size <span class="number">4</span> \
+  --gemm_plugin float16 \
+  --max_batch_size <span class="number">64</span> \
+  --max_input_len <span class="number">4096</span>
+        </div>
+        <div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap;">
+          <span style="padding:4px 10px;border-radius:6px;background:rgba(16,185,129,0.1);color:var(--success);font-size:0.7rem;font-weight:600;">FP8 Quantization</span>
+          <span style="padding:4px 10px;border-radius:6px;background:rgba(16,185,129,0.1);color:var(--success);font-size:0.7rem;font-weight:600;">In-flight Batching</span>
+          <span style="padding:4px 10px;border-radius:6px;background:rgba(16,185,129,0.1);color:var(--success);font-size:0.7rem;font-weight:600;">KV Cache Reuse</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 8: Summary -->
+<div class="section" id="section-7">
+  <div class="section-content" style="text-align:center;">
+    <div class="badge"><span class="pulse"></span> Summary</div>
+    <h2>The Stack at a <span class="gradient-text">Glance</span></h2>
+    <p class="subtitle" style="margin:0 auto 2rem;">From user request to generated token, every layer plays a critical role in delivering fast, reliable inference.</p>
+
+    <div style="display:inline-block;text-align:left;background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:2rem;max-width:600px;width:100%;">
+      <div style="display:flex;align-items:center;gap:1rem;padding:0.75rem;margin-bottom:0.5rem;border-radius:10px;background:rgba(245,158,11,0.05);border-left:3px solid var(--tertiary);">
+        <span style="font-size:1.2rem;">&#x1F527;</span>
+        <div>
+          <div style="font-weight:600;color:var(--tertiary);font-size:0.9rem;">Tooling</div>
+          <div style="font-size:0.78rem;color:var(--text-muted);">vLLM, TRT-LLM, Routers, Guardrails</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:1rem;padding:0.75rem;margin-bottom:0.5rem;border-radius:10px;background:rgba(16,185,129,0.05);border-left:3px solid var(--success);">
+        <span style="font-size:1.2rem;">&#x2601;</span>
+        <div>
+          <div style="font-weight:600;color:var(--success);font-size:0.9rem;">Infrastructure</div>
+          <div style="font-size:0.78rem;color:var(--text-muted);">Kubernetes, Autoscaling, Multi-cloud</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:1rem;padding:0.75rem;border-radius:10px;background:rgba(99,102,241,0.05);border-left:3px solid var(--primary);">
+        <span style="font-size:1.2rem;">&#x26A1;</span>
+        <div>
+          <div style="font-weight:600;color:var(--primary);font-size:0.9rem;">Runtime</div>
+          <div style="font-size:0.78rem;color:var(--text-muted);">CUDA, PyTorch, torch.compile, FlashAttention</div>
+        </div>
+      </div>
+    </div>
+
+    <p style="margin-top:2rem;color:var(--text-dim);font-size:0.85rem;">
+      Next: <a href="02_llm_architecture.html" style="color:var(--primary);text-decoration:none;font-weight:600;">LLM Architecture Deep Dive &rarr;</a>
+    </p>
+  </div>
+</div>
+
+<script>
+// Sections and navigation
+const sections = document.querySelectorAll('.section');
+const navDotsContainer = document.getElementById('navDots');
+const progressBar = document.getElementById('progressBar');
+
+// Create nav dots
+sections.forEach((_, i) => {
+  const dot = document.createElement('button');
+  dot.className = 'nav-dot';
+  dot.onclick = () => sections[i].scrollIntoView({ behavior: 'smooth' });
+  navDotsContainer.appendChild(dot);
+});
+
+const navDots = document.querySelectorAll('.nav-dot');
+
+// Scroll observer
+const observerOptions = { threshold: 0.3 };
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.querySelector('.section-content').classList.add('visible');
+      const idx = Array.from(sections).indexOf(entry.target);
+      navDots.forEach((d, i) => d.classList.toggle('active', i === idx));
+    }
+  });
+}, observerOptions);
+sections.forEach(s => observer.observe(s));
+
+// Progress bar
+window.addEventListener('scroll', () => {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  const progress = (scrollTop / docHeight) * 100;
+  progressBar.style.width = progress + '%';
+});
+
+// Toggle stack layers
+function toggleLayer(el) {
+  const wasExpanded = el.classList.contains('expanded');
+  document.querySelectorAll('.stack-layer').forEach(l => l.classList.remove('expanded'));
+  if (!wasExpanded) el.classList.add('expanded');
+}
+
+// Flow animation
+const flowDescriptions = [
+  'User sends a prompt via API (e.g., "Explain quantum computing")',
+  'API Gateway validates the request, checks rate limits and auth',
+  'Load balancer routes to the least-loaded GPU replica',
+  'Batch scheduler groups this request with others for efficiency',
+  'Model engine runs the forward pass through transformer layers',
+  'GPU kernels execute matrix operations on Tensor Cores',
+  'Generated tokens are streamed back to the user'
+];
+
+let flowAnimating = false;
+function startFlowAnimation() {
+  if (flowAnimating) return;
+  flowAnimating = true;
+  const stages = document.querySelectorAll('.flow-stage');
+  const arrows = document.querySelectorAll('.flow-arrow');
+  const desc = document.getElementById('flowDescription');
+  const btn = document.getElementById('flowBtn');
+  btn.style.opacity = '0.5';
+  btn.style.pointerEvents = 'none';
+
+  // Reset
+  stages.forEach(s => s.classList.remove('active'));
+  arrows.forEach(a => a.classList.remove('active'));
+  desc.textContent = '';
+
+  let step = 0;
+  function nextStep() {
+    if (step > 0 && step - 1 < arrows.length) {
+      arrows[step - 1].classList.add('active');
+      arrows[step - 1].style.color = 'var(--secondary)';
+    }
+    if (step < stages.length) {
+      stages[step].classList.add('active');
+      desc.textContent = flowDescriptions[step];
+      desc.style.opacity = '0';
+      requestAnimationFrame(() => desc.style.opacity = '1');
+      step++;
+      setTimeout(nextStep, 900);
+    } else {
+      flowAnimating = false;
+      btn.style.opacity = '1';
+      btn.style.pointerEvents = 'auto';
+      btn.textContent = '↻ Replay Animation';
+      // Reset after delay
+      setTimeout(() => {
+        stages.forEach(s => s.classList.remove('active'));
+        arrows.forEach(a => { a.classList.remove('active'); a.style.color = ''; });
+        desc.textContent = 'Click to replay the animation';
+        btn.textContent = '▶ Animate Request Flow';
+      }, 4000);
+    }
+  }
+  nextStep();
+}
+
+// Particle effect
+const canvas = document.getElementById('particles');
+const ctx = canvas.getContext('2d');
+let particles = [];
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+class Particle {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    this.x = Math.random() * canvas.width;
+    this.y = Math.random() * canvas.height;
+    this.size = Math.random() * 1.5 + 0.5;
+    this.speedX = (Math.random() - 0.5) * 0.3;
+    this.speedY = (Math.random() - 0.5) * 0.3;
+    this.opacity = Math.random() * 0.3 + 0.1;
+    const colors = ['99,102,241', '34,211,238', '245,158,11'];
+    this.color = colors[Math.floor(Math.random() * colors.length)];
+  }
+  update() {
+    this.x += this.speedX;
+    this.y += this.speedY;
+    if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) {
+      this.reset();
+    }
+  }
+  draw() {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${this.color},${this.opacity})`;
+    ctx.fill();
+  }
+}
+
+for (let i = 0; i < 50; i++) particles.push(new Particle());
+
+function animateParticles() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  particles.forEach(p => { p.update(); p.draw(); });
+  requestAnimationFrame(animateParticles);
+}
+animateParticles();
+
+// Trigger first section visibility
+setTimeout(() => {
+  document.querySelector('#section-0 .section-content').classList.add('visible');
+}, 100);
+</script>
+</body>
+</html>

@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inference Engines: vLLM vs SGLang vs TensorRT-LLM</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#0a0a0f;color:#e2e8f0;overflow-x:hidden;line-height:1.6}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#0a0a0f}
+::-webkit-scrollbar-thumb{background:#6366f1;border-radius:3px}
+
+.progress-bar{position:fixed;top:0;left:0;width:0%;height:3px;background:linear-gradient(90deg,#6366f1,#22d3ee);z-index:1000;transition:width .3s}
+.nav-dots{position:fixed;right:20px;top:50%;transform:translateY(-50%);z-index:100;display:flex;flex-direction:column;gap:12px}
+.nav-dot{width:10px;height:10px;border-radius:50%;background:#333;cursor:pointer;transition:all .3s;border:2px solid transparent}
+.nav-dot.active{background:#6366f1;border-color:#22d3ee;transform:scale(1.3)}
+.nav-dot:hover{background:#6366f1}
+
+section{min-height:100vh;padding:80px 60px;display:flex;flex-direction:column;justify-content:center;align-items:center;position:relative}
+
+.hero-section{background:radial-gradient(ellipse at center,#1a1a3e 0%,#0a0a0f 70%)}
+.hero-title{font-size:3rem;font-weight:800;text-align:center;margin-bottom:20px;background:linear-gradient(135deg,#6366f1,#22d3ee);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero-subtitle{font-size:1.2rem;color:#94a3b8;text-align:center;max-width:700px;margin-bottom:40px}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:20px;padding:8px 20px;font-size:.85rem;color:#a5b4fc;margin-bottom:20px}
+
+.section-title{font-size:2rem;font-weight:700;margin-bottom:10px;text-align:center}
+.section-desc{color:#94a3b8;text-align:center;max-width:650px;margin-bottom:40px}
+.highlight{color:#22d3ee}.highlight-amber{color:#f59e0b}.highlight-green{color:#10b981}
+
+.card{background:rgba(20,20,40,.6);border:1px solid #222;border-radius:16px;padding:30px;transition:all .3s}
+.card:hover{border-color:#6366f1;box-shadow:0 4px 30px rgba(99,102,241,.1)}
+
+@keyframes fadeInUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+.gradient-bg{background:linear-gradient(135deg,#0a0a1f,#0f0f2f,#0a0a1f);background-size:200% 200%;animation:gradientShift 8s ease infinite}
+.animate-in{animation:fadeInUp .8s ease both}
+
+/* Engine Cards */
+.engine-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:25px;max-width:1000px;width:100%}
+.engine-card{border-radius:16px;padding:30px;transition:all .5s;position:relative;overflow:hidden;cursor:pointer}
+.engine-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;border-radius:16px 16px 0 0}
+.engine-card.vllm{background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.3)}
+.engine-card.vllm::before{background:#6366f1}
+.engine-card.sglang{background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.3)}
+.engine-card.sglang::before{background:#22d3ee}
+.engine-card.trtllm{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3)}
+.engine-card.trtllm::before{background:#10b981}
+.engine-card:hover{transform:translateY(-5px)}
+.engine-icon{width:50px;height:50px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:800;margin-bottom:15px}
+.engine-name{font-size:1.3rem;font-weight:700;margin-bottom:8px}
+.engine-by{font-size:.75rem;color:#64748b;margin-bottom:15px}
+.engine-strengths{list-style:none;margin-top:10px}
+.engine-strengths li{font-size:.8rem;color:#94a3b8;padding:4px 0;padding-left:20px;position:relative}
+.engine-strengths li::before{content:'';position:absolute;left:0;top:10px;width:8px;height:8px;border-radius:50%}
+.engine-card.vllm .engine-strengths li::before{background:#6366f1}
+.engine-card.sglang .engine-strengths li::before{background:#22d3ee}
+.engine-card.trtllm .engine-strengths li::before{background:#10b981}
+.engine-tag{display:inline-block;padding:3px 10px;border-radius:12px;font-size:.7rem;font-weight:600;margin:2px}
+
+/* Priority toggle */
+.priority-toggle{display:flex;gap:0;border-radius:12px;overflow:hidden;border:1px solid #333;margin-bottom:30px}
+.priority-btn{padding:12px 24px;border:none;background:#1a1a2e;color:#94a3b8;cursor:pointer;font-family:'Inter',sans-serif;font-weight:600;font-size:.85rem;transition:all .3s}
+.priority-btn.active{color:#fff}
+.priority-btn.perf.active{background:#6366f1}
+.priority-btn.ease.active{background:#22d3ee;color:#0a0a0f}
+.priority-btn.model.active{background:#10b981}
+
+/* Decision Tree */
+.decision-tree{max-width:700px;width:100%}
+.dt-node{padding:15px 25px;border-radius:12px;text-align:center;margin:10px auto;max-width:400px;cursor:pointer;transition:all .3s}
+.dt-question{background:rgba(99,102,241,.1);border:2px solid #6366f1;color:#a5b4fc;font-weight:600}
+.dt-question:hover{background:rgba(99,102,241,.2)}
+.dt-answer{font-size:.85rem;border:1px solid #333;background:rgba(20,20,40,.6);color:#94a3b8;display:none}
+.dt-answer.show{display:block;animation:fadeInUp .4s ease}
+.dt-result{background:rgba(16,185,129,.1);border:2px solid #10b981;color:#6ee7b7;font-weight:600;display:none}
+.dt-result.show{display:block;animation:fadeInUp .4s ease}
+.dt-branch{display:flex;gap:15px;justify-content:center;margin:10px 0}
+.dt-branch-btn{padding:8px 20px;border-radius:8px;border:1px solid #444;background:rgba(20,20,40,.6);color:#e2e8f0;cursor:pointer;font-size:.8rem;font-family:'Inter',sans-serif;transition:all .3s}
+.dt-branch-btn:hover{border-color:#6366f1;background:rgba(99,102,241,.1)}
+.dt-branch-btn.selected{border-color:#6366f1;background:rgba(99,102,241,.2);color:#a5b4fc}
+.dt-connector{width:2px;height:20px;background:#333;margin:0 auto}
+
+/* Code comparison */
+.code-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;max-width:1000px;width:100%}
+.code-card{border-radius:12px;overflow:hidden}
+.code-header{padding:10px 15px;font-weight:600;font-size:.85rem}
+.code-block{background:#111;padding:15px;font-family:monospace;font-size:.72rem;line-height:1.5;overflow-x:auto;border:1px solid #222;min-height:180px}
+.code-comment{color:#6b7280}
+.code-keyword{color:#6366f1}
+.code-string{color:#10b981}
+.code-func{color:#22d3ee}
+
+/* Performance chart */
+.perf-chart{display:flex;gap:25px;align-items:flex-end;height:280px;margin-top:20px}
+.perf-bar-group{display:flex;flex-direction:column;align-items:center;gap:8px}
+.perf-bars{display:flex;gap:6px;align-items:flex-end}
+.perf-bar{width:30px;border-radius:5px 5px 0 0;transition:height 1.5s cubic-bezier(.4,0,.2,1)}
+.perf-bar-label{font-size:.7rem;color:#94a3b8;text-align:center}
+.perf-legend{display:flex;gap:20px;margin-top:20px}
+.perf-legend-item{display:flex;align-items:center;gap:6px;font-size:.75rem;color:#94a3b8}
+.perf-legend-dot{width:12px;height:12px;border-radius:3px}
+
+/* Timeline */
+.timeline{position:relative;max-width:800px;width:100%;padding:30px 0}
+.timeline-line{position:absolute;top:50%;left:0;right:0;height:3px;background:#222;transform:translateY(-50%)}
+.timeline-item{position:absolute;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center}
+.timeline-dot{width:16px;height:16px;border-radius:50%;border:3px solid;z-index:2;cursor:pointer;transition:all .3s}
+.timeline-dot:hover{transform:scale(1.3)}
+.timeline-label{position:absolute;font-size:.7rem;font-weight:600;white-space:nowrap}
+.timeline-date{position:absolute;font-size:.6rem;color:#64748b;white-space:nowrap}
+
+.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;max-width:900px}
+
+@media(max-width:768px){
+  .engine-grid,.code-grid{grid-template-columns:1fr}
+  section{padding:60px 20px}
+}
+</style>
+</head>
+<body>
+<div class="progress-bar" id="progressBar"></div>
+<nav class="nav-dots" id="navDots"></nav>
+
+<!-- Section 1: Hero -->
+<section class="hero-section" id="sec0">
+<div class="hero-badge">Chapter 13 -- Serving Infrastructure</div>
+<h1 class="hero-title">Inference Engines</h1>
+<p class="hero-subtitle">vLLM vs SGLang vs TensorRT-LLM -- choosing the right engine for your LLM serving needs.</p>
+<div style="display:flex;gap:20px;margin-top:10px;flex-wrap:wrap;justify-content:center">
+<div class="card" style="text-align:center;padding:20px 25px;border-color:rgba(99,102,241,.3)">
+<div style="font-size:1.5rem;font-weight:800;color:#6366f1">vLLM</div>
+<div style="font-size:.75rem;color:#94a3b8">Most Popular</div>
+</div>
+<div class="card" style="text-align:center;padding:20px 25px;border-color:rgba(34,211,238,.3)">
+<div style="font-size:1.5rem;font-weight:800;color:#22d3ee">SGLang</div>
+<div style="font-size:.75rem;color:#94a3b8">Fastest Growing</div>
+</div>
+<div class="card" style="text-align:center;padding:20px 25px;border-color:rgba(16,185,129,.3)">
+<div style="font-size:1.5rem;font-weight:800;color:#10b981">TRT-LLM</div>
+<div style="font-size:.75rem;color:#94a3b8">Peak Performance</div>
+</div>
+</div>
+</section>
+
+<!-- Section 2: Engine Cards -->
+<section class="gradient-bg" id="sec1">
+<h2 class="section-title">Engine <span class="highlight">Comparison</span></h2>
+<p class="section-desc">Three leading engines, each with different strengths. Hover over cards for details.</p>
+<div class="engine-grid">
+<div class="engine-card vllm animate-in">
+<div class="engine-icon" style="background:rgba(99,102,241,.2);color:#6366f1">vL</div>
+<div class="engine-name" style="color:#6366f1">vLLM</div>
+<div class="engine-by">UC Berkeley / vLLM Team</div>
+<div style="margin:10px 0">
+<span class="engine-tag" style="background:rgba(99,102,241,.2);color:#a5b4fc">PagedAttention</span>
+<span class="engine-tag" style="background:rgba(99,102,241,.2);color:#a5b4fc">Python</span>
+</div>
+<ul class="engine-strengths">
+<li>Pioneered PagedAttention for KV cache</li>
+<li>Largest community & ecosystem</li>
+<li>Broadest model support</li>
+<li>Easy setup -- pip install & go</li>
+<li>OpenAI-compatible API</li>
+</ul>
+<div style="margin-top:15px">
+<span class="engine-tag" style="background:rgba(99,102,241,.1);color:#64748b">NVIDIA GPUs</span>
+<span class="engine-tag" style="background:rgba(99,102,241,.1);color:#64748b">AMD GPUs</span>
+<span class="engine-tag" style="background:rgba(99,102,241,.1);color:#64748b">TPUs</span>
+</div>
+</div>
+<div class="engine-card sglang animate-in" style="animation-delay:.2s">
+<div class="engine-icon" style="background:rgba(34,211,238,.2);color:#22d3ee">SG</div>
+<div class="engine-name" style="color:#22d3ee">SGLang</div>
+<div class="engine-by">UC Berkeley / LMSYS</div>
+<div style="margin:10px 0">
+<span class="engine-tag" style="background:rgba(34,211,238,.2);color:#67e8f9">RadixAttention</span>
+<span class="engine-tag" style="background:rgba(34,211,238,.2);color:#67e8f9">Rust+Python</span>
+</div>
+<ul class="engine-strengths">
+<li>RadixAttention for prefix caching</li>
+<li>Fastest throughput in benchmarks</li>
+<li>Constrained decoding built-in</li>
+<li>Multi-modal support</li>
+<li>Excellent structured output</li>
+</ul>
+<div style="margin-top:15px">
+<span class="engine-tag" style="background:rgba(34,211,238,.1);color:#64748b">NVIDIA GPUs</span>
+<span class="engine-tag" style="background:rgba(34,211,238,.1);color:#64748b">AMD GPUs</span>
+</div>
+</div>
+<div class="engine-card trtllm animate-in" style="animation-delay:.4s">
+<div class="engine-icon" style="background:rgba(16,185,129,.2);color:#10b981">TR</div>
+<div class="engine-name" style="color:#10b981">TensorRT-LLM</div>
+<div class="engine-by">NVIDIA</div>
+<div style="margin:10px 0">
+<span class="engine-tag" style="background:rgba(16,185,129,.2);color:#6ee7b7">FP8/INT4</span>
+<span class="engine-tag" style="background:rgba(16,185,129,.2);color:#6ee7b7">C++</span>
+</div>
+<ul class="engine-strengths">
+<li>Maximum NVIDIA GPU utilization</li>
+<li>Best quantization support (FP8)</li>
+<li>In-flight batching</li>
+<li>Tight CUDA kernel optimization</li>
+<li>Best for production at scale</li>
+</ul>
+<div style="margin-top:15px">
+<span class="engine-tag" style="background:rgba(16,185,129,.1);color:#64748b">NVIDIA Only</span>
+</div>
+</div>
+</div>
+</section>
+
+<!-- Section 3: Priority Toggle -->
+<section id="sec2">
+<h2 class="section-title">What's Your <span class="highlight-amber">Priority?</span></h2>
+<p class="section-desc">Select your top priority and see which engine ranks best.</p>
+<div class="priority-toggle">
+<button class="priority-btn perf active" onclick="setPriority('perf')">Performance</button>
+<button class="priority-btn ease" onclick="setPriority('ease')">Ease of Use</button>
+<button class="priority-btn model" onclick="setPriority('model')">Model Support</button>
+</div>
+<div id="rankingCards" style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;transition:all .5s">
+<!-- Populated by JS -->
+</div>
+</section>
+
+<!-- Section 4: Decision Tree -->
+<section class="gradient-bg" id="sec3">
+<h2 class="section-title">Decision <span class="highlight">Flowchart</span></h2>
+<p class="section-desc">Answer a few questions to find the right engine for your use case.</p>
+<div class="decision-tree" id="decisionTree">
+<div class="dt-node dt-question" onclick="showBranch('q1')">What GPU hardware are you using?</div>
+<div class="dt-branch" id="q1" style="display:none">
+<button class="dt-branch-btn" onclick="dtAnswer('nvidia')">NVIDIA</button>
+<button class="dt-branch-btn" onclick="dtAnswer('amd')">AMD</button>
+<button class="dt-branch-btn" onclick="dtAnswer('tpu')">TPU</button>
+</div>
+<div class="dt-connector" id="conn1" style="display:none"></div>
+<div class="dt-node dt-answer" id="a_amd">AMD detected -- <strong style="color:#22d3ee">SGLang</strong> or <strong style="color:#6366f1">vLLM</strong> (TRT-LLM is NVIDIA-only)</div>
+<div class="dt-node dt-answer" id="a_tpu">TPU detected -- <strong style="color:#6366f1">vLLM</strong> (only engine with TPU support)</div>
+<div class="dt-node dt-question" id="q2_q" style="display:none" onclick="showBranch('q2')">Do you need maximum performance or easy setup?</div>
+<div class="dt-branch" id="q2" style="display:none">
+<button class="dt-branch-btn" onclick="dtAnswer2('maxperf')">Max Performance</button>
+<button class="dt-branch-btn" onclick="dtAnswer2('easysetup')">Easy Setup</button>
+<button class="dt-branch-btn" onclick="dtAnswer2('structured')">Structured Output</button>
+</div>
+<div class="dt-node dt-result" id="r_maxperf">Use <strong style="color:#10b981">TensorRT-LLM</strong> for peak NVIDIA performance, or <strong style="color:#22d3ee">SGLang</strong> for competitive speed with easier setup.</div>
+<div class="dt-node dt-result" id="r_easysetup">Use <strong style="color:#6366f1">vLLM</strong> -- pip install, one-line launch, huge community support.</div>
+<div class="dt-node dt-result" id="r_structured">Use <strong style="color:#22d3ee">SGLang</strong> -- best built-in constrained decoding and RadixAttention for prefix caching.</div>
+</div>
+<button onclick="resetTree()" style="margin-top:20px;padding:8px 20px;border:none;border-radius:8px;background:#333;color:#e2e8f0;cursor:pointer;font-size:.8rem;font-family:'Inter',sans-serif">Reset Decision Tree</button>
+</section>
+
+<!-- Section 5: Code Comparison -->
+<section id="sec4">
+<h2 class="section-title">Code <span class="highlight-green">Comparison</span></h2>
+<p class="section-desc">Same model, three engines. See the API differences.</p>
+<div class="code-grid">
+<div class="code-card">
+<div class="code-header" style="background:rgba(99,102,241,.15);color:#a5b4fc">vLLM</div>
+<div class="code-block">
+<span class="code-comment"># Install: pip install vllm</span><br><br>
+<span class="code-keyword">from</span> vllm <span class="code-keyword">import</span> LLM<br><br>
+llm = <span class="code-func">LLM</span>(<br>
+&nbsp;&nbsp;model=<span class="code-string">"meta-llama/Llama-3.1-70B"</span>,<br>
+&nbsp;&nbsp;tensor_parallel_size=<span class="code-string">4</span>,<br>
+&nbsp;&nbsp;dtype=<span class="code-string">"auto"</span><br>
+)<br><br>
+output = llm.<span class="code-func">generate</span>(<br>
+&nbsp;&nbsp;<span class="code-string">"What is ML?"</span><br>
+)
+</div>
+</div>
+<div class="code-card">
+<div class="code-header" style="background:rgba(34,211,238,.15);color:#67e8f9">SGLang</div>
+<div class="code-block">
+<span class="code-comment"># Install: pip install sglang</span><br><br>
+<span class="code-keyword">import</span> sglang <span class="code-keyword">as</span> sgl<br><br>
+llm = sgl.<span class="code-func">Engine</span>(<br>
+&nbsp;&nbsp;model_path=<span class="code-string">"meta-llama/Llama-3.1-70B"</span>,<br>
+&nbsp;&nbsp;tp_size=<span class="code-string">4</span>,<br>
+)<br><br>
+output = llm.<span class="code-func">generate</span>(<br>
+&nbsp;&nbsp;<span class="code-string">"What is ML?"</span><br>
+)
+</div>
+</div>
+<div class="code-card">
+<div class="code-header" style="background:rgba(16,185,129,.15);color:#6ee7b7">TensorRT-LLM</div>
+<div class="code-block">
+<span class="code-comment"># Build engine first (compile)</span><br><br>
+<span class="code-keyword">import</span> tensorrt_llm<br><br>
+llm = tensorrt_llm.<span class="code-func">LLM</span>(<br>
+&nbsp;&nbsp;model=<span class="code-string">"meta-llama/Llama-3.1-70B"</span>,<br>
+&nbsp;&nbsp;tensor_parallelism=<span class="code-string">4</span>,<br>
+&nbsp;&nbsp;dtype=<span class="code-string">"float16"</span><br>
+)<br><br>
+output = llm.<span class="code-func">generate</span>(<br>
+&nbsp;&nbsp;<span class="code-string">"What is ML?"</span><br>
+)
+</div>
+</div>
+</div>
+</section>
+
+<!-- Section 6: Performance -->
+<section class="gradient-bg" id="sec5">
+<h2 class="section-title">Performance <span class="highlight">Benchmarks</span></h2>
+<p class="section-desc">Relative throughput comparison on Llama 3.1 70B (4x H100, higher is better).</p>
+<div class="perf-chart" id="perfChart">
+<div class="perf-bar-group">
+<div class="perf-bars">
+<div class="perf-bar" id="pb0" style="height:0;background:#6366f1;width:35px"></div>
+<div class="perf-bar" id="pb1" style="height:0;background:#22d3ee;width:35px"></div>
+<div class="perf-bar" id="pb2" style="height:0;background:#10b981;width:35px"></div>
+</div>
+<div class="perf-bar-label">Throughput<br>(tok/s)</div>
+</div>
+<div class="perf-bar-group">
+<div class="perf-bars">
+<div class="perf-bar" id="pb3" style="height:0;background:#6366f1;width:35px"></div>
+<div class="perf-bar" id="pb4" style="height:0;background:#22d3ee;width:35px"></div>
+<div class="perf-bar" id="pb5" style="height:0;background:#10b981;width:35px"></div>
+</div>
+<div class="perf-bar-label">TTFT<br>(lower=better)</div>
+</div>
+<div class="perf-bar-group">
+<div class="perf-bars">
+<div class="perf-bar" id="pb6" style="height:0;background:#6366f1;width:35px"></div>
+<div class="perf-bar" id="pb7" style="height:0;background:#22d3ee;width:35px"></div>
+<div class="perf-bar" id="pb8" style="height:0;background:#10b981;width:35px"></div>
+</div>
+<div class="perf-bar-label">Prefix Cache<br>Speedup</div>
+</div>
+</div>
+<div class="perf-legend">
+<div class="perf-legend-item"><div class="perf-legend-dot" style="background:#6366f1"></div>vLLM</div>
+<div class="perf-legend-item"><div class="perf-legend-dot" style="background:#22d3ee"></div>SGLang</div>
+<div class="perf-legend-item"><div class="perf-legend-dot" style="background:#10b981"></div>TensorRT-LLM</div>
+</div>
+</section>
+
+<!-- Section 7: Timeline -->
+<section id="sec6">
+<h2 class="section-title">Release <span class="highlight-amber">Timeline</span></h2>
+<p class="section-desc">The evolution of inference engines.</p>
+<div class="timeline" style="height:200px">
+<div class="timeline-line"></div>
+<div class="timeline-item" style="left:5%">
+<div class="timeline-dot" style="background:#10b981;border-color:#10b981"></div>
+<div class="timeline-label" style="top:-35px;color:#10b981">TRT-LLM</div>
+<div class="timeline-date" style="top:25px">Oct 2023</div>
+</div>
+<div class="timeline-item" style="left:20%">
+<div class="timeline-dot" style="background:#6366f1;border-color:#6366f1"></div>
+<div class="timeline-label" style="top:-35px;color:#6366f1">vLLM 0.1</div>
+<div class="timeline-date" style="top:25px">Jun 2023</div>
+</div>
+<div class="timeline-item" style="left:40%">
+<div class="timeline-dot" style="background:#22d3ee;border-color:#22d3ee"></div>
+<div class="timeline-label" style="top:-35px;color:#22d3ee">SGLang 0.1</div>
+<div class="timeline-date" style="top:25px">Jan 2024</div>
+</div>
+<div class="timeline-item" style="left:55%">
+<div class="timeline-dot" style="background:#6366f1;border-color:#6366f1"></div>
+<div class="timeline-label" style="top:-55px;color:#6366f1">vLLM V1<br><span style="font-size:.6rem;color:#94a3b8">Major rewrite</span></div>
+<div class="timeline-date" style="top:25px">Jan 2025</div>
+</div>
+<div class="timeline-item" style="left:72%">
+<div class="timeline-dot" style="background:#22d3ee;border-color:#22d3ee"></div>
+<div class="timeline-label" style="top:-55px;color:#22d3ee">SGLang 0.4<br><span style="font-size:.6rem;color:#94a3b8">DeepSeek era</span></div>
+<div class="timeline-date" style="top:25px">Feb 2025</div>
+</div>
+<div class="timeline-item" style="left:90%">
+<div class="timeline-dot" style="background:#f59e0b;border-color:#f59e0b"></div>
+<div class="timeline-label" style="top:-35px;color:#f59e0b">Converging</div>
+<div class="timeline-date" style="top:25px">2025+</div>
+</div>
+</div>
+<div class="card" style="max-width:600px;margin-top:30px;text-align:center">
+<p style="font-size:.85rem;color:#94a3b8">The engines are <span class="highlight">converging</span> in features. vLLM adopted disaggregated serving, SGLang leads in throughput, and TRT-LLM continues to optimize NVIDIA hardware. Choose based on your specific constraints.</p>
+</div>
+</section>
+
+<!-- Section 8: Takeaways -->
+<section class="gradient-bg" id="sec7">
+<h2 class="section-title">Key <span class="highlight-amber">Takeaways</span></h2>
+<div class="info-grid" style="margin-top:20px">
+<div class="card animate-in">
+<h4 style="color:#6366f1;margin-bottom:8px">vLLM: The Safe Choice</h4>
+<p style="font-size:.82rem;color:#94a3b8">Broadest model support, largest community, easiest setup. Start here if you are unsure.</p>
+</div>
+<div class="card animate-in" style="animation-delay:.2s">
+<h4 style="color:#22d3ee;margin-bottom:8px">SGLang: The Speed Demon</h4>
+<p style="font-size:.82rem;color:#94a3b8">Best throughput benchmarks, RadixAttention for prefix caching, excellent structured output support.</p>
+</div>
+<div class="card animate-in" style="animation-delay:.4s">
+<h4 style="color:#10b981;margin-bottom:8px">TensorRT-LLM: Peak NVIDIA</h4>
+<p style="font-size:.82rem;color:#94a3b8">Maximum performance on NVIDIA hardware. Best quantization. More complex setup -- worth it at scale.</p>
+</div>
+<div class="card animate-in" style="animation-delay:.6s">
+<h4 style="color:#f59e0b;margin-bottom:8px">They're Converging</h4>
+<p style="font-size:.82rem;color:#94a3b8">All three engines are adopting each other's best ideas. The performance gap is narrowing. Your choice increasingly comes down to ecosystem fit.</p>
+</div>
+</div>
+</section>
+
+<script>
+// Navigation
+const sections = document.querySelectorAll('section');
+const navDots = document.getElementById('navDots');
+sections.forEach((s,i) => {
+  const dot = document.createElement('div');
+  dot.className = 'nav-dot';
+  dot.onclick = () => s.scrollIntoView({behavior:'smooth'});
+  navDots.appendChild(dot);
+});
+
+window.addEventListener('scroll', () => {
+  const scrollPct = window.scrollY / (document.body.scrollHeight - window.innerHeight);
+  document.getElementById('progressBar').style.width = (scrollPct*100)+'%';
+  const dots = document.querySelectorAll('.nav-dot');
+  sections.forEach((s,i) => {
+    const rect = s.getBoundingClientRect();
+    if(rect.top < window.innerHeight/2 && rect.bottom > window.innerHeight/2) {
+      dots.forEach(d => d.classList.remove('active'));
+      dots[i].classList.add('active');
+    }
+  });
+});
+
+// Priority toggle
+const rankings = {
+  perf: [{name:'SGLang',color:'#22d3ee',rank:1,note:'Highest throughput in benchmarks'},{name:'TensorRT-LLM',color:'#10b981',rank:2,note:'Best NVIDIA kernel optimization'},{name:'vLLM',color:'#6366f1',rank:3,note:'Competitive after V1 rewrite'}],
+  ease: [{name:'vLLM',color:'#6366f1',rank:1,note:'pip install, one command launch'},{name:'SGLang',color:'#22d3ee',rank:2,note:'Simple API, good docs'},{name:'TensorRT-LLM',color:'#10b981',rank:3,note:'Requires engine compilation step'}],
+  model: [{name:'vLLM',color:'#6366f1',rank:1,note:'Broadest model support, all architectures'},{name:'SGLang',color:'#22d3ee',rank:2,note:'Most popular models supported'},{name:'TensorRT-LLM',color:'#10b981',rank:3,note:'NVIDIA models + popular open source'}]
+};
+
+function setPriority(p) {
+  document.querySelectorAll('.priority-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.priority-btn.'+p).classList.add('active');
+
+  const cards = rankings[p];
+  const container = document.getElementById('rankingCards');
+  container.innerHTML = cards.map((c,i) => `
+    <div class="card animate-in" style="text-align:center;padding:25px 35px;border-color:${c.color}30;animation-delay:${i*.15}s;min-width:200px">
+      <div style="font-size:2rem;font-weight:800;color:${c.color}">#${c.rank}</div>
+      <div style="font-size:1.1rem;font-weight:700;color:${c.color};margin:5px 0">${c.name}</div>
+      <div style="font-size:.75rem;color:#94a3b8">${c.note}</div>
+    </div>
+  `).join('');
+}
+setPriority('perf');
+
+// Decision tree
+function showBranch(id) {
+  document.getElementById(id).style.display = 'flex';
+}
+function dtAnswer(hw) {
+  document.querySelectorAll('#q1 .dt-branch-btn').forEach(b => {b.classList.remove('selected');});
+  event.target.classList.add('selected');
+  document.getElementById('a_amd').classList.remove('show');
+  document.getElementById('a_tpu').classList.remove('show');
+  document.getElementById('q2_q').style.display = 'none';
+  document.getElementById('q2').style.display = 'none';
+  document.querySelectorAll('.dt-result').forEach(r => r.classList.remove('show'));
+
+  if(hw==='amd'){document.getElementById('a_amd').classList.add('show');document.getElementById('a_amd').style.display='block';}
+  else if(hw==='tpu'){document.getElementById('a_tpu').classList.add('show');document.getElementById('a_tpu').style.display='block';}
+  else{document.getElementById('q2_q').style.display='block';document.getElementById('conn1').style.display='block';}
+}
+function dtAnswer2(choice) {
+  document.querySelectorAll('#q2 .dt-branch-btn').forEach(b => b.classList.remove('selected'));
+  event.target.classList.add('selected');
+  showBranch('q2');
+  document.querySelectorAll('.dt-result').forEach(r => {r.classList.remove('show');r.style.display='none';});
+  const el = document.getElementById('r_'+choice);
+  el.style.display = 'block';
+  el.classList.add('show');
+}
+function resetTree() {
+  document.querySelectorAll('.dt-branch').forEach(b => b.style.display='none');
+  document.querySelectorAll('.dt-answer,.dt-result').forEach(a => {a.classList.remove('show');a.style.display='none';});
+  document.querySelectorAll('.dt-branch-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('q2_q').style.display='none';
+  document.getElementById('conn1').style.display='none';
+}
+
+// Performance bars
+let perfAnimated = false;
+const perfHeights = [180,220,200, 120,100,90, 140,220,160];
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if(e.isIntersecting && e.target.id === 'sec5' && !perfAnimated) {
+      perfAnimated = true;
+      perfHeights.forEach((h,i) => {
+        setTimeout(() => document.getElementById('pb'+i).style.height = h+'px', i*100);
+      });
+    }
+  });
+},{threshold:.3});
+sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
