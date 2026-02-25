@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fine-Tuning vs Distillation - Inference Engineering</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0a;--bg-card:#121212;--bg-card-hover:#1a1a1a;--border:#262626;--primary:#00d46a;--secondary:#00c8e6;--tertiary:#a855f7;--success:#10b981;--text:#f2f2f2;--text-muted:#a3a3a3;--text-dim:#737373;--danger:#ef4444}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
+h1,h2{font-family:'Instrument Serif',serif;font-style:italic}
+code,.mono{font-family:'JetBrains Mono',monospace}
+.gradient-text{background:linear-gradient(135deg,#00d46a,#00c8e6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+nav{position:fixed;top:0;left:0;right:0;z-index:1000;background:rgba(10,10,10,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0.75rem 2rem;display:flex;align-items:center;justify-content:space-between}
+nav .logo{font-family:'Instrument Serif',serif;font-style:italic;font-size:1.25rem}
+nav .badge{border:1px solid rgba(0,212,106,0.3);background:rgba(0,212,106,0.1);color:var(--primary);padding:0.25rem 0.75rem;border-radius:9999px;font-size:0.75rem;font-weight:500}
+.progress-bar{position:fixed;top:0;left:0;height:3px;z-index:1001;background:linear-gradient(90deg,var(--primary),var(--secondary));transition:width 0.3s ease}
+.dot-nav{position:fixed;right:2rem;top:50%;transform:translateY(-50%);z-index:999;display:flex;flex-direction:column;gap:12px}
+.dot-nav .dot{width:10px;height:10px;border-radius:50%;background:var(--border);cursor:pointer;transition:all 0.3s;border:2px solid transparent}
+.dot-nav .dot.active{background:var(--primary);border-color:var(--primary);box-shadow:0 0 10px rgba(0,212,106,0.5)}
+section{min-height:100vh;padding:6rem 2rem 4rem;position:relative;display:flex;align-items:center;justify-content:center}
+.section-inner{max-width:1200px;width:100%;margin:0 auto}
+.grid-bg{position:absolute;inset:0;z-index:0;background-image:linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px);background-size:60px 60px}
+.glow-green{position:absolute;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(0,212,106,0.1),transparent 70%);pointer-events:none}
+.glow-cyan{position:absolute;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(0,200,230,0.08),transparent 70%);pointer-events:none}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;transition:all 0.3s}
+.card:hover{background:var(--bg-card-hover);border-color:rgba(0,212,106,0.3)}
+.fade-in{opacity:0;transform:translateY(30px);transition:all 0.8s cubic-bezier(0.16,1,0.3,1)}
+.fade-in.visible{opacity:1;transform:translateY(0)}
+.btn{padding:0.6rem 1.5rem;border:1px solid var(--primary);background:rgba(0,212,106,0.1);color:var(--primary);border-radius:8px;cursor:pointer;font-family:'Inter',sans-serif;font-weight:500;transition:all 0.3s;font-size:0.85rem}
+.btn:hover{background:rgba(0,212,106,0.2)}
+.btn.active{background:var(--primary);color:var(--bg)}
+.btn.secondary{border-color:var(--secondary);background:rgba(0,200,230,0.1);color:var(--secondary)}
+.btn.tertiary{border-color:var(--tertiary);background:rgba(168,85,247,0.1);color:var(--tertiary)}
+.btn.danger{border-color:var(--danger);background:rgba(239,68,68,0.1);color:var(--danger)}
+.controls{display:flex;gap:0.75rem;flex-wrap:wrap;margin:1.5rem 0}
+.section-title{font-size:3rem;margin-bottom:1rem;line-height:1.2}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:start}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin:1.5rem 0}
+.stat-card{background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:1rem;text-align:center}
+.stat-card .stat-value{font-size:1.4rem;font-weight:700;font-family:'JetBrains Mono',monospace}
+.stat-card .stat-label{font-size:0.7rem;color:var(--text-muted);margin-top:0.25rem}
+
+/* Process flow */
+.process-flow{display:flex;flex-direction:column;gap:0.5rem;padding:1rem 0}
+.flow-step{display:flex;align-items:center;gap:1rem;padding:0.75rem 1rem;border-radius:8px;border:1px solid var(--border);transition:all 0.5s}
+.flow-step.active{border-color:var(--primary);background:rgba(0,212,106,0.08);box-shadow:0 0 15px rgba(0,212,106,0.15)}
+.flow-step .step-num{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;flex-shrink:0}
+.flow-step .step-content{flex:1}
+.flow-step .step-title{font-weight:600;font-size:0.85rem;margin-bottom:0.15rem}
+.flow-step .step-desc{font-size:0.75rem;color:var(--text-dim)}
+
+/* Comparison slider */
+.comparison-container{position:relative;margin:2rem 0}
+.comparison-canvas{width:100%;height:300px;background:rgba(0,0,0,0.2);border-radius:12px;border:1px solid var(--border)}
+
+/* Model size viz */
+.model-box{display:inline-flex;align-items:center;justify-content:center;border-radius:8px;font-weight:600;font-size:0.85rem;transition:all 0.5s;text-align:center}
+
+/* Training animation */
+.training-viz{position:relative;height:250px;background:rgba(0,0,0,0.2);border-radius:12px;border:1px solid var(--border);overflow:hidden}
+
+/* Slider */
+.range-slider{-webkit-appearance:none;width:100%;height:8px;background:linear-gradient(90deg,var(--primary),var(--tertiary));border-radius:4px;outline:none;cursor:pointer;margin:1rem 0}
+.range-slider::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:white;cursor:pointer;box-shadow:0 0 10px rgba(0,212,106,0.5)}
+
+/* Bars */
+.metric-bar-h{display:flex;align-items:center;gap:0.75rem;margin:0.5rem 0}
+.metric-label-h{width:120px;font-size:0.8rem;color:var(--text-muted);text-align:right}
+.metric-track-h{flex:1;height:24px;background:var(--border);border-radius:4px;overflow:hidden;position:relative}
+.metric-fill-h{height:100%;border-radius:4px;transition:width 0.8s ease;display:flex;align-items:center;padding:0 0.75rem;font-size:0.7rem;font-family:'JetBrains Mono',monospace;white-space:nowrap}
+
+/* Soft labels viz */
+.softlabel-row{display:flex;align-items:center;gap:2px;margin:0.25rem 0}
+.softlabel-token{font-size:0.7rem;font-family:'JetBrains Mono',monospace;padding:0.2rem 0.4rem;border-radius:3px;transition:all 0.3s}
+
+/* Side-by-side process */
+.side-label{font-size:1rem;font-weight:700;text-align:center;padding:0.5rem;border-radius:8px;margin-bottom:1rem}
+
+@media(max-width:768px){nav{padding:0.75rem 1rem}section{padding:5rem 1rem 3rem}.dot-nav{right:1rem}h1{font-size:2rem !important}.two-col{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+<nav>
+  <div class="logo"><span class="gradient-text">VizuaraAI</span></div>
+  <div style="display:flex;align-items:center;gap:1rem;">
+    <span class="badge">Lesson 30</span>
+    <span style="color:var(--text-muted);font-size:0.85rem;">Fine-Tuning vs Distillation</span>
+  </div>
+</nav>
+<div class="dot-nav" id="dotNav"></div>
+
+<!-- Section 0: Hero -->
+<section id="sec0">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:-100px;left:-100px;"></div>
+  <div class="glow-cyan" style="bottom:-100px;right:-100px;"></div>
+  <div class="section-inner" style="text-align:center;">
+    <div class="fade-in">
+      <div class="badge" style="display:inline-block;margin-bottom:1.5rem;">Model Optimization</div>
+      <h1 class="section-title"><span class="gradient-text">Fine-Tuning</span> vs <span class="gradient-text">Distillation</span></h1>
+      <p style="font-size:1.1rem;color:var(--text-muted);max-width:650px;margin:1rem auto;line-height:1.6;">
+        Two fundamental approaches to creating specialized models from general-purpose LLMs.
+        Fine-tuning adapts the original model's weights; distillation transfers knowledge
+        to a smaller, faster model. Both have distinct tradeoffs in quality, cost, and latency.
+      </p>
+      <div class="stats-grid" style="max-width:800px;margin:2rem auto;">
+        <div class="stat-card"><div class="stat-value" style="color:var(--primary);">Fine-Tune</div><div class="stat-label">Same size, better quality</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--secondary);">Distill</div><div class="stat-label">Smaller size, cheaper inference</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--tertiary);">10-100x</div><div class="stat-label">Cost reduction possible</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--danger);">5-15%</div><div class="stat-label">Typical quality gap</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 1: Side by Side -->
+<section id="sec1">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:20%;right:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Side-by-Side</span> Comparison</h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">Watch both processes in parallel. Click "Animate" to see the training flow.</p>
+
+      <div class="two-col">
+        <div>
+          <div class="side-label" style="background:rgba(0,212,106,0.1);border:1px solid rgba(0,212,106,0.3);color:var(--primary);">Fine-Tuning</div>
+          <div class="card">
+            <div class="process-flow" id="ftFlow">
+              <div class="flow-step" data-step="0">
+                <div class="step-num" style="background:rgba(0,212,106,0.2);color:var(--primary);">1</div>
+                <div class="step-content">
+                  <div class="step-title" style="color:var(--primary);">Labeled Dataset</div>
+                  <div class="step-desc">Curate task-specific input-output pairs</div>
+                </div>
+              </div>
+              <div class="flow-step" data-step="1">
+                <div class="step-num" style="background:rgba(0,212,106,0.2);color:var(--primary);">2</div>
+                <div class="step-content">
+                  <div class="step-title" style="color:var(--primary);">Load Base Model</div>
+                  <div class="step-desc">Start from pre-trained weights (e.g., LLaMA 70B)</div>
+                </div>
+              </div>
+              <div class="flow-step" data-step="2">
+                <div class="step-num" style="background:rgba(0,212,106,0.2);color:var(--primary);">3</div>
+                <div class="step-content">
+                  <div class="step-title" style="color:var(--primary);">Compute Loss</div>
+                  <div class="step-desc">Cross-entropy on ground truth labels</div>
+                </div>
+              </div>
+              <div class="flow-step" data-step="3">
+                <div class="step-num" style="background:rgba(0,212,106,0.2);color:var(--primary);">4</div>
+                <div class="step-content">
+                  <div class="step-title" style="color:var(--primary);">Gradient Updates</div>
+                  <div class="step-desc">Update model weights via backpropagation</div>
+                </div>
+              </div>
+              <div class="flow-step" data-step="4">
+                <div class="step-num" style="background:rgba(0,212,106,0.2);color:var(--primary);">5</div>
+                <div class="step-content">
+                  <div class="step-title" style="color:var(--primary);">Specialized Model</div>
+                  <div class="step-desc">Same size model, better at specific task</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="side-label" style="background:rgba(0,200,230,0.1);border:1px solid rgba(0,200,230,0.3);color:var(--secondary);">Distillation</div>
+          <div class="card">
+            <div class="process-flow" id="distFlow">
+              <div class="flow-step" data-step="0">
+                <div class="step-num" style="background:rgba(0,200,230,0.2);color:var(--secondary);">1</div>
+                <div class="step-content">
+                  <div class="step-title" style="color:var(--secondary);">Teacher Model</div>
+                  <div class="step-desc">Large, capable model (e.g., GPT-4, Claude)</div>
+                </div>
+              </div>
+              <div class="flow-step" data-step="1">
+                <div class="step-num" style="background:rgba(0,200,230,0.2);color:var(--secondary);">2</div>
+                <div class="step-content">
+                  <div class="step-title" style="color:var(--secondary);">Generate Soft Labels</div>
+                  <div class="step-desc">Teacher produces probability distributions over tokens</div>
+                </div>
+              </div>
+              <div class="flow-step" data-step="2">
+                <div class="step-num" style="background:rgba(0,200,230,0.2);color:var(--secondary);">3</div>
+                <div class="step-content">
+                  <div class="step-title" style="color:var(--secondary);">Student Model</div>
+                  <div class="step-desc">Smaller model (e.g., LLaMA 8B) learns from teacher</div>
+                </div>
+              </div>
+              <div class="flow-step" data-step="3">
+                <div class="step-num" style="background:rgba(0,200,230,0.2);color:var(--secondary);">4</div>
+                <div class="step-content">
+                  <div class="step-title" style="color:var(--secondary);">KL Divergence Loss</div>
+                  <div class="step-desc">Minimize distance between student and teacher distributions</div>
+                </div>
+              </div>
+              <div class="flow-step" data-step="4">
+                <div class="step-num" style="background:rgba(0,200,230,0.2);color:var(--secondary);">5</div>
+                <div class="step-content">
+                  <div class="step-title" style="color:var(--secondary);">Compressed Model</div>
+                  <div class="step-desc">Smaller model with teacher-like capabilities</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls" style="justify-content:center;">
+        <button class="btn" onclick="animateProcesses()">Animate Both Processes</button>
+        <button class="btn secondary" onclick="resetProcesses()">Reset</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 2: Fine-Tuning Deep Dive -->
+<section id="sec2">
+  <div class="grid-bg"></div>
+  <div class="glow-cyan" style="top:10%;left:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Fine-Tuning</span> Deep Dive</h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">Adapting a pre-trained model to a specific task or domain by continuing training on specialized data.</p>
+
+      <div class="two-col">
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--primary);">Training Dynamics</h3>
+            <canvas id="ftLossChart" width="500" height="200" style="width:100%;border-radius:8px;background:rgba(0,0,0,0.2);"></canvas>
+            <div style="display:flex;gap:1rem;margin-top:0.5rem;font-size:0.75rem;">
+              <span style="color:var(--primary);">--- Training loss</span>
+              <span style="color:var(--danger);">--- Validation loss</span>
+            </div>
+            <div class="controls">
+              <button class="btn" onclick="animateFTLoss()">Train</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--secondary);">Approaches</h3>
+            <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.8;">
+              <div style="margin-bottom:0.75rem;">
+                <b style="color:var(--primary);">Full Fine-Tuning</b><br>
+                Update all parameters. Best quality but expensive. Requires 4-8x model size in GPU memory (optimizer states). For 70B: ~560GB VRAM.
+              </div>
+              <div style="margin-bottom:0.75rem;">
+                <b style="color:var(--secondary);">LoRA / QLoRA</b><br>
+                Train small adapter matrices (rank 8-64). Freezes original weights. ~1-5% of params trained. 70B model trainable on single A100 with QLoRA.
+              </div>
+              <div>
+                <b style="color:var(--tertiary);">Prompt Tuning</b><br>
+                Only train soft prompt embeddings (10-100 tokens). Original model completely frozen. Cheapest but least flexible.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">Resource Requirements</h3>
+            <div id="ftResources">
+              <div class="metric-bar-h">
+                <div class="metric-label-h">Full FT (70B)</div>
+                <div class="metric-track-h"><div class="metric-fill-h" style="width:95%;background:var(--danger);">8x A100 80GB, ~$5K</div></div>
+              </div>
+              <div class="metric-bar-h">
+                <div class="metric-label-h">LoRA (70B)</div>
+                <div class="metric-track-h"><div class="metric-fill-h" style="width:40%;background:var(--tertiary);">2x A100, ~$500</div></div>
+              </div>
+              <div class="metric-bar-h">
+                <div class="metric-label-h">QLoRA (70B)</div>
+                <div class="metric-track-h"><div class="metric-fill-h" style="width:20%;background:var(--secondary);">1x A100, ~$100</div></div>
+              </div>
+              <div class="metric-bar-h">
+                <div class="metric-label-h">Full FT (8B)</div>
+                <div class="metric-track-h"><div class="metric-fill-h" style="width:25%;background:var(--primary);">1x A100, ~$50</div></div>
+              </div>
+              <div class="metric-bar-h">
+                <div class="metric-label-h">LoRA (8B)</div>
+                <div class="metric-track-h"><div class="metric-fill-h" style="width:10%;background:var(--primary);">1x A10G, ~$10</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--danger);">Common Pitfalls</h3>
+            <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.8;">
+              <div style="margin-bottom:0.5rem;"><span style="color:var(--danger);font-weight:600;">Catastrophic forgetting</span>: Model loses general capabilities when fine-tuned too aggressively. Use low learning rates (1e-5 to 5e-5).</div>
+              <div style="margin-bottom:0.5rem;"><span style="color:var(--danger);font-weight:600;">Overfitting</span>: Small datasets cause memorization. Use 1-3 epochs max, add regularization.</div>
+              <div><span style="color:var(--danger);font-weight:600;">Data quality</span>: Garbage in, garbage out. A few hundred high-quality examples beat thousands of noisy ones.</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">Loss Function</h3>
+            <div style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:1rem;font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:var(--primary);text-align:center;">
+              L = -sum(y_true * log(y_pred))
+            </div>
+            <p style="color:var(--text-dim);font-size:0.8rem;margin-top:0.5rem;">Standard cross-entropy against ground truth (hard) labels.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 3: Distillation Deep Dive -->
+<section id="sec3">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="bottom:10%;right:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Distillation</span> Deep Dive</h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">Transferring knowledge from a large teacher model to a smaller student model through soft probability distributions.</p>
+
+      <div class="two-col">
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--secondary);">Soft Labels vs Hard Labels</h3>
+            <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:1rem;">
+              Hard labels say "the answer is A". Soft labels say "70% A, 20% B, 10% C" -- capturing the teacher's uncertainty and inter-class relationships.
+            </p>
+            <div style="margin-bottom:1rem;">
+              <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:0.5rem;">Hard label (ground truth):</div>
+              <div style="display:flex;gap:3px;" id="hardLabels"></div>
+            </div>
+            <div>
+              <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:0.5rem;">Soft label (teacher output, T=<span id="tempVal">3</span>):</div>
+              <div style="display:flex;gap:3px;" id="softLabels"></div>
+            </div>
+            <div style="margin-top:1rem;">
+              <label style="font-size:0.8rem;color:var(--text-muted);">Temperature: </label>
+              <input type="range" class="range-slider" min="1" max="10" value="3" step="0.5" id="tempSlider" oninput="updateTemp(this.value)" style="width:200px;display:inline-block;vertical-align:middle;">
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--tertiary);">Distillation Loss</h3>
+            <div style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:1rem;font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:var(--secondary);line-height:1.8;text-align:center;">
+              L = a * KL(teacher_soft || student_soft) * T^2<br>
+              &nbsp;&nbsp;&nbsp;+ (1-a) * CE(hard_labels, student_hard)
+            </div>
+            <p style="color:var(--text-muted);font-size:0.85rem;margin-top:0.75rem;line-height:1.7;">
+              The loss combines two signals: <b style="color:var(--secondary)">KL divergence</b> between teacher and student soft distributions (scaled by T^2), and standard <b style="color:var(--primary)">cross-entropy</b> against hard labels. The mixing weight <b style="color:var(--tertiary)">alpha</b> balances both.
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--primary);">Teacher-Student Architecture</h3>
+            <div style="display:flex;flex-direction:column;gap:1rem;align-items:center;padding:1rem 0;">
+              <div style="display:flex;align-items:center;gap:2rem;">
+                <div class="model-box" style="width:120px;height:120px;background:rgba(168,85,247,0.15);border:2px solid var(--tertiary);color:var(--tertiary);">
+                  Teacher<br><span class="mono" style="font-size:0.7rem;">70B params</span>
+                </div>
+                <div style="text-align:center;">
+                  <div style="font-size:0.75rem;color:var(--text-dim);">Soft probabilities</div>
+                  <div style="width:80px;height:2px;background:linear-gradient(90deg,var(--tertiary),var(--primary));margin:0.5rem 0;position:relative;">
+                    <div style="position:absolute;right:-4px;top:-3px;width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:6px solid var(--primary);"></div>
+                  </div>
+                  <div style="font-size:0.75rem;color:var(--text-dim);">Knowledge transfer</div>
+                </div>
+                <div class="model-box" style="width:80px;height:80px;background:rgba(0,212,106,0.15);border:2px solid var(--primary);color:var(--primary);">
+                  Student<br><span class="mono" style="font-size:0.7rem;">8B params</span>
+                </div>
+              </div>
+              <div style="font-size:0.8rem;color:var(--text-dim);text-align:center;">
+                The student learns to mimic the teacher's full output distribution,<br>not just the top-1 answer. This transfers "dark knowledge."
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">Distillation Variants</h3>
+            <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.8;">
+              <div style="margin-bottom:0.5rem;"><b style="color:var(--secondary);">Logit distillation</b>: Match full output distributions. Classic approach. Requires teacher logit access.</div>
+              <div style="margin-bottom:0.5rem;"><b style="color:var(--primary);">Sequence-level</b>: Teacher generates full responses. Student trains on teacher outputs. Works with API-only teachers.</div>
+              <div style="margin-bottom:0.5rem;"><b style="color:var(--tertiary);">Feature distillation</b>: Match intermediate hidden states. Requires architectural compatibility.</div>
+              <div><b style="color:var(--danger);">Self-distillation</b>: Model distills into a smaller version of itself. Iterative compression.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 4: Interactive Comparison -->
+<section id="sec4">
+  <div class="grid-bg"></div>
+  <div class="glow-cyan" style="top:20%;left:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Quality vs Cost</span> Tradeoffs</h2>
+      <p style="color:var(--text-muted);margin-bottom:1.5rem;">Adjust dataset size and see the impact on both approaches.</p>
+
+      <div class="card" style="margin-bottom:1.5rem;">
+        <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:1rem;">Dataset Size Impact</h3>
+        <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;">
+          <span style="font-size:0.85rem;color:var(--text-muted);white-space:nowrap;">Dataset size:</span>
+          <input type="range" class="range-slider" min="100" max="100000" value="5000" step="100" id="datasetSlider" oninput="updateDataset(this.value)" style="flex:1;">
+          <span class="mono" style="font-size:0.9rem;color:var(--primary);min-width:80px;" id="datasetSize">5,000</span>
+        </div>
+
+        <div class="two-col" style="gap:1.5rem;">
+          <div>
+            <div style="text-align:center;margin-bottom:0.75rem;">
+              <span style="font-weight:600;color:var(--primary);">Fine-Tuning (70B)</span>
+            </div>
+            <div class="metric-bar-h">
+              <div class="metric-label-h">Quality</div>
+              <div class="metric-track-h"><div class="metric-fill-h" id="ftQuality" style="width:82%;background:var(--primary);">82%</div></div>
+            </div>
+            <div class="metric-bar-h">
+              <div class="metric-label-h">Training Cost</div>
+              <div class="metric-track-h"><div class="metric-fill-h" id="ftCost" style="width:50%;background:var(--danger);">$500</div></div>
+            </div>
+            <div class="metric-bar-h">
+              <div class="metric-label-h">Inference Cost</div>
+              <div class="metric-track-h"><div class="metric-fill-h" id="ftInfCost" style="width:80%;background:var(--danger);">$2.10/hr</div></div>
+            </div>
+            <div class="metric-bar-h">
+              <div class="metric-label-h">Latency</div>
+              <div class="metric-track-h"><div class="metric-fill-h" id="ftLatency" style="width:75%;background:var(--tertiary);">45ms</div></div>
+            </div>
+          </div>
+
+          <div>
+            <div style="text-align:center;margin-bottom:0.75rem;">
+              <span style="font-weight:600;color:var(--secondary);">Distillation (8B student)</span>
+            </div>
+            <div class="metric-bar-h">
+              <div class="metric-label-h">Quality</div>
+              <div class="metric-track-h"><div class="metric-fill-h" id="distQuality" style="width:70%;background:var(--secondary);">70%</div></div>
+            </div>
+            <div class="metric-bar-h">
+              <div class="metric-label-h">Training Cost</div>
+              <div class="metric-track-h"><div class="metric-fill-h" id="distCost" style="width:65%;background:var(--danger);">$650</div></div>
+            </div>
+            <div class="metric-bar-h">
+              <div class="metric-label-h">Inference Cost</div>
+              <div class="metric-track-h"><div class="metric-fill-h" id="distInfCost" style="width:15%;background:var(--primary);">$0.25/hr</div></div>
+            </div>
+            <div class="metric-bar-h">
+              <div class="metric-label-h">Latency</div>
+              <div class="metric-track-h"><div class="metric-fill-h" id="distLatency" style="width:20%;background:var(--primary);">8ms</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:1rem;">Break-Even Analysis</h3>
+        <canvas id="breakEvenChart" width="600" height="250" style="width:100%;border-radius:8px;background:rgba(0,0,0,0.2);"></canvas>
+        <p id="breakEvenText" style="color:var(--text-muted);font-size:0.85rem;margin-top:1rem;text-align:center;">
+          With 5,000 examples, distillation breaks even with fine-tuning after ~2,400 requests due to lower inference cost.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 5: Decision Framework -->
+<section id="sec5">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:30%;left:50%;transform:translateX(-50%);"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Decision Framework</span></h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">When to choose fine-tuning vs distillation based on your specific constraints.</p>
+
+      <div class="two-col" style="margin-bottom:2rem;">
+        <div class="card" style="border-color:rgba(0,212,106,0.3);">
+          <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.3rem;margin-bottom:1rem;color:var(--primary);">Choose Fine-Tuning When:</h3>
+          <div style="font-size:0.9rem;color:var(--text-muted);line-height:2;">
+            <div>Quality is the top priority</div>
+            <div>You need the model's full capability set</div>
+            <div>Request volume is low-medium (<10K/day)</div>
+            <div>Budget allows for larger model serving</div>
+            <div>Task requires complex reasoning</div>
+            <div>You have limited training data (<1K examples)</div>
+            <div>Rapid iteration cycle needed</div>
+          </div>
+        </div>
+
+        <div class="card" style="border-color:rgba(0,200,230,0.3);">
+          <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.3rem;margin-bottom:1rem;color:var(--secondary);">Choose Distillation When:</h3>
+          <div style="font-size:0.9rem;color:var(--text-muted);line-height:2;">
+            <div>Latency is critical (real-time, edge)</div>
+            <div>Request volume is very high (>100K/day)</div>
+            <div>Inference cost must be minimized</div>
+            <div>Task is well-defined and narrow</div>
+            <div>You can tolerate 5-15% quality drop</div>
+            <div>You have access to a capable teacher</div>
+            <div>You can generate large training sets from teacher</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1.5rem;">
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(0,212,106,0.15);display:flex;align-items:center;justify-content:center;color:var(--primary);font-weight:700;">!</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Hybrid Approach</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            The best results often come from combining both: <b style="color:var(--tertiary)">distill then fine-tune</b>.
+            First distill the teacher into a smaller model, then fine-tune the student on your
+            task-specific labeled data. This gives you the cost benefits of a small model with
+            quality closer to the large one.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(0,200,230,0.15);display:flex;align-items:center;justify-content:center;color:var(--secondary);font-weight:700;">!</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Synthetic Data Pipeline</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Modern distillation often uses synthetic data: prompt the teacher with diverse inputs,
+            collect its responses, then train the student on these. This scales to millions of
+            examples cheaply. Add filtering/verification for quality control.
+            Models like Phi-3 and Mistral used this approach extensively.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(168,85,247,0.15);display:flex;align-items:center;justify-content:center;color:var(--tertiary);font-weight:700;">!</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Progressive Distillation</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Don't jump from 70B to 8B directly. Distill in stages: 70B to 30B, then 30B to 8B.
+            Each stage loses less quality than a single large jump. This "cascading" approach
+            preserves more of the teacher's knowledge through intermediate checkpoints.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;color:var(--danger);font-weight:700;">!</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Legal Considerations</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Many model licenses (OpenAI, Anthropic) prohibit using outputs to train competing models.
+            Open-weight models (LLaMA, Mistral) typically allow distillation. Always check the
+            teacher model's license before distilling. Some licenses have specific carve-outs
+            for distillation.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+// Navigation
+const sections = document.querySelectorAll('section');
+const dotNav = document.getElementById('dotNav');
+const progressBar = document.getElementById('progressBar');
+sections.forEach((_,i) => {
+  const dot = document.createElement('div');
+  dot.className = 'dot';
+  dot.onclick = () => sections[i].scrollIntoView({behavior:'smooth'});
+  dotNav.appendChild(dot);
+});
+function updateScroll() {
+  const scrollTop = window.scrollY;
+  const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+  progressBar.style.width = (scrollTop/scrollHeight*100)+'%';
+  const dots = dotNav.querySelectorAll('.dot');
+  sections.forEach((sec,i) => {
+    const rect = sec.getBoundingClientRect();
+    if (rect.top < window.innerHeight/2 && rect.bottom > window.innerHeight/2) {
+      dots.forEach(d => d.classList.remove('active'));
+      dots[i].classList.add('active');
+    }
+    sec.querySelectorAll('.fade-in').forEach(el => { if (rect.top < window.innerHeight*0.85) el.classList.add('visible'); });
+  });
+}
+window.addEventListener('scroll', updateScroll);
+updateScroll();
+
+// Animate processes
+let processTimer = null;
+function animateProcesses() {
+  resetProcesses();
+  let step = 0;
+  processTimer = setInterval(() => {
+    if (step > 4) { clearInterval(processTimer); return; }
+    document.querySelectorAll('#ftFlow .flow-step').forEach((s,i) => {
+      s.classList.toggle('active', i === step);
+    });
+    document.querySelectorAll('#distFlow .flow-step').forEach((s,i) => {
+      s.classList.toggle('active', i === step);
+    });
+    step++;
+  }, 1000);
+}
+
+function resetProcesses() {
+  if (processTimer) clearInterval(processTimer);
+  document.querySelectorAll('.flow-step').forEach(s => s.classList.remove('active'));
+}
+
+// Fine-tuning loss chart
+let ftLossTimer = null;
+function animateFTLoss() {
+  const canvas = document.getElementById('ftLossChart');
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  let trainLoss = [], valLoss = [];
+  let epoch = 0;
+
+  if (ftLossTimer) clearInterval(ftLossTimer);
+  ftLossTimer = setInterval(() => {
+    if (epoch > 100) { clearInterval(ftLossTimer); return; }
+    const tl = 2.5 * Math.exp(-epoch * 0.04) + 0.1 + Math.random() * 0.05;
+    const vl = 2.5 * Math.exp(-epoch * 0.035) + 0.15 + (epoch > 60 ? (epoch-60)*0.008 : 0) + Math.random() * 0.05;
+    trainLoss.push(tl);
+    valLoss.push(vl);
+
+    ctx.clearRect(0, 0, w, h);
+    // Grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      const y = (i/4)*h; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+    }
+
+    function drawLine(data, color) {
+      if (data.length < 2) return;
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+      data.forEach((v, i) => {
+        const x = (i/100)*w, y = h - (v/3)*h;
+        if (i === 0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+    }
+    drawLine(trainLoss, '#00d46a');
+    drawLine(valLoss, '#ef4444');
+
+    if (epoch > 60) {
+      ctx.fillStyle = 'rgba(239,68,68,0.3)';
+      ctx.font = '11px Inter';
+      ctx.fillText('Overfitting!', w * 0.65, 30);
+    }
+
+    epoch++;
+  }, 50);
+}
+
+// Soft labels
+const vocabTokens = ['Paris', 'London', 'Berlin', 'France', 'city', 'the', 'capital', 'Europe'];
+const hardLabelIdx = 0;
+const teacherLogits = [8.5, 3.2, 2.8, 5.1, 1.5, 0.3, 4.2, 1.8];
+
+function softmax(logits, T) {
+  const scaled = logits.map(l => l / T);
+  const maxL = Math.max(...scaled);
+  const exps = scaled.map(l => Math.exp(l - maxL));
+  const sum = exps.reduce((a, b) => a + b);
+  return exps.map(e => e / sum);
+}
+
+function renderLabels(T) {
+  const hardContainer = document.getElementById('hardLabels');
+  const softContainer = document.getElementById('softLabels');
+  hardContainer.innerHTML = '';
+  softContainer.innerHTML = '';
+
+  const probs = softmax(teacherLogits, T);
+
+  vocabTokens.forEach((t, i) => {
+    const hardEl = document.createElement('div');
+    hardEl.className = 'softlabel-token';
+    const isTarget = i === hardLabelIdx;
+    hardEl.style.background = isTarget ? 'rgba(0,212,106,0.3)' : 'rgba(255,255,255,0.05)';
+    hardEl.style.color = isTarget ? 'var(--primary)' : 'var(--text-dim)';
+    hardEl.textContent = `${t}: ${isTarget ? '1.0' : '0.0'}`;
+    hardContainer.appendChild(hardEl);
+
+    const softEl = document.createElement('div');
+    softEl.className = 'softlabel-token';
+    const p = probs[i];
+    const intensity = Math.min(p * 3, 1);
+    softEl.style.background = `rgba(0,200,230,${intensity * 0.4})`;
+    softEl.style.color = p > 0.1 ? 'var(--secondary)' : 'var(--text-dim)';
+    softEl.textContent = `${t}: ${p.toFixed(2)}`;
+    softContainer.appendChild(softEl);
+  });
+}
+
+function updateTemp(val) {
+  document.getElementById('tempVal').textContent = val;
+  renderLabels(parseFloat(val));
+}
+renderLabels(3);
+
+// Dataset impact
+function updateDataset(val) {
+  const n = parseInt(val);
+  document.getElementById('datasetSize').textContent = n.toLocaleString();
+
+  // Fine-tuning quality: logarithmic improvement
+  const ftQ = Math.min(95, 60 + 8 * Math.log10(n));
+  const distQ = Math.min(90, 45 + 10 * Math.log10(n));
+  const ftTrainCost = Math.round(50 + n * 0.05);
+  const distTrainCost = Math.round(200 + n * 0.08); // Teacher inference + student training
+
+  document.getElementById('ftQuality').style.width = ftQ + '%';
+  document.getElementById('ftQuality').textContent = Math.round(ftQ) + '%';
+  document.getElementById('distQuality').style.width = distQ + '%';
+  document.getElementById('distQuality').textContent = Math.round(distQ) + '%';
+
+  document.getElementById('ftCost').style.width = Math.min(100, ftTrainCost/5000*100) + '%';
+  document.getElementById('ftCost').textContent = '$' + ftTrainCost.toLocaleString();
+  document.getElementById('distCost').style.width = Math.min(100, distTrainCost/5000*100) + '%';
+  document.getElementById('distCost').textContent = '$' + distTrainCost.toLocaleString();
+
+  drawBreakEven(n, ftTrainCost, distTrainCost);
+}
+
+function drawBreakEven(n, ftTrain, distTrain) {
+  const canvas = document.getElementById('breakEvenChart');
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const maxReqs = 50000;
+  const ftInfCostPerReq = 0.021; // $2.10/hr / 100 reqs/hr
+  const distInfCostPerReq = 0.0025; // $0.25/hr / 100 reqs/hr
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 5; i++) {
+    const y = (i/4)*h; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+  }
+
+  const maxCost = ftTrain + maxReqs * ftInfCostPerReq;
+
+  // Fine-tuning total cost line
+  ctx.strokeStyle = '#00d46a';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let r = 0; r <= maxReqs; r += 100) {
+    const cost = ftTrain + r * ftInfCostPerReq;
+    const x = (r / maxReqs) * w;
+    const y = h - (cost / maxCost) * h;
+    if (r === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Distillation total cost line
+  ctx.strokeStyle = '#00c8e6';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let r = 0; r <= maxReqs; r += 100) {
+    const cost = distTrain + r * distInfCostPerReq;
+    const x = (r / maxReqs) * w;
+    const y = h - (cost / maxCost) * h;
+    if (r === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Break-even point
+  const breakEven = Math.round((distTrain - ftTrain) / (ftInfCostPerReq - distInfCostPerReq));
+  if (breakEven > 0 && breakEven < maxReqs) {
+    const bx = (breakEven / maxReqs) * w;
+    const by = h - ((ftTrain + breakEven * ftInfCostPerReq) / maxCost) * h;
+    ctx.beginPath();
+    ctx.arc(bx, by, 6, 0, Math.PI * 2);
+    ctx.fillStyle = 'white';
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = '10px JetBrains Mono';
+    ctx.textAlign = 'center';
+    ctx.fillText(`Break-even: ${breakEven.toLocaleString()} reqs`, bx, by - 12);
+  }
+
+  // Labels
+  ctx.fillStyle = '#00d46a';
+  ctx.font = '11px Inter';
+  ctx.textAlign = 'left';
+  ctx.fillText('Fine-tuning (70B)', 10, 20);
+  ctx.fillStyle = '#00c8e6';
+  ctx.fillText('Distillation (8B)', 10, 35);
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.font = '9px JetBrains Mono';
+  ctx.fillText('0 requests', 5, h - 5);
+  ctx.textAlign = 'right';
+  ctx.fillText(maxReqs.toLocaleString() + ' requests', w - 5, h - 5);
+
+  const beText = breakEven > 0
+    ? `With ${n.toLocaleString()} examples, distillation breaks even after ~${breakEven.toLocaleString()} requests due to ${Math.round(ftInfCostPerReq/distInfCostPerReq)}x lower inference cost.`
+    : `With these settings, fine-tuning has lower training cost but higher per-request cost.`;
+  document.getElementById('breakEvenText').textContent = beText;
+}
+
+// Initial draw
+updateDataset(5000);
+</script>
+</body>
+</html>
