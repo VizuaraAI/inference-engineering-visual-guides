@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quantization Number Formats Visual | Inference Engineering</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a;
+  --bg-card: #121212;
+  --bg-card-hover: #1a1a1a;
+  --border: #262626;
+  --primary: #00d46a;
+  --secondary: #00c8e6;
+  --tertiary: #a855f7;
+  --success: #10b981;
+  --text: #f2f2f2;
+  --text-muted: #a3a3a3;
+  --text-dim: #737373;
+  --danger: #ef4444;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); overflow-x: hidden; }
+code, .mono { font-family: 'JetBrains Mono', monospace; }
+h1, h2 { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; }
+.gradient-text { background: linear-gradient(135deg, #00d46a, #00c8e6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+.grid-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 60px 60px; z-index: 0; pointer-events: none; }
+.glow-orb { position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; }
+.glow-orb.green { width: 400px; height: 400px; background: rgba(0,212,106,0.08); top: 10%; left: -100px; }
+.glow-orb.cyan { width: 350px; height: 350px; background: rgba(0,200,230,0.06); bottom: 10%; right: -80px; }
+
+nav { position: fixed; top: 0; left: 0; width: 100%; z-index: 1000; background: rgba(10,10,10,0.85); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); padding: 0 2rem; height: 60px; display: flex; align-items: center; justify-content: space-between; }
+nav .logo { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.3rem; }
+nav .nav-links { display: flex; gap: 2rem; }
+nav .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 0.85rem; transition: color 0.3s; }
+nav .nav-links a:hover { color: var(--primary); }
+
+.progress-bar { position: fixed; top: 60px; left: 0; height: 3px; z-index: 999; background: linear-gradient(90deg, var(--primary), var(--secondary)); transition: width 0.3s ease; }
+.section-dots { position: fixed; right: 1.5rem; top: 50%; transform: translateY(-50%); z-index: 999; display: flex; flex-direction: column; gap: 12px; }
+.section-dots .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--text-dim); background: transparent; cursor: pointer; transition: all 0.3s; }
+.section-dots .dot.active { background: var(--primary); border-color: var(--primary); box-shadow: 0 0 10px rgba(0,212,106,0.5); }
+
+section { min-height: 100vh; position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; padding: 80px 2rem 2rem; }
+.section-inner { max-width: 1200px; width: 100%; opacity: 0; transform: translateY(40px); transition: all 0.8s cubic-bezier(0.16,1,0.3,1); }
+.section-inner.visible { opacity: 1; transform: translateY(0); }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; transition: all 0.3s; }
+.card:hover { background: var(--bg-card-hover); box-shadow: 0 0 40px rgba(0,212,106,0.15); }
+.badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; border: 1px solid var(--primary); background: rgba(0,212,106,0.1); color: var(--primary); margin-bottom: 1rem; }
+
+.hero h1 { font-size: clamp(2.5rem, 5vw, 4rem); line-height: 1.1; margin-bottom: 1rem; }
+.hero p { color: var(--text-muted); font-size: 1.15rem; max-width: 650px; line-height: 1.7; }
+
+.section-tag { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; color: var(--primary); margin-bottom: 0.5rem; }
+.section-title { font-size: clamp(1.8rem, 3vw, 2.5rem); margin-bottom: 1rem; }
+.section-desc { color: var(--text-muted); font-size: 1rem; max-width: 700px; line-height: 1.7; margin-bottom: 2rem; }
+
+.btn { padding: 0.6rem 1.5rem; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-family: 'Inter', sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.3s; }
+.btn:hover { border-color: var(--primary); box-shadow: 0 0 20px rgba(0,212,106,0.15); }
+.btn.active { background: rgba(0,212,106,0.15); border-color: var(--primary); color: var(--primary); }
+
+.explain-panel { margin-top: 1.5rem; padding: 1.5rem; background: rgba(0,212,106,0.03); border: 1px solid rgba(0,212,106,0.15); border-radius: 12px; font-size: 0.9rem; color: var(--text-muted); line-height: 1.7; }
+.explain-panel strong { color: var(--text); }
+
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+.stat-card { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; text-align: center; }
+.stat-card .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 1.8rem; font-weight: 700; margin-bottom: 0.25rem; }
+.stat-card .stat-label { font-size: 0.75rem; color: var(--text-muted); }
+
+/* Bit visualization */
+.bit-container { display: flex; gap: 2px; flex-wrap: wrap; align-items: center; margin: 0.5rem 0; }
+.bit {
+  width: 32px; height: 38px; border-radius: 6px; display: flex; align-items: center;
+  justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;
+  font-weight: 600; transition: all 0.3s; cursor: default; position: relative;
+}
+.bit.sign { background: rgba(239,68,68,0.2); border: 1px solid rgba(239,68,68,0.4); color: var(--danger); }
+.bit.exponent { background: rgba(0,200,230,0.15); border: 1px solid rgba(0,200,230,0.3); color: var(--secondary); }
+.bit.mantissa { background: rgba(0,212,106,0.12); border: 1px solid rgba(0,212,106,0.3); color: var(--primary); }
+.bit.int-bit { background: rgba(168,85,247,0.15); border: 1px solid rgba(168,85,247,0.3); color: var(--tertiary); }
+
+.bit-label {
+  font-size: 0.6rem; text-align: center; position: absolute; top: -16px;
+  width: 100%; color: var(--text-dim);
+}
+
+.format-header {
+  display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;
+}
+.format-name { font-size: 1rem; font-weight: 600; }
+.format-bits { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--text-dim); }
+
+.format-row {
+  padding: 1.25rem; background: rgba(0,0,0,0.2); border: 1px solid var(--border);
+  border-radius: 12px; margin-bottom: 1rem; transition: all 0.3s;
+}
+.format-row:hover { border-color: rgba(0,212,106,0.3); }
+
+.format-meta {
+  display: flex; gap: 2rem; margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);
+  flex-wrap: wrap;
+}
+.format-meta span { display: flex; align-items: center; gap: 0.3rem; }
+
+/* Number line */
+.number-line-container {
+  position: relative; height: 80px; margin: 1rem 0; background: rgba(0,0,0,0.2);
+  border-radius: 8px; overflow: hidden;
+}
+.number-line {
+  position: absolute; top: 50%; left: 5%; right: 5%; height: 2px;
+  background: var(--border);
+}
+.number-tick {
+  position: absolute; top: 50%; width: 2px; height: 8px; background: var(--primary);
+  transform: translateY(-50%); transition: all 0.3s;
+}
+.number-tick.highlight { height: 20px; background: var(--secondary); box-shadow: 0 0 8px rgba(0,200,230,0.4); }
+.number-label {
+  position: absolute; top: 65%; font-size: 0.55rem; color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace; transform: translateX(-50%);
+}
+
+/* Input */
+.num-input {
+  padding: 0.75rem 1.25rem; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text); font-family: 'JetBrains Mono', monospace;
+  font-size: 1.1rem; width: 200px; text-align: center;
+}
+.num-input:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 20px rgba(0,212,106,0.15); }
+
+/* Comparison table */
+.fmt-table { width: 100%; border-collapse: collapse; }
+.fmt-table th, .fmt-table td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+.fmt-table th { color: var(--text-dim); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; }
+
+/* Bar chart for tradeoff */
+.tradeoff-bar {
+  height: 24px; border-radius: 4px; transition: width 1.5s ease; display: flex;
+  align-items: center; padding-left: 8px; font-size: 0.7rem; font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  section { padding: 80px 1rem 1rem; }
+  .bit { width: 24px; height: 30px; font-size: 0.7rem; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div class="glow-orb green"></div>
+<div class="glow-orb cyan"></div>
+
+<nav>
+  <div class="logo"><span class="gradient-text">Vizuara</span> Inference Engineering</div>
+  <div class="nav-links">
+    <a href="#hero">Overview</a>
+    <a href="#formats">Formats</a>
+    <a href="#converter">Converter</a>
+    <a href="#numberline">Number Line</a>
+    <a href="#tradeoff">Tradeoffs</a>
+    <a href="#summary">Summary</a>
+  </div>
+</nav>
+
+<div class="progress-bar" id="progressBar"></div>
+<div class="section-dots" id="sectionDots"></div>
+
+<!-- Hero -->
+<section id="hero">
+  <div class="section-inner hero">
+    <div class="badge">Module 19</div>
+    <h1><span class="gradient-text">Quantization</span> Number Formats</h1>
+    <p>Understand how neural network weights are represented in memory. From FP32 to FP4, each format trades precision for speed and memory efficiency. See exactly what happens to your numbers at each bit width.</p>
+    <div style="display: flex; gap: 0.75rem; margin-top: 2rem; flex-wrap: wrap;">
+      <div class="stat-card" style="padding: 0.75rem 1.25rem;">
+        <div class="stat-value" style="font-size: 1rem; color: var(--primary);">FP32</div>
+        <div class="stat-label">32 bits / 4 bytes</div>
+      </div>
+      <div class="stat-card" style="padding: 0.75rem 1.25rem;">
+        <div class="stat-value" style="font-size: 1rem; color: var(--secondary);">FP16</div>
+        <div class="stat-label">16 bits / 2 bytes</div>
+      </div>
+      <div class="stat-card" style="padding: 0.75rem 1.25rem;">
+        <div class="stat-value" style="font-size: 1rem; color: var(--tertiary);">BF16</div>
+        <div class="stat-label">16 bits / 2 bytes</div>
+      </div>
+      <div class="stat-card" style="padding: 0.75rem 1.25rem;">
+        <div class="stat-value" style="font-size: 1rem; color: var(--success);">FP8</div>
+        <div class="stat-label">8 bits / 1 byte</div>
+      </div>
+      <div class="stat-card" style="padding: 0.75rem 1.25rem;">
+        <div class="stat-value" style="font-size: 1rem; color: var(--danger);">INT8</div>
+        <div class="stat-label">8 bits / 1 byte</div>
+      </div>
+      <div class="stat-card" style="padding: 0.75rem 1.25rem;">
+        <div class="stat-value" style="font-size: 1rem; color: var(--text-muted);">FP4</div>
+        <div class="stat-label">4 bits / 0.5 byte</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Formats breakdown -->
+<section id="formats">
+  <div class="section-inner">
+    <div class="section-tag">Bit Layout</div>
+    <h2 class="section-title"><span class="gradient-text">Sign, Exponent, Mantissa</span></h2>
+    <div class="section-desc">Floating point numbers encode value as (-1)<sup>sign</sup> * 2<sup>exponent-bias</sup> * (1 + mantissa). Each format allocates bits differently.</div>
+
+    <div id="formatsList"></div>
+
+    <div class="explain-panel">
+      <strong>Key Insight:</strong> More <span style="color: var(--secondary);">exponent</span> bits = wider dynamic range (can represent very large and very small numbers). More <span style="color: var(--primary);">mantissa</span> bits = higher precision (finer distinctions between nearby values). BF16 sacrifices mantissa for exponent, matching FP32's range in half the bits.
+    </div>
+  </div>
+</section>
+
+<!-- Interactive converter -->
+<section id="converter">
+  <div class="section-inner">
+    <div class="section-tag">Interactive</div>
+    <h2 class="section-title"><span class="gradient-text">Number Format Converter</span></h2>
+    <div class="section-desc">Enter a number and see how it gets represented in each format, including quantization error.</div>
+
+    <div class="card">
+      <div style="text-align: center; margin-bottom: 2rem;">
+        <label style="font-size: 0.85rem; color: var(--text-muted); display: block; margin-bottom: 0.5rem;">Enter a number:</label>
+        <input type="number" class="num-input" id="numberInput" value="3.14159" step="any" onchange="convertNumber()">
+        <div style="display: flex; gap: 0.5rem; justify-content: center; margin-top: 1rem; flex-wrap: wrap;">
+          <button class="btn" onclick="setNumber(3.14159)">pi</button>
+          <button class="btn" onclick="setNumber(0.1)">0.1</button>
+          <button class="btn" onclick="setNumber(65504)">65504</button>
+          <button class="btn" onclick="setNumber(0.000001)">1e-6</button>
+          <button class="btn" onclick="setNumber(-42.5)">-42.5</button>
+          <button class="btn" onclick="setNumber(100000)">100000</button>
+        </div>
+      </div>
+
+      <div id="conversionResults"></div>
+    </div>
+  </div>
+</section>
+
+<!-- Number line -->
+<section id="numberline">
+  <div class="section-inner">
+    <div class="section-tag">Representable Values</div>
+    <h2 class="section-title"><span class="gradient-text">Number Line Visualization</span></h2>
+    <div class="section-desc">See where each format can represent values. Notice how values cluster near zero and become sparser at larger magnitudes.</div>
+
+    <div class="card">
+      <h3 style="font-size: 1rem; margin-bottom: 1.5rem;">Representable Values Near Zero (0 to 1)</h3>
+      <div id="numberLines"></div>
+      <div class="explain-panel" style="margin-top: 1rem;">
+        <strong>Observation:</strong> FP32 has so many representable values that the ticks form a nearly solid bar. FP16 and BF16 are sparser but still reasonable. FP8 has visible gaps. INT8 has evenly-spaced values (no clustering). FP4 has only a handful of representable values in any range.
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 1.5rem;">
+      <h3 style="font-size: 1rem; margin-bottom: 1rem;">Dynamic Range Comparison</h3>
+      <table class="fmt-table">
+        <thead>
+          <tr><th>Format</th><th>Min Positive</th><th>Max Value</th><th>Dynamic Range</th><th>Precision (decimals)</th></tr>
+        </thead>
+        <tbody>
+          <tr><td style="color: var(--primary);">FP32</td><td class="mono">~1.2e-38</td><td class="mono">~3.4e+38</td><td class="mono">~1e76</td><td class="mono">~7.2</td></tr>
+          <tr><td style="color: var(--secondary);">FP16</td><td class="mono">~6.1e-5</td><td class="mono">~65504</td><td class="mono">~1e9</td><td class="mono">~3.3</td></tr>
+          <tr><td style="color: var(--tertiary);">BF16</td><td class="mono">~1.2e-38</td><td class="mono">~3.4e+38</td><td class="mono">~1e76</td><td class="mono">~2.4</td></tr>
+          <tr><td style="color: var(--success);">FP8 (E4M3)</td><td class="mono">~0.0019</td><td class="mono">~448</td><td class="mono">~2.4e5</td><td class="mono">~1.1</td></tr>
+          <tr><td style="color: var(--danger);">INT8</td><td class="mono">0 (or -128)</td><td class="mono">255 (or 127)</td><td class="mono">256</td><td class="mono">exact int</td></tr>
+          <tr><td style="color: var(--text-muted);">FP4 (E2M1)</td><td class="mono">~0.5</td><td class="mono">~6</td><td class="mono">~12</td><td class="mono">~0.3</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Tradeoff -->
+<section id="tradeoff">
+  <div class="section-inner">
+    <div class="section-tag">Tradeoffs</div>
+    <h2 class="section-title"><span class="gradient-text">Dynamic Range vs Precision</span></h2>
+    <div class="section-desc">Every quantization format makes a tradeoff. More bits for exponent means wider range but coarser precision, and vice versa.</div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+      <div class="card">
+        <h3 style="font-size: 1rem; margin-bottom: 1.5rem;">Memory Per Parameter</h3>
+        <div id="memoryBars" style="display: flex; flex-direction: column; gap: 1rem;"></div>
+      </div>
+      <div class="card">
+        <h3 style="font-size: 1rem; margin-bottom: 1.5rem;">Model Size: Llama-70B</h3>
+        <div id="modelSizeBars" style="display: flex; flex-direction: column; gap: 1rem;"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 1.5rem;">
+      <h3 style="font-size: 1rem; margin-bottom: 1.5rem;">Quantization Error by Format</h3>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;" id="errorCards"></div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem;">
+      <div class="card">
+        <h3 style="font-size: 1rem; color: var(--primary); margin-bottom: 1rem;">FP16 vs BF16</h3>
+        <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.8;">
+          <p><strong style="color: var(--secondary);">FP16:</strong> 5 exp + 10 mantissa. Higher precision but limited range (max ~65K). Can overflow during training with large gradients.</p>
+          <p style="margin-top: 0.5rem;"><strong style="color: var(--tertiary);">BF16:</strong> 8 exp + 7 mantissa. Same range as FP32 but lower precision. Preferred for training because it never overflows.</p>
+          <p style="margin-top: 0.5rem;"><strong style="color: var(--text);">Verdict:</strong> BF16 is the default for LLM training. FP16 is sometimes preferred for inference where values are bounded.</p>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="font-size: 1rem; color: var(--secondary); margin-bottom: 1rem;">FP8: E4M3 vs E5M2</h3>
+        <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.8;">
+          <p><strong style="color: var(--success);">E4M3:</strong> 4 exp + 3 mantissa. Better precision, max ~448. Used for weights and activations.</p>
+          <p style="margin-top: 0.5rem;"><strong style="color: var(--primary);">E5M2:</strong> 5 exp + 2 mantissa. Wider range (up to ~57344). Used for gradients in training.</p>
+          <p style="margin-top: 0.5rem;"><strong style="color: var(--text);">Usage:</strong> Hopper (H100) supports native FP8 compute. Weights typically use E4M3, gradients use E5M2.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Summary -->
+<section id="summary">
+  <div class="section-inner" style="text-align: center;">
+    <div class="section-tag">Summary</div>
+    <h2 class="section-title"><span class="gradient-text">Quantization Formats Summary</span></h2>
+    <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); max-width: 800px; margin: 0 auto 2rem;">
+      <div class="stat-card">
+        <div class="stat-value" style="font-size: 1.3rem; color: var(--primary);">2-8x</div>
+        <div class="stat-label">Memory Reduction</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="font-size: 1.3rem; color: var(--secondary);">BF16</div>
+        <div class="stat-label">Training Default</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="font-size: 1.3rem; color: var(--tertiary);">INT4/FP4</div>
+        <div class="stat-label">Aggressive Serving</div>
+      </div>
+    </div>
+    <div class="explain-panel" style="text-align: left; max-width: 800px; margin: 0 auto;">
+      <strong>Practical Guidance:</strong> For inference serving, INT4/FP4 quantization (W4A16) reduces model memory by 8x with typically less than 1% quality loss on major benchmarks. FP8 (W8A8) is the sweet spot for near-lossless compression with hardware support on H100. Always benchmark your specific use case, as quantization sensitivity varies by model architecture and task.
+    </div>
+    <div style="margin-top: 2rem; color: var(--text-dim); font-size: 0.85rem;">
+      Module 19 of Inference Engineering &mdash; <span class="gradient-text" style="font-weight: 600;">VizuaraAI</span>
+    </div>
+  </div>
+</section>
+
+<script>
+const sections = document.querySelectorAll('section');
+const sectionIds = Array.from(sections).map(s => s.id);
+const dotsContainer = document.getElementById('sectionDots');
+sectionIds.forEach(id => {
+  const dot = document.createElement('div');
+  dot.className = 'dot';
+  dot.onclick = () => document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+  dotsContainer.appendChild(dot);
+});
+const dots = dotsContainer.querySelectorAll('.dot');
+
+function updateProgress() {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  document.getElementById('progressBar').style.width = ((scrollTop / docHeight) * 100) + '%';
+  sections.forEach((section, i) => {
+    const rect = section.getBoundingClientRect();
+    const inner = section.querySelector('.section-inner');
+    if (rect.top < window.innerHeight * 0.75 && rect.bottom > 0) {
+      if (inner) inner.classList.add('visible');
+      dots[i].classList.add('active');
+    } else { dots[i].classList.remove('active'); }
+  });
+  animateTradeoffBars();
+}
+window.addEventListener('scroll', updateProgress);
+window.addEventListener('load', () => { updateProgress(); initAll(); });
+
+// Format definitions
+const formats = [
+  { name: 'FP32', bits: 32, sign: 1, exp: 8, man: 23, color: 'var(--primary)', type: 'float' },
+  { name: 'FP16', bits: 16, sign: 1, exp: 5, man: 10, color: 'var(--secondary)', type: 'float' },
+  { name: 'BF16', bits: 16, sign: 1, exp: 8, man: 7, color: 'var(--tertiary)', type: 'float' },
+  { name: 'FP8 (E4M3)', bits: 8, sign: 1, exp: 4, man: 3, color: 'var(--success)', type: 'float' },
+  { name: 'INT8', bits: 8, sign: 1, exp: 0, man: 7, color: 'var(--danger)', type: 'int' },
+  { name: 'FP4 (E2M1)', bits: 4, sign: 1, exp: 2, man: 1, color: 'var(--text-muted)', type: 'float' },
+];
+
+function initAll() {
+  renderFormats();
+  convertNumber();
+  renderNumberLines();
+  renderTradeoffBars();
+  renderErrorCards();
+}
+
+function renderFormats() {
+  const container = document.getElementById('formatsList');
+  formats.forEach(fmt => {
+    const row = document.createElement('div');
+    row.className = 'format-row';
+
+    let bitsHTML = '<div class="bit-container">';
+    // Sign bit
+    bitsHTML += `<div class="bit sign" title="Sign bit"><span class="bit-label">S</span>0</div>`;
+    // Exponent bits
+    for (let i = 0; i < fmt.exp; i++) {
+      bitsHTML += `<div class="bit exponent" title="Exponent bit ${i}">0</div>`;
+    }
+    // Mantissa bits (or integer bits for INT8)
+    const manClass = fmt.type === 'int' ? 'int-bit' : 'mantissa';
+    for (let i = 0; i < fmt.man; i++) {
+      bitsHTML += `<div class="bit ${manClass}">0</div>`;
+    }
+    bitsHTML += '</div>';
+
+    row.innerHTML = `
+      <div class="format-header">
+        <span class="format-name" style="color: ${fmt.color};">${fmt.name}</span>
+        <span class="format-bits">${fmt.bits} bits</span>
+      </div>
+      ${bitsHTML}
+      <div class="format-meta">
+        <span><span style="color: var(--danger);">&#9632;</span> Sign: ${fmt.sign}</span>
+        <span><span style="color: var(--secondary);">&#9632;</span> Exponent: ${fmt.exp}</span>
+        <span><span style="color: ${fmt.type === 'int' ? 'var(--tertiary)' : 'var(--primary)'};">&#9632;</span> ${fmt.type === 'int' ? 'Integer' : 'Mantissa'}: ${fmt.man}</span>
+        <span style="color: var(--text-dim);">Memory: ${fmt.bits/8} byte${fmt.bits > 8 ? 's' : ''}</span>
+      </div>`;
+    container.appendChild(row);
+  });
+}
+
+// Number conversion
+function setNumber(n) {
+  document.getElementById('numberInput').value = n;
+  convertNumber();
+}
+
+function convertNumber() {
+  const num = parseFloat(document.getElementById('numberInput').value);
+  if (isNaN(num)) return;
+  const container = document.getElementById('conversionResults');
+  container.innerHTML = '';
+
+  const results = [
+    { name: 'FP32', repr: representFP32(num), error: 0, color: 'var(--primary)' },
+    { name: 'FP16', repr: representFP16(num), error: Math.abs(num - roundToFP16(num)), color: 'var(--secondary)' },
+    { name: 'BF16', repr: representBF16(num), error: Math.abs(num - roundToBF16(num)), color: 'var(--tertiary)' },
+    { name: 'FP8 (E4M3)', repr: representFP8(num), error: Math.abs(num - roundToFP8(num)), color: 'var(--success)' },
+    { name: 'INT8', repr: representINT8(num), error: Math.abs(num - Math.round(Math.max(-128, Math.min(127, num)))), color: 'var(--danger)' },
+    { name: 'FP4 (E2M1)', repr: representFP4(num), error: Math.abs(num - roundToFP4(num)), color: 'var(--text-muted)' },
+  ];
+
+  results.forEach(r => {
+    const row = document.createElement('div');
+    row.className = 'format-row';
+    const relError = num !== 0 ? ((r.error / Math.abs(num)) * 100).toFixed(4) : '0.0000';
+    let bitsHTML = '<div class="bit-container">';
+    r.repr.split('').forEach((b, i) => {
+      let cls = 'mantissa';
+      if (i === 0) cls = 'sign';
+      else if (r.name === 'INT8') cls = i === 0 ? 'sign' : 'int-bit';
+      else {
+        const fmt = formats.find(f => f.name === r.name || r.name.startsWith(f.name.split(' ')[0]));
+        if (fmt && i <= fmt.exp) cls = 'exponent';
+      }
+      bitsHTML += `<div class="bit ${cls}" style="width:28px;height:32px;font-size:0.8rem;">${b}</div>`;
+    });
+    bitsHTML += '</div>';
+
+    row.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+        <span style="font-weight: 600; color: ${r.color};">${r.name}</span>
+        <span class="mono" style="font-size: 0.8rem; color: var(--text-muted);">Error: <span style="color: ${r.error > 0.01 ? 'var(--danger)' : 'var(--primary)'};">${r.error.toFixed(6)}</span> (${relError}%)</span>
+      </div>
+      ${bitsHTML}`;
+    container.appendChild(row);
+  });
+}
+
+function floatToBinary32(num) {
+  const buf = new ArrayBuffer(4);
+  new Float32Array(buf)[0] = num;
+  const view = new Uint32Array(buf)[0];
+  return view.toString(2).padStart(32, '0');
+}
+
+function representFP32(num) { return floatToBinary32(num); }
+
+function representFP16(num) {
+  const bits = floatToBinary32(num);
+  const sign = bits[0];
+  const exp32 = parseInt(bits.substring(1, 9), 2);
+  const man32 = bits.substring(9);
+  let exp16 = exp32 - 127 + 15;
+  if (exp16 <= 0) exp16 = 0;
+  if (exp16 >= 31) exp16 = 31;
+  return sign + exp16.toString(2).padStart(5, '0') + man32.substring(0, 10);
+}
+
+function representBF16(num) {
+  const bits = floatToBinary32(num);
+  return bits.substring(0, 16);
+}
+
+function representFP8(num) {
+  const bits = floatToBinary32(num);
+  const sign = bits[0];
+  const exp32 = parseInt(bits.substring(1, 9), 2);
+  const man32 = bits.substring(9);
+  let exp8 = exp32 - 127 + 7;
+  if (exp8 <= 0) exp8 = 0;
+  if (exp8 >= 15) exp8 = 15;
+  return sign + exp8.toString(2).padStart(4, '0') + man32.substring(0, 3);
+}
+
+function representINT8(num) {
+  let val = Math.round(Math.max(-128, Math.min(127, num)));
+  if (val < 0) val = 256 + val;
+  return val.toString(2).padStart(8, '0');
+}
+
+function representFP4(num) {
+  const sign = num < 0 ? '1' : '0';
+  const absVal = Math.abs(num);
+  let exp, man;
+  if (absVal >= 4) { exp = '11'; man = absVal >= 6 ? '1' : '0'; }
+  else if (absVal >= 2) { exp = '10'; man = absVal >= 3 ? '1' : '0'; }
+  else if (absVal >= 1) { exp = '01'; man = absVal >= 1.5 ? '1' : '0'; }
+  else { exp = '00'; man = absVal >= 0.5 ? '1' : '0'; }
+  return sign + exp + man;
+}
+
+function roundToFP16(num) {
+  const buf = new ArrayBuffer(4);
+  new Float32Array(buf)[0] = num;
+  const bits = new Uint32Array(buf)[0];
+  const sign = (bits >> 31) & 1;
+  let exp = ((bits >> 23) & 0xFF) - 127 + 15;
+  let man = (bits >> 13) & 0x3FF;
+  if (exp <= 0) { exp = 0; man = 0; }
+  if (exp >= 31) { exp = 31; man = 0; return sign ? -65504 : 65504; }
+  const fp16bits = (sign << 15) | (exp << 10) | man;
+  const s = (fp16bits >> 15) & 1;
+  const e = (fp16bits >> 10) & 0x1F;
+  const m = fp16bits & 0x3FF;
+  if (e === 0) return (s ? -1 : 1) * Math.pow(2, -14) * (m / 1024);
+  return (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + m / 1024);
+}
+
+function roundToBF16(num) {
+  const buf = new ArrayBuffer(4);
+  new Float32Array(buf)[0] = num;
+  const bits = new Uint32Array(buf)[0];
+  const truncated = bits & 0xFFFF0000;
+  const buf2 = new ArrayBuffer(4);
+  new Uint32Array(buf2)[0] = truncated;
+  return new Float32Array(buf2)[0];
+}
+
+function roundToFP8(num) {
+  const absVal = Math.abs(num);
+  const sign = num < 0 ? -1 : 1;
+  if (absVal > 448) return sign * 448;
+  if (absVal < 0.001953125) return 0;
+  let bestVal = 0, bestDist = Infinity;
+  for (let e = 0; e < 16; e++) {
+    for (let m = 0; m < 8; m++) {
+      let val;
+      if (e === 0) val = Math.pow(2, -6) * (m / 8);
+      else val = Math.pow(2, e - 7) * (1 + m / 8);
+      const dist = Math.abs(absVal - val);
+      if (dist < bestDist) { bestDist = dist; bestVal = val; }
+    }
+  }
+  return sign * bestVal;
+}
+
+function roundToFP4(num) {
+  const vals = [0, 0.5, 1, 1.5, 2, 3, 4, 6];
+  const sign = num < 0 ? -1 : 1;
+  const absVal = Math.abs(num);
+  let best = 0, bestDist = Infinity;
+  vals.forEach(v => {
+    const d = Math.abs(absVal - v);
+    if (d < bestDist) { bestDist = d; best = v; }
+  });
+  return sign * best;
+}
+
+// Number lines
+function renderNumberLines() {
+  const container = document.getElementById('numberLines');
+  const lineData = [
+    { name: 'FP32', count: 200, color: 'var(--primary)' },
+    { name: 'FP16', count: 60, color: 'var(--secondary)' },
+    { name: 'BF16', count: 25, color: 'var(--tertiary)' },
+    { name: 'FP8', count: 12, color: 'var(--success)' },
+    { name: 'INT8', count: 2, color: 'var(--danger)' },
+    { name: 'FP4', count: 3, color: 'var(--text-muted)' },
+  ];
+
+  lineData.forEach(ld => {
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'margin-bottom: 1rem;';
+    wrapper.innerHTML = `<div style="font-size: 0.75rem; color: ${ld.color}; font-weight: 600; margin-bottom: 4px;">${ld.name}</div>`;
+
+    const lineDiv = document.createElement('div');
+    lineDiv.style.cssText = 'position: relative; height: 30px; background: rgba(0,0,0,0.2); border-radius: 4px; overflow: hidden;';
+
+    const line = document.createElement('div');
+    line.style.cssText = 'position: absolute; top: 50%; left: 3%; right: 3%; height: 1px; background: var(--border);';
+    lineDiv.appendChild(line);
+
+    // Generate tick positions (simplified)
+    for (let i = 0; i < ld.count; i++) {
+      const pos = 3 + (i / ld.count) * 94;
+      const tick = document.createElement('div');
+      tick.style.cssText = `position: absolute; left: ${pos}%; top: 30%; width: 1px; height: 40%; background: ${ld.color}; opacity: 0.6;`;
+      lineDiv.appendChild(tick);
+    }
+
+    wrapper.appendChild(lineDiv);
+    container.appendChild(wrapper);
+  });
+}
+
+// Tradeoff bars
+let barsAnimated = false;
+function renderTradeoffBars() {
+  const memContainer = document.getElementById('memoryBars');
+  const sizeContainer = document.getElementById('modelSizeBars');
+
+  const memData = [
+    { name: 'FP32', bytes: 4, pct: 100, color: 'rgba(0,212,106,0.5)' },
+    { name: 'FP16/BF16', bytes: 2, pct: 50, color: 'rgba(0,200,230,0.5)' },
+    { name: 'FP8/INT8', bytes: 1, pct: 25, color: 'rgba(168,85,247,0.5)' },
+    { name: 'FP4/INT4', bytes: 0.5, pct: 12.5, color: 'rgba(239,68,68,0.4)' },
+  ];
+
+  memData.forEach(d => {
+    memContainer.innerHTML += `
+      <div style="display: flex; align-items: center; gap: 1rem;">
+        <div style="width: 80px; font-size: 0.8rem; color: var(--text-muted);">${d.name}</div>
+        <div style="flex: 1; height: 28px; background: rgba(255,255,255,0.03); border-radius: 6px; overflow: hidden;">
+          <div class="trade-bar" style="width: 0; height: 100%; background: ${d.color}; border-radius: 6px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; transition: width 1.5s ease;" data-width="${d.pct}">${d.bytes}B</div>
+        </div>
+      </div>`;
+  });
+
+  const sizeData = [
+    { name: 'FP32', size: '280 GB', pct: 100, color: 'rgba(0,212,106,0.5)' },
+    { name: 'BF16', size: '140 GB', pct: 50, color: 'rgba(0,200,230,0.5)' },
+    { name: 'INT8', size: '70 GB', pct: 25, color: 'rgba(168,85,247,0.5)' },
+    { name: 'INT4', size: '35 GB', pct: 12.5, color: 'rgba(239,68,68,0.4)' },
+  ];
+
+  sizeData.forEach(d => {
+    sizeContainer.innerHTML += `
+      <div style="display: flex; align-items: center; gap: 1rem;">
+        <div style="width: 80px; font-size: 0.8rem; color: var(--text-muted);">${d.name}</div>
+        <div style="flex: 1; height: 28px; background: rgba(255,255,255,0.03); border-radius: 6px; overflow: hidden;">
+          <div class="trade-bar" style="width: 0; height: 100%; background: ${d.color}; border-radius: 6px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; transition: width 1.5s ease;" data-width="${d.pct}">${d.size}</div>
+        </div>
+      </div>`;
+  });
+}
+
+function animateTradeoffBars() {
+  if (barsAnimated) return;
+  const bars = document.querySelectorAll('.trade-bar');
+  if (bars.length === 0) return;
+  const rect = bars[0].getBoundingClientRect();
+  if (rect.top < window.innerHeight * 0.9) {
+    barsAnimated = true;
+    bars.forEach(b => b.style.width = b.dataset.width + '%');
+  }
+}
+
+function renderErrorCards() {
+  const container = document.getElementById('errorCards');
+  const testVal = 3.14159;
+  const errors = [
+    { name: 'FP32', err: 0, color: 'var(--primary)' },
+    { name: 'FP16', err: Math.abs(testVal - roundToFP16(testVal)), color: 'var(--secondary)' },
+    { name: 'BF16', err: Math.abs(testVal - roundToBF16(testVal)), color: 'var(--tertiary)' },
+    { name: 'FP8', err: Math.abs(testVal - roundToFP8(testVal)), color: 'var(--success)' },
+    { name: 'INT8', err: Math.abs(testVal - 3), color: 'var(--danger)' },
+    { name: 'FP4', err: Math.abs(testVal - roundToFP4(testVal)), color: 'var(--text-muted)' },
+  ];
+
+  errors.forEach(e => {
+    const pct = testVal !== 0 ? ((e.err / testVal) * 100).toFixed(3) : '0';
+    container.innerHTML += `
+      <div class="stat-card">
+        <div style="color: ${e.color}; font-weight: 600; font-size: 0.9rem; margin-bottom: 0.5rem;">${e.name}</div>
+        <div class="stat-value" style="font-size: 1.2rem; color: ${e.err > 0.5 ? 'var(--danger)' : e.err > 0.01 ? 'var(--tertiary)' : 'var(--primary)'};">${e.err.toFixed(4)}</div>
+        <div class="stat-label">${pct}% relative error</div>
+        <div style="font-size: 0.7rem; color: var(--text-dim); margin-top: 0.25rem;">for pi (3.14159)</div>
+      </div>`;
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Autoscaling Lifecycle | Inference Engineering</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a;
+  --bg-card: #121212;
+  --bg-card-hover: #1a1a1a;
+  --border: #262626;
+  --primary: #00d46a;
+  --secondary: #00c8e6;
+  --tertiary: #a855f7;
+  --success: #10b981;
+  --text: #f2f2f2;
+  --text-muted: #a3a3a3;
+  --text-dim: #737373;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); overflow-x: hidden; }
+code, .mono { font-family: 'JetBrains Mono', monospace; }
+h1, h2 { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; }
+.gradient-text { background: linear-gradient(135deg, #00d46a, #00c8e6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+.grid-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 60px 60px; z-index: 0; pointer-events: none; }
+.glow-orb { position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; }
+.glow-orb.green { width: 400px; height: 400px; background: rgba(0,212,106,0.08); top: 10%; left: -100px; }
+.glow-orb.cyan { width: 350px; height: 350px; background: rgba(0,200,230,0.06); bottom: 10%; right: -80px; }
+
+nav { position: fixed; top: 0; left: 0; width: 100%; z-index: 1000; background: rgba(10,10,10,0.85); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); padding: 0 2rem; height: 60px; display: flex; align-items: center; justify-content: space-between; }
+nav .logo { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.3rem; }
+nav .nav-links { display: flex; gap: 2rem; }
+nav .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 0.85rem; transition: color 0.3s; }
+nav .nav-links a:hover { color: var(--primary); }
+
+.progress-bar { position: fixed; top: 60px; left: 0; height: 3px; z-index: 999; background: linear-gradient(90deg, var(--primary), var(--secondary)); transition: width 0.3s ease; }
+.section-dots { position: fixed; right: 1.5rem; top: 50%; transform: translateY(-50%); z-index: 999; display: flex; flex-direction: column; gap: 12px; }
+.section-dots .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--text-dim); background: transparent; cursor: pointer; transition: all 0.3s; }
+.section-dots .dot.active { background: var(--primary); border-color: var(--primary); box-shadow: 0 0 10px rgba(0,212,106,0.5); }
+
+section { min-height: 100vh; position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; padding: 80px 2rem 2rem; }
+.section-inner { max-width: 1200px; width: 100%; opacity: 0; transform: translateY(40px); transition: all 0.8s cubic-bezier(0.16,1,0.3,1); }
+.section-inner.visible { opacity: 1; transform: translateY(0); }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; transition: all 0.3s; }
+.card:hover { background: var(--bg-card-hover); box-shadow: 0 0 40px rgba(0,212,106,0.15); }
+.badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; border: 1px solid var(--primary); background: rgba(0,212,106,0.1); color: var(--primary); margin-bottom: 1rem; }
+
+.hero h1 { font-size: clamp(2.5rem, 5vw, 4rem); line-height: 1.1; margin-bottom: 1rem; }
+.hero p { color: var(--text-muted); font-size: 1.15rem; max-width: 650px; line-height: 1.7; }
+
+.section-tag { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; color: var(--primary); margin-bottom: 0.5rem; }
+.section-title { font-size: clamp(1.8rem, 3vw, 2.5rem); margin-bottom: 1rem; }
+.section-desc { color: var(--text-muted); font-size: 1rem; max-width: 700px; line-height: 1.7; margin-bottom: 2rem; }
+
+.btn { padding: 0.6rem 1.5rem; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-family: 'Inter', sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.3s; }
+.btn:hover { border-color: var(--primary); box-shadow: 0 0 20px rgba(0,212,106,0.15); }
+.btn.active { background: rgba(0,212,106,0.15); border-color: var(--primary); color: var(--primary); }
+
+.explain-panel { margin-top: 1.5rem; padding: 1.5rem; background: rgba(0,212,106,0.03); border: 1px solid rgba(0,212,106,0.15); border-radius: 12px; font-size: 0.9rem; color: var(--text-muted); line-height: 1.7; }
+.explain-panel strong { color: var(--text); }
+
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+.stat-card { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; text-align: center; }
+.stat-card .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 1.8rem; font-weight: 700; margin-bottom: 0.25rem; }
+.stat-card .stat-label { font-size: 0.75rem; color: var(--text-muted); }
+
+/* Canvas charts */
+.chart-canvas {
+  width: 100%; height: 300px; position: relative;
+  background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 12px;
+  overflow: hidden;
+}
+canvas { width: 100%; height: 100%; }
+
+/* Replica boxes */
+.replica-container {
+  display: flex; gap: 0.5rem; flex-wrap: wrap; min-height: 60px; align-items: center;
+  padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 8px;
+}
+.replica-box {
+  width: 50px; height: 50px; border-radius: 10px; display: flex; align-items: center;
+  justify-content: center; font-size: 0.7rem; font-weight: 600;
+  transition: all 0.4s cubic-bezier(0.16,1,0.3,1);
+}
+.replica-box.running { background: rgba(0,212,106,0.15); border: 1px solid rgba(0,212,106,0.3); color: var(--primary); }
+.replica-box.starting { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); color: var(--warning); animation: pulse-start 1s ease infinite; }
+.replica-box.draining { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: var(--danger); opacity: 0.6; }
+
+@keyframes pulse-start {
+  0%, 100% { opacity: 0.5; } 50% { opacity: 1; }
+}
+
+/* Slider for traffic */
+.traffic-slider-container {
+  position: relative; width: 100%; height: 100px; margin: 1rem 0;
+  background: rgba(0,0,0,0.2); border-radius: 8px; cursor: crosshair;
+  border: 1px solid var(--border);
+}
+.traffic-point {
+  position: absolute; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--secondary); border: 2px solid var(--bg); box-shadow: 0 0 8px rgba(0,200,230,0.4);
+  transform: translate(-50%, -50%); cursor: grab; z-index: 10;
+}
+.traffic-point:active { cursor: grabbing; }
+
+/* Metric gauge */
+.gauge {
+  width: 80px; height: 80px; border-radius: 50%; position: relative;
+  display: flex; align-items: center; justify-content: center;
+}
+.gauge-ring {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+}
+
+/* Timeline annotation */
+.time-label {
+  font-size: 0.6rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;
+  position: absolute; bottom: 4px;
+}
+
+@media (max-width: 768px) {
+  section { padding: 80px 1rem 1rem; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div class="glow-orb green"></div>
+<div class="glow-orb cyan"></div>
+
+<nav>
+  <div class="logo"><span class="gradient-text">Vizuara</span> Inference Engineering</div>
+  <div class="nav-links">
+    <a href="#hero">Overview</a>
+    <a href="#traffic">Traffic</a>
+    <a href="#metrics">Metrics</a>
+    <a href="#interactive">Interactive</a>
+    <a href="#coldstart">Cold Start</a>
+    <a href="#summary">Summary</a>
+  </div>
+</nav>
+
+<div class="progress-bar" id="progressBar"></div>
+<div class="section-dots" id="sectionDots"></div>
+
+<!-- Hero -->
+<section id="hero">
+  <div class="section-inner hero">
+    <div class="badge">Module 21</div>
+    <h1><span class="gradient-text">Autoscaling</span> Lifecycle</h1>
+    <p>Scale GPU replicas up and down in response to traffic. Balance cost against latency with intelligent scaling policies. See the full lifecycle from traffic spike to replica warmup to scale-down.</p>
+    <div style="display: flex; gap: 1rem; margin-top: 2rem; flex-wrap: wrap;">
+      <div class="stat-card" style="padding: 0.75rem 1.25rem;">
+        <div class="stat-value" style="font-size: 1rem; color: var(--primary);">KPA / HPA</div>
+        <div class="stat-label">Scaling Methods</div>
+      </div>
+      <div class="stat-card" style="padding: 0.75rem 1.25rem;">
+        <div class="stat-value" style="font-size: 1rem; color: var(--secondary);">30-120s</div>
+        <div class="stat-label">Cold Start</div>
+      </div>
+      <div class="stat-card" style="padding: 0.75rem 1.25rem;">
+        <div class="stat-value" style="font-size: 1rem; color: var(--tertiary);">~60%</div>
+        <div class="stat-label">Cost Savings</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Traffic Pattern -->
+<section id="traffic">
+  <div class="section-inner">
+    <div class="section-tag">Traffic Patterns</div>
+    <h2 class="section-title"><span class="gradient-text">Daily Traffic Curve</span></h2>
+    <div class="section-desc">LLM traffic follows predictable patterns: morning ramp-up, midday peak, afternoon plateau, evening taper, and overnight minimum.</div>
+
+    <div class="card">
+      <h3 style="font-size: 1rem; margin-bottom: 1rem;">24-Hour Traffic & Replica Count</h3>
+      <div class="chart-canvas" id="trafficChart">
+        <canvas id="trafficCanvas"></canvas>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.7rem; color: var(--text-dim); padding: 0 1rem;">
+        <span>00:00</span><span>04:00</span><span>08:00</span><span>12:00</span><span>16:00</span><span>20:00</span><span>24:00</span>
+      </div>
+      <div style="display: flex; gap: 2rem; margin-top: 1rem; font-size: 0.8rem;">
+        <span style="display: flex; align-items: center; gap: 0.3rem;"><div style="width: 12px; height: 3px; background: var(--secondary); border-radius: 2px;"></div> Traffic (req/s)</span>
+        <span style="display: flex; align-items: center; gap: 0.3rem;"><div style="width: 12px; height: 3px; background: var(--primary); border-radius: 2px;"></div> Replicas</span>
+        <span style="display: flex; align-items: center; gap: 0.3rem;"><div style="width: 12px; height: 3px; background: var(--danger); border-radius: 2px;"></div> Target capacity</span>
+      </div>
+      <button class="btn" style="margin-top: 1rem;" onclick="animateTraffic()">Animate 24h Cycle</button>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-top: 1.5rem;">
+      <div class="card">
+        <h3 style="font-size: 1rem; color: var(--secondary); margin-bottom: 1rem;">Scale-Up Triggers</h3>
+        <ul style="list-style: none; font-size: 0.85rem; color: var(--text-muted); line-height: 2;">
+          <li>Queue depth exceeds threshold</li>
+          <li>P95 latency exceeds SLO</li>
+          <li>GPU utilization above 80%</li>
+          <li>Request rate crosses boundary</li>
+          <li>Pending requests per replica > N</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="font-size: 1rem; color: var(--primary); margin-bottom: 1rem;">Scale-Down Triggers</h3>
+        <ul style="list-style: none; font-size: 0.85rem; color: var(--text-muted); line-height: 2;">
+          <li>GPU utilization below 30% (cooldown)</li>
+          <li>Queue depth consistently near 0</li>
+          <li>Replicas idle for > cool-down period</li>
+          <li>Traffic drops below lower threshold</li>
+          <li>Cost budget constraint reached</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Metrics Dashboard -->
+<section id="metrics">
+  <div class="section-inner">
+    <div class="section-tag">Metrics</div>
+    <h2 class="section-title"><span class="gradient-text">Autoscaling Metrics Dashboard</span></h2>
+    <div class="section-desc">The autoscaler continuously monitors these metrics to make scaling decisions.</div>
+
+    <div class="card">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;" id="metricsGrid">
+        <div class="stat-card" style="position: relative; overflow: hidden;">
+          <div style="font-size: 0.7rem; color: var(--text-dim); margin-bottom: 0.5rem;">Queue Depth</div>
+          <div class="stat-value" id="queueDepth" style="font-size: 2rem; color: var(--secondary);">0</div>
+          <div class="stat-label">pending requests</div>
+          <div id="queueSparkline" style="position: absolute; bottom: 0; left: 0; right: 0; height: 30px; overflow: hidden;"></div>
+        </div>
+        <div class="stat-card">
+          <div style="font-size: 0.7rem; color: var(--text-dim); margin-bottom: 0.5rem;">P95 Latency</div>
+          <div class="stat-value" id="p95Latency" style="font-size: 2rem; color: var(--primary);">45ms</div>
+          <div class="stat-label">time per output token</div>
+        </div>
+        <div class="stat-card">
+          <div style="font-size: 0.7rem; color: var(--text-dim); margin-bottom: 0.5rem;">Throughput</div>
+          <div class="stat-value" id="throughput" style="font-size: 2rem; color: var(--tertiary);">1.2K</div>
+          <div class="stat-label">tokens/sec</div>
+        </div>
+        <div class="stat-card">
+          <div style="font-size: 0.7rem; color: var(--text-dim); margin-bottom: 0.5rem;">Active Replicas</div>
+          <div class="stat-value" id="activeReplicas" style="font-size: 2rem; color: var(--success);">3</div>
+          <div class="stat-label">GPU instances</div>
+        </div>
+      </div>
+
+      <div style="margin-top: 2rem;">
+        <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.75rem;">Replica Pool</div>
+        <div class="replica-container" id="replicaPool">
+          <div class="replica-box running">R1</div>
+          <div class="replica-box running">R2</div>
+          <div class="replica-box running">R3</div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem; flex-wrap: wrap;">
+        <button class="btn" onclick="simulateSpike()">Simulate Traffic Spike</button>
+        <button class="btn" onclick="simulateDrop()">Simulate Traffic Drop</button>
+        <button class="btn" onclick="resetMetrics()">Reset</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Interactive Traffic Control -->
+<section id="interactive">
+  <div class="section-inner">
+    <div class="section-tag">Playground</div>
+    <h2 class="section-title"><span class="gradient-text">Control the Traffic</span></h2>
+    <div class="section-desc">Use the slider to set traffic levels and watch the autoscaler respond in real-time.</div>
+
+    <div class="card">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+        <div>
+          <h3 style="font-size: 1rem; margin-bottom: 1rem;">Traffic Level</h3>
+          <div style="margin-bottom: 1.5rem;">
+            <label style="font-size: 0.8rem; color: var(--text-muted);">Requests/sec: <span id="trafficVal" class="mono" style="color: var(--secondary);">100</span></label>
+            <input type="range" id="trafficSlider" min="0" max="500" value="100" oninput="updateInteractive()" style="width: 100%; margin-top: 0.5rem; -webkit-appearance: none; height: 6px; border-radius: 3px; background: var(--border); outline: none;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--text-dim);"><span>0 (idle)</span><span>250 (peak)</span><span>500 (surge)</span></div>
+          </div>
+
+          <h3 style="font-size: 1rem; margin-bottom: 1rem;">Scaling Parameters</h3>
+          <div style="margin-bottom: 1rem;">
+            <label style="font-size: 0.8rem; color: var(--text-muted);">Scale-up threshold (req/replica): <span id="scaleUpVal" class="mono" style="color: var(--primary);">50</span></label>
+            <input type="range" id="scaleUpThreshold" min="20" max="100" value="50" oninput="updateInteractive()" style="width: 100%; margin-top: 0.5rem; -webkit-appearance: none; height: 6px; border-radius: 3px; background: var(--border); outline: none;">
+          </div>
+          <div style="margin-bottom: 1rem;">
+            <label style="font-size: 0.8rem; color: var(--text-muted);">Scale-down cooldown (sec): <span id="cooldownVal" class="mono" style="color: var(--tertiary);">60</span></label>
+            <input type="range" id="cooldownPeriod" min="10" max="300" value="60" oninput="updateInteractive()" style="width: 100%; margin-top: 0.5rem; -webkit-appearance: none; height: 6px; border-radius: 3px; background: var(--border); outline: none;">
+          </div>
+          <div style="margin-bottom: 1rem;">
+            <label style="font-size: 0.8rem; color: var(--text-muted);">Min replicas: <span id="minRepVal" class="mono" style="color: var(--success);">1</span></label>
+            <input type="range" id="minReplicas" min="0" max="5" value="1" oninput="updateInteractive()" style="width: 100%; margin-top: 0.5rem; -webkit-appearance: none; height: 6px; border-radius: 3px; background: var(--border); outline: none;">
+          </div>
+          <div>
+            <label style="font-size: 0.8rem; color: var(--text-muted);">Max replicas: <span id="maxRepVal" class="mono" style="color: var(--danger);">12</span></label>
+            <input type="range" id="maxReplicas" min="3" max="20" value="12" oninput="updateInteractive()" style="width: 100%; margin-top: 0.5rem; -webkit-appearance: none; height: 6px; border-radius: 3px; background: var(--border); outline: none;">
+          </div>
+        </div>
+
+        <div>
+          <h3 style="font-size: 1rem; margin-bottom: 1rem;">Autoscaler State</h3>
+          <div class="stats-grid" style="grid-template-columns: 1fr 1fr; margin-top: 0;">
+            <div class="stat-card">
+              <div class="stat-value" id="intReplicas" style="font-size: 1.8rem; color: var(--primary);">2</div>
+              <div class="stat-label">Current Replicas</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="intTarget" style="font-size: 1.8rem; color: var(--secondary);">2</div>
+              <div class="stat-label">Target Replicas</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="intLatency" style="font-size: 1.8rem; color: var(--tertiary);">25ms</div>
+              <div class="stat-label">Est. TPOT</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="intCost" style="font-size: 1.8rem; color: var(--warning);">$4.80</div>
+              <div class="stat-label">Cost/hour</div>
+            </div>
+          </div>
+
+          <div style="margin-top: 1.5rem;">
+            <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem;">Replica Pool</div>
+            <div class="replica-container" id="intReplicaPool"></div>
+          </div>
+
+          <div id="intScalingLog" style="margin-top: 1rem; max-height: 120px; overflow-y: auto; font-size: 0.75rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; padding: 0.75rem; background: rgba(0,0,0,0.3); border-radius: 8px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Cold Start -->
+<section id="coldstart">
+  <div class="section-inner">
+    <div class="section-tag">Cold Start</div>
+    <h2 class="section-title"><span class="gradient-text">Cold Start & Warm-Up</span></h2>
+    <div class="section-desc">New replicas need time to load the model and warm up. This delay impacts autoscaling responsiveness.</div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+      <div class="card">
+        <h3 style="font-size: 1rem; margin-bottom: 1.5rem;">Cold Start Timeline</h3>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div style="width: 100px; font-size: 0.75rem; color: var(--text-dim); text-align: right; flex-shrink: 0;">Container</div>
+            <div style="flex: 1; height: 28px; background: rgba(255,255,255,0.03); border-radius: 6px; overflow: hidden; position: relative;">
+              <div style="position: absolute; left: 0; top: 0; height: 100%; width: 8%; background: rgba(0,200,230,0.4); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; color: var(--secondary);">~3s</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div style="width: 100px; font-size: 0.75rem; color: var(--text-dim); text-align: right; flex-shrink: 0;">Model Download</div>
+            <div style="flex: 1; height: 28px; background: rgba(255,255,255,0.03); border-radius: 6px; overflow: hidden; position: relative;">
+              <div style="position: absolute; left: 8%; top: 0; height: 100%; width: 35%; background: rgba(168,85,247,0.4); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; color: var(--tertiary);">~20-40s</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div style="width: 100px; font-size: 0.75rem; color: var(--text-dim); text-align: right; flex-shrink: 0;">GPU Load</div>
+            <div style="flex: 1; height: 28px; background: rgba(255,255,255,0.03); border-radius: 6px; overflow: hidden; position: relative;">
+              <div style="position: absolute; left: 43%; top: 0; height: 100%; width: 25%; background: rgba(0,212,106,0.4); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; color: var(--primary);">~15-30s</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div style="width: 100px; font-size: 0.75rem; color: var(--text-dim); text-align: right; flex-shrink: 0;">CUDA Warmup</div>
+            <div style="flex: 1; height: 28px; background: rgba(255,255,255,0.03); border-radius: 6px; overflow: hidden; position: relative;">
+              <div style="position: absolute; left: 68%; top: 0; height: 100%; width: 15%; background: rgba(245,158,11,0.4); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; color: var(--warning);">~10-15s</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div style="width: 100px; font-size: 0.75rem; color: var(--text-dim); text-align: right; flex-shrink: 0;">Health Check</div>
+            <div style="flex: 1; height: 28px; background: rgba(255,255,255,0.03); border-radius: 6px; overflow: hidden; position: relative;">
+              <div style="position: absolute; left: 83%; top: 0; height: 100%; width: 7%; background: rgba(16,185,129,0.4); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; color: var(--success);">~5s</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div style="width: 100px; font-size: 0.75rem; color: var(--primary); text-align: right; flex-shrink: 0; font-weight: 600;">Ready!</div>
+            <div style="flex: 1; height: 28px; background: rgba(0,212,106,0.05); border: 1px solid rgba(0,212,106,0.2); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: var(--primary); font-weight: 600;">Total: 60-120 seconds</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="font-size: 1rem; margin-bottom: 1.5rem;">Mitigation Strategies</h3>
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <div style="padding: 1rem; background: rgba(0,212,106,0.03); border: 1px solid rgba(0,212,106,0.15); border-radius: 10px;">
+            <div style="font-weight: 600; font-size: 0.9rem; color: var(--primary); margin-bottom: 0.25rem;">Pre-warm Pool</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Keep minimum replicas always warm. Scale-to-zero only for dev/staging.</div>
+          </div>
+          <div style="padding: 1rem; background: rgba(0,200,230,0.03); border: 1px solid rgba(0,200,230,0.15); border-radius: 10px;">
+            <div style="font-weight: 600; font-size: 0.9rem; color: var(--secondary); margin-bottom: 0.25rem;">Predictive Scaling</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Use historical patterns to pre-scale before anticipated peaks (e.g., Monday morning).</div>
+          </div>
+          <div style="padding: 1rem; background: rgba(168,85,247,0.03); border: 1px solid rgba(168,85,247,0.15); border-radius: 10px;">
+            <div style="font-weight: 600; font-size: 0.9rem; color: var(--tertiary); margin-bottom: 0.25rem;">Model Caching</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Cache model weights on local NVMe SSD. Reduces download from 40s to 5s.</div>
+          </div>
+          <div style="padding: 1rem; background: rgba(245,158,11,0.03); border: 1px solid rgba(245,158,11,0.15); border-radius: 10px;">
+            <div style="font-weight: 600; font-size: 0.9rem; color: var(--warning); margin-bottom: 0.25rem;">Overprovisioning Buffer</div>
+            <div style="font-size: 0.8rem; color: var(--text-muted);">Maintain 10-20% extra capacity to absorb sudden spikes during scale-up delay.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="explain-panel">
+      <strong>The Cold Start Problem:</strong> LLM serving has some of the longest cold start times of any workload. A 70B model is ~140GB (BF16) and takes 20-40 seconds just to download from object storage. CUDA graph compilation and warmup add another 10-15 seconds. This means the autoscaler must be proactive, not just reactive. Predictive scaling based on historical traffic patterns is essential for production SLOs.
+    </div>
+  </div>
+</section>
+
+<!-- Summary -->
+<section id="summary">
+  <div class="section-inner" style="text-align: center;">
+    <div class="section-tag">Summary</div>
+    <h2 class="section-title"><span class="gradient-text">Autoscaling Summary</span></h2>
+    <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); max-width: 800px; margin: 0 auto 2rem;">
+      <div class="stat-card">
+        <div class="stat-value" style="font-size: 1.3rem; color: var(--primary);">Reactive</div>
+        <div class="stat-label">Queue / Latency Based</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="font-size: 1.3rem; color: var(--secondary);">Predictive</div>
+        <div class="stat-label">Historical Patterns</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="font-size: 1.3rem; color: var(--tertiary);">Hybrid</div>
+        <div class="stat-label">Best Practice</div>
+      </div>
+    </div>
+    <div class="explain-panel" style="text-align: left; max-width: 800px; margin: 0 auto;">
+      <strong>Production Recipe:</strong> Use a hybrid approach: (1) Set minimum replicas based on baseline traffic to avoid cold starts, (2) Use predictive scaling for known daily patterns, (3) Layer reactive scaling on top for unexpected spikes, (4) Set conservative cooldown periods (5-10 min) to avoid flapping, and (5) Monitor cost vs. latency tradeoff continuously. The goal is to keep P99 latency within SLO while minimizing idle GPU hours.
+    </div>
+    <div style="margin-top: 2rem; color: var(--text-dim); font-size: 0.85rem;">
+      Module 21 of Inference Engineering &mdash; <span class="gradient-text" style="font-weight: 600;">VizuaraAI</span>
+    </div>
+  </div>
+</section>
+
+<script>
+// Sections + progress
+const sections = document.querySelectorAll('section');
+const sectionIds = Array.from(sections).map(s => s.id);
+const dotsContainer = document.getElementById('sectionDots');
+sectionIds.forEach(id => {
+  const dot = document.createElement('div');
+  dot.className = 'dot';
+  dot.onclick = () => document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+  dotsContainer.appendChild(dot);
+});
+const dots = dotsContainer.querySelectorAll('.dot');
+
+function updateProgress() {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  document.getElementById('progressBar').style.width = ((scrollTop / docHeight) * 100) + '%';
+  sections.forEach((section, i) => {
+    const rect = section.getBoundingClientRect();
+    const inner = section.querySelector('.section-inner');
+    if (rect.top < window.innerHeight * 0.75 && rect.bottom > 0) {
+      if (inner) inner.classList.add('visible');
+      dots[i].classList.add('active');
+    } else { dots[i].classList.remove('active'); }
+  });
+}
+window.addEventListener('scroll', updateProgress);
+window.addEventListener('load', () => { updateProgress(); drawTrafficChart(); updateInteractive(); });
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Traffic chart
+function drawTrafficChart() {
+  const canvas = document.getElementById('trafficCanvas');
+  const container = document.getElementById('trafficChart');
+  canvas.width = container.clientWidth * 2;
+  canvas.height = container.clientHeight * 2;
+  canvas.style.width = container.clientWidth + 'px';
+  canvas.style.height = container.clientHeight + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(2, 2);
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+
+  // Traffic curve (req/s over 24h)
+  const traffic = [];
+  for (let i = 0; i < 96; i++) { // 15-min intervals
+    const hour = i / 4;
+    let rps;
+    if (hour < 6) rps = 20 + Math.sin(hour / 3) * 5;
+    else if (hour < 9) rps = 20 + (hour - 6) * 60;
+    else if (hour < 12) rps = 200 + Math.sin((hour - 9) * 1.5) * 40;
+    else if (hour < 14) rps = 250 + Math.sin((hour - 12) * 2) * 30;
+    else if (hour < 18) rps = 200 - (hour - 14) * 15;
+    else if (hour < 21) rps = 140 - (hour - 18) * 25;
+    else rps = 60 - (hour - 21) * 12;
+    traffic.push(Math.max(10, rps + (Math.random() - 0.5) * 15));
+  }
+
+  // Replicas (step function following traffic)
+  const replicas = traffic.map(t => Math.max(1, Math.ceil(t / 50)));
+  const maxTraffic = 300;
+  const maxReplicas = 8;
+  const pad = { top: 20, right: 20, bottom: 20, left: 20 };
+  const plotW = w - pad.left - pad.right;
+  const plotH = h - pad.top - pad.bottom;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Target capacity line (dashed)
+  ctx.beginPath();
+  ctx.setLineDash([5, 5]);
+  ctx.strokeStyle = 'rgba(239,68,68,0.3)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 96; i++) {
+    const x = pad.left + (i / 95) * plotW;
+    const cap = replicas[i] * 50;
+    const y = pad.top + (1 - cap / maxTraffic) * plotH;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Traffic curve
+  ctx.beginPath();
+  ctx.strokeStyle = '#00c8e6';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 96; i++) {
+    const x = pad.left + (i / 95) * plotW;
+    const y = pad.top + (1 - traffic[i] / maxTraffic) * plotH;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Traffic fill
+  ctx.lineTo(pad.left + plotW, pad.top + plotH);
+  ctx.lineTo(pad.left, pad.top + plotH);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+  grad.addColorStop(0, 'rgba(0,200,230,0.15)');
+  grad.addColorStop(1, 'rgba(0,200,230,0)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Replicas step line
+  ctx.beginPath();
+  ctx.strokeStyle = '#00d46a';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 96; i++) {
+    const x = pad.left + (i / 95) * plotW;
+    const y = pad.top + (1 - replicas[i] / maxReplicas) * plotH;
+    if (i === 0) ctx.moveTo(x, y);
+    else {
+      const prevY = pad.top + (1 - replicas[i-1] / maxReplicas) * plotH;
+      ctx.lineTo(x, prevY);
+      ctx.lineTo(x, y);
+    }
+  }
+  ctx.stroke();
+}
+
+window.addEventListener('resize', drawTrafficChart);
+
+let animating = false;
+async function animateTraffic() {
+  if (animating) return;
+  animating = true;
+  const canvas = document.getElementById('trafficCanvas');
+  const container = document.getElementById('trafficChart');
+  canvas.width = container.clientWidth * 2;
+  canvas.height = container.clientHeight * 2;
+  canvas.style.width = container.clientWidth + 'px';
+  canvas.style.height = container.clientHeight + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(2, 2);
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+
+  const traffic = [];
+  for (let i = 0; i < 96; i++) {
+    const hour = i / 4;
+    let rps;
+    if (hour < 6) rps = 20 + Math.sin(hour / 3) * 5;
+    else if (hour < 9) rps = 20 + (hour - 6) * 60;
+    else if (hour < 12) rps = 200 + Math.sin((hour - 9) * 1.5) * 40;
+    else if (hour < 14) rps = 250 + Math.sin((hour - 12) * 2) * 30;
+    else if (hour < 18) rps = 200 - (hour - 14) * 15;
+    else if (hour < 21) rps = 140 - (hour - 18) * 25;
+    else rps = 60 - (hour - 21) * 12;
+    traffic.push(Math.max(10, rps + (Math.random() - 0.5) * 15));
+  }
+  const replicas = traffic.map(t => Math.max(1, Math.ceil(t / 50)));
+  const maxTraffic = 300;
+  const maxReplicas = 8;
+  const pad = { top: 20, right: 20, bottom: 20, left: 20 };
+  const plotW = w - pad.left - pad.right;
+  const plotH = h - pad.top - pad.bottom;
+
+  for (let frame = 1; frame <= 96; frame++) {
+    ctx.clearRect(0, 0, w, h);
+
+    // Draw up to current frame
+    // Traffic fill
+    ctx.beginPath();
+    for (let i = 0; i < frame; i++) {
+      const x = pad.left + (i / 95) * plotW;
+      const y = pad.top + (1 - traffic[i] / maxTraffic) * plotH;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    const lastX = pad.left + ((frame - 1) / 95) * plotW;
+    ctx.lineTo(lastX, pad.top + plotH);
+    ctx.lineTo(pad.left, pad.top + plotH);
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + plotH);
+    grad.addColorStop(0, 'rgba(0,200,230,0.15)');
+    grad.addColorStop(1, 'rgba(0,200,230,0)');
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    // Traffic line
+    ctx.beginPath();
+    ctx.strokeStyle = '#00c8e6';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < frame; i++) {
+      const x = pad.left + (i / 95) * plotW;
+      const y = pad.top + (1 - traffic[i] / maxTraffic) * plotH;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // Replica line
+    ctx.beginPath();
+    ctx.strokeStyle = '#00d46a';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < frame; i++) {
+      const x = pad.left + (i / 95) * plotW;
+      const y = pad.top + (1 - replicas[i] / maxReplicas) * plotH;
+      if (i === 0) ctx.moveTo(x, y);
+      else {
+        const prevY = pad.top + (1 - replicas[i-1] / maxReplicas) * plotH;
+        ctx.lineTo(x, prevY);
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+
+    // Current point
+    const cx = pad.left + ((frame - 1) / 95) * plotW;
+    const cy = pad.top + (1 - traffic[frame - 1] / maxTraffic) * plotH;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#00c8e6';
+    ctx.fill();
+
+    await sleep(40);
+  }
+  animating = false;
+}
+
+// Metrics simulation
+let currentReplicas = 3;
+async function simulateSpike() {
+  const pool = document.getElementById('replicaPool');
+  const log = [];
+
+  // Traffic spike - add replicas
+  document.getElementById('queueDepth').textContent = '47';
+  document.getElementById('queueDepth').style.color = 'var(--warning)';
+  document.getElementById('p95Latency').textContent = '120ms';
+  document.getElementById('p95Latency').style.color = 'var(--danger)';
+  document.getElementById('throughput').textContent = '3.8K';
+
+  await sleep(800);
+
+  // Scale up decision
+  for (let i = 0; i < 3; i++) {
+    const box = document.createElement('div');
+    box.className = 'replica-box starting';
+    box.textContent = 'R' + (currentReplicas + i + 1);
+    pool.appendChild(box);
+    await sleep(400);
+  }
+
+  // Cold start
+  await sleep(1500);
+
+  // Replicas ready
+  pool.querySelectorAll('.starting').forEach(b => {
+    b.className = 'replica-box running';
+  });
+  currentReplicas += 3;
+  document.getElementById('activeReplicas').textContent = currentReplicas;
+
+  await sleep(500);
+
+  // Metrics stabilize
+  document.getElementById('queueDepth').textContent = '3';
+  document.getElementById('queueDepth').style.color = 'var(--primary)';
+  document.getElementById('p95Latency').textContent = '38ms';
+  document.getElementById('p95Latency').style.color = 'var(--primary)';
+  document.getElementById('throughput').textContent = '5.2K';
+}
+
+async function simulateDrop() {
+  const pool = document.getElementById('replicaPool');
+  const boxes = pool.querySelectorAll('.replica-box');
+
+  document.getElementById('queueDepth').textContent = '0';
+  document.getElementById('p95Latency').textContent = '15ms';
+  document.getElementById('throughput').textContent = '0.4K';
+
+  await sleep(800);
+
+  // Mark replicas for draining
+  const toDrain = Math.min(currentReplicas - 2, 3);
+  for (let i = boxes.length - 1; i >= boxes.length - toDrain && i >= 2; i--) {
+    boxes[i].className = 'replica-box draining';
+    await sleep(300);
+  }
+
+  await sleep(1500);
+
+  // Remove drained replicas
+  for (let i = 0; i < toDrain; i++) {
+    const draining = pool.querySelector('.draining');
+    if (draining) {
+      draining.style.transform = 'scale(0)';
+      await sleep(200);
+      draining.remove();
+      currentReplicas--;
+    }
+  }
+  document.getElementById('activeReplicas').textContent = currentReplicas;
+}
+
+function resetMetrics() {
+  currentReplicas = 3;
+  const pool = document.getElementById('replicaPool');
+  pool.innerHTML = '';
+  for (let i = 0; i < 3; i++) {
+    const box = document.createElement('div');
+    box.className = 'replica-box running';
+    box.textContent = 'R' + (i + 1);
+    pool.appendChild(box);
+  }
+  document.getElementById('queueDepth').textContent = '0';
+  document.getElementById('queueDepth').style.color = 'var(--secondary)';
+  document.getElementById('p95Latency').textContent = '45ms';
+  document.getElementById('p95Latency').style.color = 'var(--primary)';
+  document.getElementById('throughput').textContent = '1.2K';
+  document.getElementById('activeReplicas').textContent = '3';
+}
+
+// Interactive autoscaler
+let intCurrentReplicas = 2;
+let lastLogTime = 0;
+
+function updateInteractive() {
+  const traffic = parseInt(document.getElementById('trafficSlider').value);
+  const scaleUp = parseInt(document.getElementById('scaleUpThreshold').value);
+  const cooldown = parseInt(document.getElementById('cooldownPeriod').value);
+  const minRep = parseInt(document.getElementById('minReplicas').value);
+  const maxRep = parseInt(document.getElementById('maxReplicas').value);
+
+  document.getElementById('trafficVal').textContent = traffic;
+  document.getElementById('scaleUpVal').textContent = scaleUp;
+  document.getElementById('cooldownVal').textContent = cooldown;
+  document.getElementById('minRepVal').textContent = minRep;
+  document.getElementById('maxRepVal').textContent = maxRep;
+
+  // Calculate target replicas
+  const targetReplicas = Math.max(minRep, Math.min(maxRep, Math.ceil(traffic / scaleUp)));
+  const prevTarget = intCurrentReplicas;
+
+  // Simulate gradual scaling
+  if (targetReplicas > intCurrentReplicas) {
+    intCurrentReplicas = Math.min(intCurrentReplicas + 1, targetReplicas);
+  } else if (targetReplicas < intCurrentReplicas) {
+    intCurrentReplicas = Math.max(intCurrentReplicas - 1, targetReplicas);
+  }
+
+  // Update displays
+  document.getElementById('intReplicas').textContent = intCurrentReplicas;
+  document.getElementById('intTarget').textContent = targetReplicas;
+
+  // Estimated latency (inversely proportional to capacity headroom)
+  const loadFactor = traffic / (intCurrentReplicas * scaleUp);
+  const latency = Math.round(15 + loadFactor * 80);
+  document.getElementById('intLatency').textContent = latency + 'ms';
+  document.getElementById('intLatency').style.color = latency > 100 ? 'var(--danger)' : latency > 60 ? 'var(--warning)' : 'var(--primary)';
+
+  // Cost
+  const costPerHour = (intCurrentReplicas * 2.40).toFixed(2);
+  document.getElementById('intCost').textContent = '$' + costPerHour;
+
+  // Render replica pool
+  const pool = document.getElementById('intReplicaPool');
+  pool.innerHTML = '';
+  for (let i = 0; i < intCurrentReplicas; i++) {
+    const box = document.createElement('div');
+    box.className = 'replica-box running';
+    box.textContent = 'R' + (i + 1);
+    pool.appendChild(box);
+  }
+  // Show starting replicas
+  if (targetReplicas > intCurrentReplicas) {
+    for (let i = 0; i < targetReplicas - intCurrentReplicas; i++) {
+      const box = document.createElement('div');
+      box.className = 'replica-box starting';
+      box.textContent = '+';
+      pool.appendChild(box);
+    }
+  }
+
+  // Log scaling events
+  const now = Date.now();
+  if (now - lastLogTime > 500 && targetReplicas !== prevTarget) {
+    const log = document.getElementById('intScalingLog');
+    const action = targetReplicas > prevTarget ? 'SCALE_UP' : 'SCALE_DOWN';
+    const color = action === 'SCALE_UP' ? 'var(--secondary)' : 'var(--primary)';
+    log.innerHTML = `<div style="color: ${color};">[${new Date().toLocaleTimeString()}] ${action}: ${prevTarget} -> ${targetReplicas} replicas (traffic: ${traffic} req/s)</div>` + log.innerHTML;
+    lastLogTime = now;
+  }
+}
+</script>
+</body>
+</html>

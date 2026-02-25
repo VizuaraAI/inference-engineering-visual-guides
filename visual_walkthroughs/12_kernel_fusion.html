@@ -4,46 +4,46 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Kernel Fusion: Eliminating Memory Round-Trips</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter',sans-serif;background:#0a0a0f;color:#e2e8f0;overflow-x:hidden;line-height:1.6}
+body{font-family:'Inter',sans-serif;background:#0a0a0a;color:#f2f2f2;overflow-x:hidden;line-height:1.6}
 ::-webkit-scrollbar{width:6px}
-::-webkit-scrollbar-track{background:#0a0a0f}
-::-webkit-scrollbar-thumb{background:#6366f1;border-radius:3px}
+::-webkit-scrollbar-track{background:#0a0a0a}
+::-webkit-scrollbar-thumb{background:#00d46a;border-radius:3px}
 
-.progress-bar{position:fixed;top:0;left:0;width:0%;height:3px;background:linear-gradient(90deg,#6366f1,#22d3ee);z-index:1000;transition:width .3s}
+.progress-bar{position:fixed;top:0;left:0;width:0%;height:3px;background:linear-gradient(90deg,#00d46a,#00c8e6);z-index:1000;transition:width .3s}
 .nav-dots{position:fixed;right:20px;top:50%;transform:translateY(-50%);z-index:100;display:flex;flex-direction:column;gap:12px}
 .nav-dot{width:10px;height:10px;border-radius:50%;background:#333;cursor:pointer;transition:all .3s;border:2px solid transparent}
-.nav-dot.active{background:#6366f1;border-color:#22d3ee;transform:scale(1.3)}
-.nav-dot:hover{background:#6366f1}
+.nav-dot.active{background:#00d46a;border-color:#00c8e6;transform:scale(1.3)}
+.nav-dot:hover{background:#00d46a}
 
 section{min-height:100vh;padding:80px 60px;display:flex;flex-direction:column;justify-content:center;align-items:center;position:relative}
 
-.hero-section{background:radial-gradient(ellipse at center,#1a1a3e 0%,#0a0a0f 70%)}
-.hero-title{font-size:3.2rem;font-weight:800;text-align:center;margin-bottom:20px;background:linear-gradient(135deg,#6366f1,#22d3ee);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.hero-subtitle{font-size:1.3rem;color:#94a3b8;text-align:center;max-width:700px;margin-bottom:40px}
-.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:20px;padding:8px 20px;font-size:.85rem;color:#a5b4fc;margin-bottom:20px}
+.hero-section{background:radial-gradient(ellipse at center,#1a1a1a 0%,#0a0a0a 70%)}
+.hero-title{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:3.2rem;text-align:center;margin-bottom:20px;background:linear-gradient(135deg,#00d46a,#00c8e6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero-subtitle{font-size:1.3rem;color:#a3a3a3;text-align:center;max-width:700px;margin-bottom:40px}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(0,212,106,.15);border:1px solid rgba(0,212,106,.3);border-radius:20px;padding:8px 20px;font-size:.85rem;color:#00d46a;margin-bottom:20px}
 
-.section-title{font-size:2rem;font-weight:700;margin-bottom:10px;text-align:center}
-.section-desc{color:#94a3b8;text-align:center;max-width:650px;margin-bottom:40px}
+.section-title{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:2rem;margin-bottom:10px;text-align:center}
+.section-desc{color:#a3a3a3;text-align:center;max-width:650px;margin-bottom:40px}
 .highlight{color:#22d3ee}
 .highlight-amber{color:#f59e0b}
 .highlight-green{color:#10b981}
 .highlight-red{color:#ef4444}
 
-.card{background:rgba(20,20,40,.6);border:1px solid #222;border-radius:16px;padding:30px;transition:all .3s}
-.card:hover{border-color:#6366f1;box-shadow:0 4px 30px rgba(99,102,241,.1)}
+.card{background:rgba(18,18,18,.6);border:1px solid #262626;border-radius:16px;padding:30px;transition:all .3s}
+.card:hover{border-color:#00d46a;box-shadow:0 0 20px rgba(0,212,106,.15),0 0 60px rgba(0,212,106,.05)}
 
 @keyframes fadeInUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
 @keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
-.gradient-bg{background:linear-gradient(135deg,#0a0a1f,#0f0f2f,#0a0a1f);background-size:200% 200%;animation:gradientShift 8s ease infinite}
+.gradient-bg{background:linear-gradient(135deg,#0a0a0a,#121212,#0a0a0a);background-size:200% 200%;animation:gradientShift 8s ease infinite}
 .animate-in{animation:fadeInUp .8s ease both}
 
 /* Memory diagram */
 .mem-diagram{display:flex;flex-direction:column;gap:20px;align-items:center;width:100%;max-width:800px}
 .mem-block{padding:20px 40px;border-radius:14px;font-weight:600;text-align:center;position:relative}
-.gpu-compute{background:linear-gradient(135deg,rgba(99,102,241,.2),rgba(99,102,241,.1));border:2px solid #6366f1;color:#a5b4fc}
+.gpu-compute{background:linear-gradient(135deg,rgba(0,212,106,.2),rgba(0,212,106,.1));border:2px solid #00d46a;color:#00d46a}
 .gpu-memory{background:linear-gradient(135deg,rgba(34,211,238,.2),rgba(34,211,238,.1));border:2px solid #22d3ee;color:#67e8f9}
 
 /* Kernel flow */
@@ -52,19 +52,19 @@ section{min-height:100vh;padding:80px 60px;display:flex;flex-direction:column;ju
 .kernel-step.visible{opacity:1;transform:translateX(0)}
 .kernel-step.wasteful{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3)}
 .kernel-step.good{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3)}
-.kernel-step.compute{background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.3)}
+.kernel-step.compute{background:rgba(0,212,106,.08);border:1px solid rgba(0,212,106,.3)}
 .step-icon{width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0}
 .step-read{background:rgba(34,211,238,.2);color:#22d3ee}
 .step-write{background:rgba(245,158,11,.2);color:#f59e0b}
-.step-compute-icon{background:rgba(99,102,241,.2);color:#6366f1}
+.step-compute-icon{background:rgba(0,212,106,.2);color:#00d46a}
 .step-waste{background:rgba(239,68,68,.2);color:#ef4444}
 .arrow-down{color:#475569;font-size:1.2rem;margin:5px 0}
 
 /* Fusion interactive */
-.fusion-area{position:relative;width:700px;min-height:400px;border:2px dashed #333;border-radius:20px;padding:30px;background:rgba(10,10,20,.5)}
+.fusion-area{position:relative;width:700px;min-height:400px;border:2px dashed #333;border-radius:20px;padding:30px;background:rgba(10,10,10,.5)}
 .draggable-kernel{padding:15px 25px;border-radius:12px;cursor:grab;user-select:none;position:relative;transition:all .3s;display:inline-flex;align-items:center;gap:10px;margin:8px}
 .draggable-kernel:active{cursor:grabbing}
-.draggable-kernel.kernel-a{background:rgba(99,102,241,.15);border:2px solid #6366f1;color:#a5b4fc}
+.draggable-kernel.kernel-a{background:rgba(0,212,106,.15);border:2px solid #00d46a;color:#00d46a}
 .draggable-kernel.kernel-b{background:rgba(34,211,238,.15);border:2px solid #22d3ee;color:#67e8f9}
 .draggable-kernel.kernel-c{background:rgba(245,158,11,.15);border:2px solid #f59e0b;color:#fbbf24}
 .fused-result{padding:20px 30px;border-radius:14px;background:linear-gradient(135deg,rgba(16,185,129,.15),rgba(16,185,129,.05));border:2px solid #10b981;color:#6ee7b7;text-align:center;margin-top:20px;display:none}
@@ -84,7 +84,7 @@ section{min-height:100vh;padding:80px 60px;display:flex;flex-direction:column;ju
 
 .code-block{background:#111;border-radius:10px;padding:15px;font-family:monospace;font-size:.8rem;overflow-x:auto;border:1px solid #222;margin-top:15px}
 .code-comment{color:#6b7280}
-.code-keyword{color:#6366f1}
+.code-keyword{color:#00d46a}
 .code-func{color:#22d3ee}
 .code-string{color:#10b981}
 .code-num{color:#f59e0b}
@@ -244,7 +244,7 @@ section{min-height:100vh;padding:80px 60px;display:flex;flex-direction:column;ju
 
 <h3 style="color:#ef4444;font-size:1rem;margin-bottom:15px">Unfused (3 separate kernels):</h3>
 <div class="rw-flow">
-<div class="rw-block" style="background:rgba(99,102,241,.15);border:1px solid #6366f1;color:#a5b4fc">MatMul</div>
+<div class="rw-block" style="background:rgba(0,212,106,.15);border:1px solid #00d46a;color:#00d46a">MatMul</div>
 <div class="rw-arrow">-></div>
 <div class="rw-mem">Write to HBM</div>
 <div class="rw-arrow">-></div>
@@ -346,11 +346,11 @@ Memory: O(N) -- 8K sequence = just the output matrix
 </div>
 <div style="margin-top:30px;text-align:center">
 <div style="font-size:.85rem;color:#94a3b8;margin-bottom:15px">Sequence length impact on memory (drag slider):</div>
-<input type="range" id="seqSlider" min="1" max="128" value="8" style="width:300px;accent-color:#6366f1" oninput="updateSeqLen()">
+<input type="range" id="seqSlider" min="1" max="128" value="8" style="width:300px;accent-color:#00d46a" oninput="updateSeqLen()">
 <div style="display:flex;gap:30px;justify-content:center;margin-top:15px">
 <div style="text-align:center">
 <div style="font-size:.75rem;color:#94a3b8">Sequence Length</div>
-<div id="seqLen" style="font-size:1.3rem;font-weight:700;color:#a5b4fc">8K</div>
+<div id="seqLen" style="font-size:1.3rem;font-weight:700;color:#00d46a">8K</div>
 </div>
 <div style="text-align:center">
 <div style="font-size:.75rem;color:#94a3b8">Standard (O(N^2))</div>
@@ -370,7 +370,7 @@ Memory: O(N) -- 8K sequence = just the output matrix
 <div class="info-grid" style="margin-top:20px">
 <div class="card animate-in">
 <div style="font-size:1.5rem;margin-bottom:10px">1</div>
-<h4 style="color:#6366f1;margin-bottom:8px">Memory is the Bottleneck</h4>
+<h4 style="color:#00d46a;margin-bottom:8px">Memory is the Bottleneck</h4>
 <p style="font-size:.82rem;color:#94a3b8">GPU compute is rarely the bottleneck during inference. HBM bandwidth is. Every unnecessary memory access costs performance.</p>
 </div>
 <div class="card animate-in" style="animation-delay:.2s">

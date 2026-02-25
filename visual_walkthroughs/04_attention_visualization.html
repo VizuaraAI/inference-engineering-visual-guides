@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How Attention Works - Visual Walkthrough</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0a;--bg-card:#121212;--bg-card-hover:#1a1a1a;--border:#262626;--primary:#00d46a;--secondary:#00c8e6;--tertiary:#f59e0b;--success:#10b981;--text:#f2f2f2;--text-muted:#a3a3a3;--text-dim:#64748b;--danger:#ef4444}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;line-height:1.6;overflow-x:hidden}
+code,.mono{font-family:'JetBrains Mono',monospace}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.bg-grid{background-image:linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px);background-size:60px 60px}
+.bg-glow-1{position:fixed;top:15%;left:5%;width:600px;height:600px;background:radial-gradient(circle,rgba(0,212,106,0.08) 0%,transparent 70%);pointer-events:none;z-index:0}
+.bg-glow-2{position:fixed;bottom:10%;right:5%;width:500px;height:500px;background:radial-gradient(circle,rgba(0,200,230,0.06) 0%,transparent 70%);pointer-events:none;z-index:0}
+.progress-bar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--primary),var(--secondary));z-index:1000;transition:width .3s}
+.nav{position:fixed;top:0;left:0;right:0;background:rgba(10,10,10,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);z-index:999;padding:0 2rem}
+.nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:60px}
+.nav-title{font-weight:700;font-size:.9rem}.nav-title span{color:var(--primary)}
+.nav-dots{display:flex;gap:8px}
+.nav-dot{width:10px;height:10px;border-radius:50%;background:var(--border);cursor:pointer;transition:all .3s;border:none}
+.nav-dot.active{background:var(--primary);box-shadow:0 0 10px var(--primary)}.nav-dot:hover{background:var(--primary);transform:scale(1.2)}
+.section{min-height:100vh;padding:100px 2rem 60px;display:flex;align-items:center;justify-content:center;position:relative;z-index:1}
+.section-content{max-width:1100px;width:100%;margin:0 auto;opacity:0;transform:translateY(40px);transition:all .8s cubic-bezier(.16,1,.3,1)}
+.section-content.visible{opacity:1;transform:translateY(0)}
+h1{font-size:3.5rem;font-weight:800;line-height:1.1;margin-bottom:1rem;font-family:'Instrument Serif',serif;font-style:italic;font-weight:400}
+h2{font-size:2.5rem;font-weight:700;line-height:1.2;margin-bottom:1rem;font-family:'Instrument Serif',serif;font-style:italic;font-weight:400}
+h3{font-size:1.3rem;font-weight:600;margin-bottom:.75rem}
+.gradient-text{background:linear-gradient(135deg,#00d46a,#00c8e6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.subtitle{font-size:1.15rem;color:var(--text-muted);max-width:700px;margin-bottom:2rem}
+.badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:100px;font-size:.8rem;font-weight:500;border:1px solid rgba(0,212,106,0.3);background:rgba(0,212,106,0.1);color:var(--primary);margin-bottom:1.5rem}
+.badge .pulse{width:8px;height:8px;border-radius:50%;background:var(--primary);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.3)}}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:1.5rem;transition:all .3s}
+
+/* Sentence tokens */
+.sentence{display:flex;flex-wrap:wrap;gap:8px;margin:1.5rem 0;justify-content:center}
+.word{padding:10px 18px;border-radius:10px;font-size:1rem;font-weight:600;cursor:pointer;transition:all .3s;border:2px solid var(--border);background:var(--bg-card);position:relative;user-select:none}
+.word:hover{border-color:var(--primary);transform:translateY(-2px)}
+.word.selected{border-color:var(--secondary);background:rgba(34,211,238,0.1);box-shadow:0 0 20px rgba(34,211,238,0.2);color:var(--secondary)}
+.word.attending{border-color:var(--tertiary);background:rgba(245,158,11,0.1)}
+.word .attn-strength{position:absolute;top:-8px;right:-8px;width:24px;height:24px;border-radius:50%;background:var(--tertiary);color:var(--bg);font-size:.6rem;font-weight:700;display:none;align-items:center;justify-content:center}
+.word.attending .attn-strength{display:flex}
+
+/* Heatmap */
+.heatmap-container{margin:1.5rem 0;overflow-x:auto}
+.heatmap{display:inline-block;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--bg-card)}
+.heatmap-row{display:flex}
+.heatmap-cell{width:56px;height:44px;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:600;transition:all .3s;cursor:pointer;border:1px solid rgba(255,255,255,0.02);position:relative}
+.heatmap-cell:hover{outline:2px solid var(--secondary);z-index:5}
+.heatmap-label{width:80px;height:44px;display:flex;align-items:center;justify-content:flex-end;padding-right:10px;font-size:.72rem;font-weight:600;color:var(--text-muted);background:var(--bg-card)}
+.heatmap-header{width:56px;height:36px;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:600;color:var(--text-dim);background:var(--bg-card)}
+.heatmap-corner{width:80px;height:36px;background:var(--bg-card)}
+
+/* QKV matrices */
+.matrix-viz{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin:1.5rem 0}
+.matrix-card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:1.25rem;text-align:center;transition:all .4s}
+.matrix-card:hover{transform:translateY(-3px)}
+.matrix-card h4{font-size:1rem;margin-bottom:.5rem}
+.matrix-mini{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;padding:.5rem;background:var(--bg);border-radius:8px;margin:.5rem 0}
+.matrix-cell{height:20px;border-radius:3px;transition:all .5s;font-size:.5rem;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.5)}
+
+/* Math panel */
+.math-panel{background:#0d1117;border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin:1rem 0}
+.math-eq{font-size:1.1rem;text-align:center;padding:1rem;line-height:2}
+.math-step{padding:.75rem 1rem;border-radius:8px;margin:.5rem 0;font-size:.85rem;transition:all .3s;cursor:default}
+.math-step:hover{background:rgba(0,212,106,0.05)}
+.math-step.active{background:rgba(0,212,106,0.1);border-left:3px solid var(--primary)}
+
+/* Multi-head grid */
+.heads-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin:1.5rem 0}
+.head-card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:1rem;text-align:center;cursor:pointer;transition:all .3s}
+.head-card:hover,.head-card.active{border-color:var(--primary);transform:translateY(-2px)}
+.head-card.active{box-shadow:0 0 15px rgba(0,212,106,0.2)}
+.head-card h5{font-size:.8rem;margin-bottom:.5rem}
+.head-desc{font-size:.7rem;color:var(--text-muted)}
+.mini-heatmap{display:grid;grid-template-columns:repeat(5,1fr);gap:2px;margin:.5rem auto;width:fit-content}
+.mini-cell{width:12px;height:12px;border-radius:2px}
+
+/* Softmax visualization */
+.softmax-viz{display:flex;align-items:flex-end;gap:8px;height:150px;margin:1.5rem 0;justify-content:center}
+.softmax-bar{width:50px;border-radius:6px 6px 0 0;transition:height 1s cubic-bezier(.16,1,.3,1);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:6px;position:relative}
+.softmax-label{font-size:.65rem;font-weight:600;margin-top:8px;text-align:center;color:var(--text-muted)}
+.softmax-val{font-size:.7rem;font-weight:700;position:absolute;top:-20px}
+
+canvas#particles{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
+@media(max-width:768px){h1{font-size:2.2rem}h2{font-size:1.8rem}.section{padding:80px 1rem 40px}.matrix-viz{grid-template-columns:1fr}.heads-grid{grid-template-columns:repeat(2,1fr)}.heatmap-cell{width:40px;height:36px}}
+</style>
+</head>
+<body class="bg-grid">
+<div class="progress-bar" id="progressBar"></div>
+<div class="bg-glow-1"></div><div class="bg-glow-2"></div>
+<canvas id="particles"></canvas>
+
+<nav class="nav"><div class="nav-inner">
+  <div class="nav-title"><span>04</span> / How Attention Works</div>
+  <div class="nav-dots" id="navDots"></div>
+</div></nav>
+
+<!-- Section 1: Title -->
+<div class="section" id="section-0">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Visual Walkthrough</div>
+    <h1>How Attention<br><span class="gradient-text">Works</span></h1>
+    <p class="subtitle">The attention mechanism is what gives transformers their power. Explore how each token decides which other tokens to focus on, step by step.</p>
+    <div style="margin-top:2rem;padding:1.5rem;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;max-width:600px;">
+      <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:.5rem;">Example sentence:</div>
+      <div style="font-size:1.3rem;font-weight:600;color:var(--text);">"The cat sat on the mat because <span style="color:var(--secondary);">it</span> was tired"</div>
+      <div style="font-size:.82rem;color:var(--text-dim);margin-top:.5rem;">How does the model know "<span style="color:var(--secondary);">it</span>" refers to "<span style="color:var(--tertiary);">cat</span>"? Attention.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 2: QKV -->
+<div class="section" id="section-1">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Step 1</div>
+    <h2>Creating <span class="gradient-text">Q, K, V</span></h2>
+    <p class="subtitle">Each token embedding is projected into three vectors: Query, Key, and Value. These are the building blocks of attention.</p>
+
+    <div class="matrix-viz">
+      <div class="matrix-card" style="border-color:rgba(0,212,106,0.3);">
+        <h4 style="color:var(--primary);">Q (Query)</h4>
+        <p style="font-size:.78rem;color:var(--text-muted);">"What am I looking for?"</p>
+        <div class="matrix-mini" id="qMatrix"></div>
+        <div class="mono" style="font-size:.7rem;color:var(--text-dim);">Q = X @ W_q</div>
+      </div>
+      <div class="matrix-card" style="border-color:rgba(245,158,11,0.3);">
+        <h4 style="color:var(--tertiary);">K (Key)</h4>
+        <p style="font-size:.78rem;color:var(--text-muted);">"What do I contain?"</p>
+        <div class="matrix-mini" id="kMatrix"></div>
+        <div class="mono" style="font-size:.7rem;color:var(--text-dim);">K = X @ W_k</div>
+      </div>
+      <div class="matrix-card" style="border-color:rgba(16,185,129,0.3);">
+        <h4 style="color:var(--success);">V (Value)</h4>
+        <p style="font-size:.78rem;color:var(--text-muted);">"What information do I pass?"</p>
+        <div class="matrix-mini" id="vMatrix"></div>
+        <div class="mono" style="font-size:.7rem;color:var(--text-dim);">V = X @ W_v</div>
+      </div>
+    </div>
+
+    <div style="padding:1rem;background:rgba(0,212,106,0.05);border:1px solid rgba(0,212,106,0.2);border-radius:10px;">
+      <div style="font-size:.85rem;"><strong style="color:var(--primary);">Analogy:</strong> <span style="color:var(--text-muted);">Think of attention like a library. Each word has a <strong style="color:var(--primary);">Query</strong> (question it's asking), a <strong style="color:var(--tertiary);">Key</strong> (label that describes its content), and a <strong style="color:var(--success);">Value</strong> (the actual information). The Query is matched against all Keys to find the most relevant Values.</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 3: Attention Scores -->
+<div class="section" id="section-2">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Step 2</div>
+    <h2>Attention <span class="gradient-text">Heatmap</span></h2>
+    <p class="subtitle">Click any word to see what it attends to. The heatmap shows attention scores &mdash; brighter means stronger attention.</p>
+
+    <div class="sentence" id="sentenceTokens">
+      <div class="word" data-idx="0" onclick="selectWord(0)">The</div>
+      <div class="word" data-idx="1" onclick="selectWord(1)">cat</div>
+      <div class="word" data-idx="2" onclick="selectWord(2)">sat</div>
+      <div class="word" data-idx="3" onclick="selectWord(3)">on</div>
+      <div class="word" data-idx="4" onclick="selectWord(4)">the</div>
+      <div class="word" data-idx="5" onclick="selectWord(5)">mat</div>
+      <div class="word" data-idx="6" onclick="selectWord(6)">because</div>
+      <div class="word" data-idx="7" onclick="selectWord(7)">it</div>
+      <div class="word" data-idx="8" onclick="selectWord(8)">was</div>
+      <div class="word" data-idx="9" onclick="selectWord(9)">tired</div>
+    </div>
+
+    <div id="attnDescription" style="text-align:center;font-size:.9rem;color:var(--text-muted);min-height:2rem;margin-bottom:1rem;">Click a word above to see its attention pattern</div>
+
+    <div class="heatmap-container" style="text-align:center;">
+      <div class="heatmap" id="heatmap"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 4: Softmax -->
+<div class="section" id="section-3">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Step 3</div>
+    <h2>Softmax <span class="gradient-text">Normalization</span></h2>
+    <p class="subtitle">Raw attention scores (Q &middot; K) are converted to probabilities using softmax. This ensures all weights sum to 1.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;">
+      <div>
+        <h3 style="color:var(--tertiary);font-size:1rem;">Before Softmax (raw scores)</h3>
+        <div class="softmax-viz" id="rawScores">
+          <div><div class="softmax-bar" style="height:80px;background:rgba(245,158,11,0.4);"><span class="softmax-val" style="color:var(--tertiary);">3.2</span></div><div class="softmax-label">The</div></div>
+          <div><div class="softmax-bar" style="height:130px;background:rgba(245,158,11,0.6);"><span class="softmax-val" style="color:var(--tertiary);">5.1</span></div><div class="softmax-label">cat</div></div>
+          <div><div class="softmax-bar" style="height:50px;background:rgba(245,158,11,0.3);"><span class="softmax-val" style="color:var(--tertiary);">1.8</span></div><div class="softmax-label">sat</div></div>
+          <div><div class="softmax-bar" style="height:30px;background:rgba(245,158,11,0.2);"><span class="softmax-val" style="color:var(--tertiary);">0.9</span></div><div class="softmax-label">on</div></div>
+          <div><div class="softmax-bar" style="height:40px;background:rgba(245,158,11,0.25);"><span class="softmax-val" style="color:var(--tertiary);">1.3</span></div><div class="softmax-label">the</div></div>
+          <div><div class="softmax-bar" style="height:25px;background:rgba(245,158,11,0.15);"><span class="softmax-val" style="color:var(--tertiary);">0.5</span></div><div class="softmax-label">mat</div></div>
+          <div><div class="softmax-bar" style="height:60px;background:rgba(245,158,11,0.35);"><span class="softmax-val" style="color:var(--tertiary);">2.3</span></div><div class="softmax-label">because</div></div>
+          <div><div class="softmax-bar" style="height:45px;background:rgba(245,158,11,0.28);"><span class="softmax-val" style="color:var(--tertiary);">1.5</span></div><div class="softmax-label">was</div></div>
+          <div><div class="softmax-bar" style="height:70px;background:rgba(245,158,11,0.38);"><span class="softmax-val" style="color:var(--tertiary);">2.7</span></div><div class="softmax-label">tired</div></div>
+        </div>
+        <div style="text-align:center;font-size:.78rem;color:var(--text-dim);">Scores for "it" attending to each word</div>
+      </div>
+
+      <div>
+        <h3 style="color:var(--success);font-size:1rem;">After Softmax (probabilities)</h3>
+        <div class="softmax-viz" id="softmaxScores">
+          <div><div class="softmax-bar" style="height:15px;background:rgba(16,185,129,0.3);"><span class="softmax-val" style="color:var(--success);">.05</span></div><div class="softmax-label">The</div></div>
+          <div><div class="softmax-bar" style="height:120px;background:rgba(16,185,129,0.7);"><span class="softmax-val" style="color:var(--success);">.42</span></div><div class="softmax-label">cat</div></div>
+          <div><div class="softmax-bar" style="height:8px;background:rgba(16,185,129,0.2);"><span class="softmax-val" style="color:var(--success);">.02</span></div><div class="softmax-label">sat</div></div>
+          <div><div class="softmax-bar" style="height:4px;background:rgba(16,185,129,0.15);"><span class="softmax-val" style="color:var(--success);">.01</span></div><div class="softmax-label">on</div></div>
+          <div><div class="softmax-bar" style="height:6px;background:rgba(16,185,129,0.18);"><span class="softmax-val" style="color:var(--success);">.01</span></div><div class="softmax-label">the</div></div>
+          <div><div class="softmax-bar" style="height:3px;background:rgba(16,185,129,0.12);"><span class="softmax-val" style="color:var(--success);">.01</span></div><div class="softmax-label">mat</div></div>
+          <div><div class="softmax-bar" style="height:30px;background:rgba(16,185,129,0.4);"><span class="softmax-val" style="color:var(--success);">.10</span></div><div class="softmax-label">because</div></div>
+          <div><div class="softmax-bar" style="height:22px;background:rgba(16,185,129,0.35);"><span class="softmax-val" style="color:var(--success);">.08</span></div><div class="softmax-label">was</div></div>
+          <div><div class="softmax-bar" style="height:85px;background:rgba(16,185,129,0.55);"><span class="softmax-val" style="color:var(--success);">.30</span></div><div class="softmax-label">tired</div></div>
+        </div>
+        <div style="text-align:center;font-size:.78rem;color:var(--text-dim);">Probabilities sum to 1.0</div>
+      </div>
+    </div>
+
+    <div class="math-panel" style="margin-top:1.5rem;">
+      <div class="math-eq">
+        <span class="mono" style="color:var(--text);">Attention(Q, K, V) = </span>
+        <span class="mono" style="color:var(--success);">softmax</span>
+        <span class="mono" style="color:var(--text);">(</span>
+        <span class="mono" style="color:var(--primary);">Q</span>
+        <span class="mono" style="color:var(--text);"> &middot; </span>
+        <span class="mono" style="color:var(--tertiary);">K<sup>T</sup></span>
+        <span class="mono" style="color:var(--text);"> / </span>
+        <span class="mono" style="color:var(--secondary);">&radic;d<sub>k</sub></span>
+        <span class="mono" style="color:var(--text);">) &middot; </span>
+        <span class="mono" style="color:var(--success);">V</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 5: Multi-Head Attention -->
+<div class="section" id="section-4">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Step 4</div>
+    <h2>Multi-Head <span class="gradient-text">Attention</span></h2>
+    <p class="subtitle">Instead of one attention pattern, the model uses multiple "heads" that attend to different types of relationships. Click each head to see its specialization.</p>
+
+    <div class="heads-grid" id="headsGrid">
+      <div class="head-card active" data-head="0" onclick="selectHead(0)">
+        <h5 style="color:var(--primary);">Head 1: Coreference</h5>
+        <div class="mini-heatmap" id="miniHead0"></div>
+        <div class="head-desc">Resolves pronouns: "it" &rarr; "cat"</div>
+      </div>
+      <div class="head-card" data-head="1" onclick="selectHead(1)">
+        <h5 style="color:var(--secondary);">Head 2: Positional</h5>
+        <div class="mini-heatmap" id="miniHead1"></div>
+        <div class="head-desc">Attends to adjacent tokens</div>
+      </div>
+      <div class="head-card" data-head="2" onclick="selectHead(2)">
+        <h5 style="color:var(--tertiary);">Head 3: Syntactic</h5>
+        <div class="mini-heatmap" id="miniHead2"></div>
+        <div class="head-desc">Subject-verb-object relations</div>
+      </div>
+      <div class="head-card" data-head="3" onclick="selectHead(3)">
+        <h5 style="color:var(--success);">Head 4: Semantic</h5>
+        <div class="mini-heatmap" id="miniHead3"></div>
+        <div class="head-desc">Related concepts: "tired" &rarr; "sat"</div>
+      </div>
+    </div>
+
+    <div id="headDetail" style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin-top:1rem;">
+      <h3 style="color:var(--primary);font-size:1rem;" id="headTitle">Head 1: Coreference Resolution</h3>
+      <p style="font-size:.85rem;color:var(--text-muted);" id="headDesc">This head specializes in linking pronouns to their antecedents. When processing "it", this head strongly attends to "cat" because it has learned that pronouns typically refer to the most recent noun subject. This is a fundamental capability for language understanding.</p>
+    </div>
+
+    <div style="margin-top:1rem;padding:1rem;background:rgba(34,211,238,0.05);border:1px solid rgba(34,211,238,0.2);border-radius:10px;">
+      <span style="color:var(--secondary);font-weight:600;font-size:.85rem;">Why multiple heads?</span>
+      <span style="font-size:.82rem;color:var(--text-muted);"> Each head has its own Q, K, V weight matrices and learns to attend to different linguistic features. The outputs of all heads are concatenated and projected. Llama 3 70B has 64 query heads (8 KV heads via GQA).</span>
+    </div>
+  </div>
+</div>
+
+<!-- Section 6: Causal Masking -->
+<div class="section" id="section-5">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Step 5</div>
+    <h2>Causal <span class="gradient-text">Masking</span></h2>
+    <p class="subtitle">In autoregressive LLMs, each token can only attend to tokens that came before it (and itself). Future tokens are masked to -infinity before softmax.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;">
+      <div>
+        <h3 style="color:var(--danger);font-size:1rem;">Causal Mask</h3>
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:1rem;overflow-x:auto;">
+          <div id="causalMask" style="display:inline-block;"></div>
+        </div>
+        <div style="font-size:.78rem;color:var(--text-muted);margin-top:.75rem;display:flex;gap:1rem;justify-content:center;">
+          <span><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:rgba(16,185,129,0.5);vertical-align:middle;margin-right:4px;"></span> Allowed</span>
+          <span><span style="display:inline-block;width:12px;height:12px;border-radius:2px;background:rgba(239,68,68,0.15);vertical-align:middle;margin-right:4px;"></span> Masked (-inf)</span>
+        </div>
+      </div>
+      <div>
+        <h3 style="color:var(--secondary);font-size:1rem;">Why Causal Masking?</h3>
+        <div style="display:flex;flex-direction:column;gap:.75rem;">
+          <div class="card" style="padding:1rem;">
+            <div style="font-size:.85rem;font-weight:600;color:var(--primary);">Autoregressive generation</div>
+            <p style="font-size:.78rem;color:var(--text-muted);">The model predicts the next token. It must not see future tokens during training or inference.</p>
+          </div>
+          <div class="card" style="padding:1rem;">
+            <div style="font-size:.85rem;font-weight:600;color:var(--secondary);">Parallel training</div>
+            <p style="font-size:.78rem;color:var(--text-muted);">With masking, all positions can be computed in parallel during training (teacher forcing).</p>
+          </div>
+          <div class="card" style="padding:1rem;">
+            <div style="font-size:.85rem;font-weight:600;color:var(--tertiary);">KV cache compatible</div>
+            <p style="font-size:.78rem;color:var(--text-muted);">During decode, only the new token's Q is needed. Past K,V are cached and reused.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 7: GQA -->
+<div class="section" id="section-6">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Optimization</div>
+    <h2>Grouped-Query <span class="gradient-text">Attention</span></h2>
+    <p class="subtitle">GQA reduces KV cache size by sharing Key/Value heads across multiple Query heads, enabling longer contexts with less memory.</p>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;">
+      <div class="card" style="text-align:center;" onmouseenter="this.style.borderColor='var(--danger)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <h3 style="color:var(--danger);font-size:.95rem;">Multi-Head (MHA)</h3>
+        <div style="margin:1rem 0;">
+          <div style="display:flex;justify-content:center;gap:4px;margin-bottom:4px;">
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(0,212,106,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">Q</div>
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(0,212,106,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">Q</div>
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(0,212,106,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">Q</div>
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(0,212,106,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">Q</div>
+          </div>
+          <div style="display:flex;justify-content:center;gap:4px;margin-bottom:4px;">
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(245,158,11,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">K</div>
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(245,158,11,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">K</div>
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(245,158,11,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">K</div>
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(245,158,11,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">K</div>
+          </div>
+          <div style="display:flex;justify-content:center;gap:4px;">
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(16,185,129,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">V</div>
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(16,185,129,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">V</div>
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(16,185,129,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">V</div>
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(16,185,129,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">V</div>
+          </div>
+        </div>
+        <div style="font-size:.78rem;color:var(--text-muted);">1 KV per Q head</div>
+        <div class="mono" style="font-size:.7rem;color:var(--text-dim);">KV cache: 100%</div>
+      </div>
+
+      <div class="card" style="text-align:center;border-color:rgba(0,212,106,0.3);" onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='rgba(0,212,106,0.3)'">
+        <h3 style="color:var(--primary);font-size:.95rem;">Grouped-Query (GQA)</h3>
+        <div style="margin:1rem 0;">
+          <div style="display:flex;justify-content:center;gap:4px;margin-bottom:4px;">
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(0,212,106,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">Q</div>
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(0,212,106,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">Q</div>
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(0,212,106,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">Q</div>
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(0,212,106,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">Q</div>
+          </div>
+          <div style="display:flex;justify-content:center;gap:4px;margin-bottom:4px;">
+            <div style="width:44px;height:20px;border-radius:4px;background:rgba(245,158,11,0.5);font-size:.5rem;display:flex;align-items:center;justify-content:center;">K (shared)</div>
+            <div style="width:44px;height:20px;border-radius:4px;background:rgba(245,158,11,0.5);font-size:.5rem;display:flex;align-items:center;justify-content:center;">K (shared)</div>
+          </div>
+          <div style="display:flex;justify-content:center;gap:4px;">
+            <div style="width:44px;height:20px;border-radius:4px;background:rgba(16,185,129,0.5);font-size:.5rem;display:flex;align-items:center;justify-content:center;">V (shared)</div>
+            <div style="width:44px;height:20px;border-radius:4px;background:rgba(16,185,129,0.5);font-size:.5rem;display:flex;align-items:center;justify-content:center;">V (shared)</div>
+          </div>
+        </div>
+        <div style="font-size:.78rem;color:var(--text-muted);">Groups of Q share KV</div>
+        <div class="mono" style="font-size:.7rem;color:var(--primary);font-weight:600;">KV cache: 25%</div>
+      </div>
+
+      <div class="card" style="text-align:center;" onmouseenter="this.style.borderColor='var(--success)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <h3 style="color:var(--success);font-size:.95rem;">Multi-Query (MQA)</h3>
+        <div style="margin:1rem 0;">
+          <div style="display:flex;justify-content:center;gap:4px;margin-bottom:4px;">
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(0,212,106,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">Q</div>
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(0,212,106,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">Q</div>
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(0,212,106,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">Q</div>
+            <div style="width:20px;height:20px;border-radius:4px;background:rgba(0,212,106,0.4);font-size:.5rem;display:flex;align-items:center;justify-content:center;">Q</div>
+          </div>
+          <div style="display:flex;justify-content:center;gap:4px;margin-bottom:4px;">
+            <div style="width:92px;height:20px;border-radius:4px;background:rgba(245,158,11,0.5);font-size:.5rem;display:flex;align-items:center;justify-content:center;">K (1 shared)</div>
+          </div>
+          <div style="display:flex;justify-content:center;gap:4px;">
+            <div style="width:92px;height:20px;border-radius:4px;background:rgba(16,185,129,0.5);font-size:.5rem;display:flex;align-items:center;justify-content:center;">V (1 shared)</div>
+          </div>
+        </div>
+        <div style="font-size:.78rem;color:var(--text-muted);">All Q share 1 KV</div>
+        <div class="mono" style="font-size:.7rem;color:var(--text-dim);">KV cache: 6.25%</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 8: Summary -->
+<div class="section" id="section-7">
+  <div class="section-content" style="text-align:center;">
+    <div class="badge"><span class="pulse"></span> Summary</div>
+    <h2>Attention <span class="gradient-text">Decoded</span></h2>
+    <div style="display:inline-block;text-align:left;background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:2rem;max-width:700px;width:100%;margin-top:1rem;">
+      <div style="display:flex;flex-direction:column;gap:.75rem;">
+        <div style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;border-radius:8px;background:rgba(0,212,106,0.05);border-left:3px solid var(--primary);">
+          <span style="font-weight:700;color:var(--primary);min-width:20px;">1</span>
+          <span style="color:var(--text-muted);font-size:.9rem;"><strong style="color:var(--text);">Project to Q, K, V</strong> &mdash; each token gets query, key, and value vectors</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;border-radius:8px;background:rgba(245,158,11,0.05);border-left:3px solid var(--tertiary);">
+          <span style="font-weight:700;color:var(--tertiary);min-width:20px;">2</span>
+          <span style="color:var(--text-muted);font-size:.9rem;"><strong style="color:var(--text);">Compute scores</strong> &mdash; dot product of Q and K, scaled by sqrt(d_k)</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;border-radius:8px;background:rgba(239,68,68,0.05);border-left:3px solid var(--danger);">
+          <span style="font-weight:700;color:var(--danger);min-width:20px;">3</span>
+          <span style="color:var(--text-muted);font-size:.9rem;"><strong style="color:var(--text);">Apply causal mask</strong> &mdash; prevent attending to future tokens</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;border-radius:8px;background:rgba(16,185,129,0.05);border-left:3px solid var(--success);">
+          <span style="font-weight:700;color:var(--success);min-width:20px;">4</span>
+          <span style="color:var(--text-muted);font-size:.9rem;"><strong style="color:var(--text);">Softmax + aggregate</strong> &mdash; normalize scores and compute weighted sum of values</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;border-radius:8px;background:rgba(34,211,238,0.05);border-left:3px solid var(--secondary);">
+          <span style="font-weight:700;color:var(--secondary);min-width:20px;">5</span>
+          <span style="color:var(--text-muted);font-size:.9rem;"><strong style="color:var(--text);">Multi-head concat</strong> &mdash; concatenate all heads and project through output layer</span>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:2rem;display:flex;gap:1rem;justify-content:center;">
+      <a href="03_prefill_vs_decode.html" style="color:var(--text-dim);text-decoration:none;font-size:.85rem;">&larr; Prefill vs Decode</a>
+      <a href="05_mixture_of_experts.html" style="color:var(--primary);text-decoration:none;font-size:.85rem;font-weight:600;">Mixture of Experts &rarr;</a>
+    </div>
+  </div>
+</div>
+
+<script>
+// Navigation
+const sections=document.querySelectorAll('.section');const navDotsContainer=document.getElementById('navDots');const progressBar=document.getElementById('progressBar');
+sections.forEach((_,i)=>{const d=document.createElement('button');d.className='nav-dot';d.onclick=()=>sections[i].scrollIntoView({behavior:'smooth'});navDotsContainer.appendChild(d)});
+const navDots=document.querySelectorAll('.nav-dot');
+const observer=new IntersectionObserver(entries=>{entries.forEach(entry=>{if(entry.isIntersecting){entry.target.querySelector('.section-content').classList.add('visible');const idx=Array.from(sections).indexOf(entry.target);navDots.forEach((d,i)=>d.classList.toggle('active',i===idx))}})},{threshold:.25});
+sections.forEach(s=>observer.observe(s));
+window.addEventListener('scroll',()=>{progressBar.style.width=(window.scrollY/(document.documentElement.scrollHeight-window.innerHeight))*100+'%'});
+
+const words = ['The','cat','sat','on','the','mat','because','it','was','tired'];
+
+// Attention patterns (simulated)
+const attentionData = [
+  [0.6, 0.1, 0.05, 0.05, 0.05, 0.05, 0.03, 0.03, 0.02, 0.01], // The
+  [0.15, 0.5, 0.1, 0.05, 0.05, 0.05, 0.03, 0.03, 0.02, 0.02],  // cat
+  [0.1, 0.3, 0.3, 0.05, 0.05, 0.1, 0.03, 0.03, 0.02, 0.02],    // sat
+  [0.05, 0.1, 0.3, 0.2, 0.15, 0.1, 0.03, 0.03, 0.02, 0.02],    // on
+  [0.15, 0.05, 0.05, 0.15, 0.3, 0.2, 0.03, 0.03, 0.02, 0.02],  // the
+  [0.05, 0.1, 0.15, 0.15, 0.2, 0.25, 0.03, 0.03, 0.02, 0.02],  // mat
+  [0.05, 0.15, 0.1, 0.05, 0.05, 0.1, 0.35, 0.05, 0.05, 0.05],  // because
+  [0.05, 0.42, 0.05, 0.02, 0.01, 0.01, 0.1, 0.12, 0.08, 0.14], // it
+  [0.02, 0.1, 0.15, 0.02, 0.02, 0.02, 0.1, 0.2, 0.25, 0.12],   // was
+  [0.02, 0.15, 0.1, 0.02, 0.02, 0.05, 0.1, 0.15, 0.15, 0.24],  // tired
+];
+
+// Build heatmap
+function buildHeatmap() {
+  const container = document.getElementById('heatmap');
+  let html = '<div class="heatmap-row"><div class="heatmap-corner"></div>';
+  words.forEach(w => { html += `<div class="heatmap-header">${w}</div>`; });
+  html += '</div>';
+  for (let i = 0; i < words.length; i++) {
+    html += `<div class="heatmap-row"><div class="heatmap-label">${words[i]}</div>`;
+    for (let j = 0; j < words.length; j++) {
+      const val = attentionData[i][j];
+      const r = Math.round(99 + val * 156);
+      const g = Math.round(102 + val * 109);
+      const b = Math.round(241);
+      const a = 0.1 + val * 0.8;
+      html += `<div class="heatmap-cell" style="background:rgba(${r},${g},${b},${a});color:rgba(255,255,255,${0.3+val*0.7})" data-row="${i}" data-col="${j}" onclick="highlightCell(${i},${j})">${val.toFixed(2)}</div>`;
+    }
+    html += '</div>';
+  }
+  container.innerHTML = html;
+}
+buildHeatmap();
+
+function selectWord(idx) {
+  document.querySelectorAll('.word').forEach((w,i) => {
+    w.classList.remove('selected','attending');
+    const s = w.querySelector('.attn-strength');
+    if (s) s.remove();
+  });
+  document.querySelectorAll('.word')[idx].classList.add('selected');
+  const desc = document.getElementById('attnDescription');
+
+  attentionData[idx].forEach((val, j) => {
+    if (j !== idx && val > 0.08) {
+      const wordEl = document.querySelectorAll('.word')[j];
+      wordEl.classList.add('attending');
+      const span = document.createElement('span');
+      span.className = 'attn-strength';
+      span.textContent = Math.round(val * 100);
+      span.style.display = 'flex';
+      wordEl.appendChild(span);
+    }
+  });
+
+  if (idx === 7) {
+    desc.innerHTML = '"<span style="color:var(--secondary)">it</span>" attends most strongly to "<span style="color:var(--tertiary)">cat</span>" (42%) -- the model learned coreference resolution!';
+  } else {
+    const topIdx = attentionData[idx].indexOf(Math.max(...attentionData[idx]));
+    desc.innerHTML = `"<span style="color:var(--secondary)">${words[idx]}</span>" attends most strongly to "<span style="color:var(--tertiary)">${words[topIdx]}</span>" (${Math.round(attentionData[idx][topIdx]*100)}%)`;
+  }
+
+  // Highlight heatmap row
+  document.querySelectorAll('.heatmap-cell').forEach(c => c.style.outline = 'none');
+  document.querySelectorAll(`.heatmap-cell[data-row="${idx}"]`).forEach(c => {
+    c.style.outline = '2px solid var(--secondary)';
+  });
+}
+
+function highlightCell(row, col) {
+  selectWord(row);
+}
+
+// QKV matrix visualization
+function buildMatrices() {
+  ['qMatrix','kMatrix','vMatrix'].forEach((id,mi) => {
+    const el = document.getElementById(id);
+    const colors = ['0,212,106','245,158,11','16,185,129'];
+    let html = '';
+    for (let i = 0; i < 16; i++) {
+      const val = Math.random();
+      html += `<div class="matrix-cell" style="background:rgba(${colors[mi]},${0.1+val*0.6});">${val.toFixed(1)}</div>`;
+    }
+    el.innerHTML = html;
+  });
+}
+buildMatrices();
+
+// Multi-head attention patterns
+const headPatterns = [
+  {title:'Head 1: Coreference Resolution',desc:'This head specializes in linking pronouns to their antecedents. When processing "it", this head strongly attends to "cat" because it has learned that pronouns typically refer to the most recent noun subject.',
+   pattern:[[.8,.1,.05,.02,.03],[.1,.7,.1,.05,.05],[.05,.3,.4,.15,.1],[.02,.05,.15,.4,.38],[.03,.05,.1,.38,.44]]},
+  {title:'Head 2: Positional / Local Context',desc:'This head attends primarily to immediately adjacent tokens. It captures local n-gram patterns and word ordering, functioning like a learned bigram/trigram model.',
+   pattern:[[.5,.3,.1,.05,.05],[.3,.3,.25,.1,.05],[.1,.25,.3,.25,.1],[.05,.1,.25,.3,.3],[.05,.05,.1,.3,.5]]},
+  {title:'Head 3: Syntactic Structure',desc:'This head captures grammatical relationships like subject-verb-object patterns. It helps the model understand sentence structure independent of specific word meanings.',
+   pattern:[[.4,.05,.35,.05,.15],[.05,.5,.05,.3,.1],[.35,.05,.3,.1,.2],[.05,.3,.1,.3,.25],[.15,.1,.2,.25,.3]]},
+  {title:'Head 4: Semantic Similarity',desc:'This head attends to semantically related words. "tired" attends to "sat" and "because" since they form a causal semantic chain. It captures meaning beyond syntax.',
+   pattern:[[.3,.2,.2,.15,.15],[.2,.25,.2,.15,.2],[.2,.2,.2,.2,.2],[.15,.15,.2,.25,.25],[.15,.2,.2,.25,.2]]}
+];
+
+function buildMiniHeatmaps() {
+  headPatterns.forEach((h,hi) => {
+    const el = document.getElementById('miniHead'+hi);
+    const colors = ['0,212,106','34,211,238','245,158,11','16,185,129'];
+    let html = '';
+    for (let i = 0; i < 5; i++) {
+      for (let j = 0; j < 5; j++) {
+        html += `<div class="mini-cell" style="background:rgba(${colors[hi]},${0.05+h.pattern[i][j]*0.9})"></div>`;
+      }
+    }
+    el.innerHTML = html;
+  });
+}
+buildMiniHeatmaps();
+
+function selectHead(idx) {
+  document.querySelectorAll('.head-card').forEach((c,i) => c.classList.toggle('active', i===idx));
+  document.getElementById('headTitle').textContent = headPatterns[idx].title;
+  document.getElementById('headTitle').style.color = ['var(--primary)','var(--secondary)','var(--tertiary)','var(--success)'][idx];
+  document.getElementById('headDesc').textContent = headPatterns[idx].desc;
+}
+
+// Causal mask
+function buildCausalMask() {
+  const el = document.getElementById('causalMask');
+  const shortWords = words.slice(0, 7);
+  let html = '<div style="display:flex;"><div style="width:60px;height:28px;"></div>';
+  shortWords.forEach(w => html += `<div style="width:40px;height:28px;display:flex;align-items:center;justify-content:center;font-size:.6rem;color:var(--text-dim);font-weight:600;">${w}</div>`);
+  html += '</div>';
+  shortWords.forEach((w,i) => {
+    html += `<div style="display:flex;"><div style="width:60px;height:32px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;font-size:.65rem;color:var(--text-muted);font-weight:600;">${w}</div>`;
+    shortWords.forEach((_,j) => {
+      const allowed = j <= i;
+      html += `<div style="width:40px;height:32px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,0.03);border-radius:3px;font-size:.55rem;font-weight:600;${allowed?'background:rgba(16,185,129,0.15);color:rgba(16,185,129,0.8);':'background:rgba(239,68,68,0.05);color:rgba(239,68,68,0.3);'}">${allowed?'1':'-inf'}</div>`;
+    });
+    html += '</div>';
+  });
+  el.innerHTML = html;
+}
+buildCausalMask();
+
+// Particles
+const canvas=document.getElementById('particles');const ctx=canvas.getContext('2d');let particles=[];
+function resizeCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight}
+resizeCanvas();window.addEventListener('resize',resizeCanvas);
+class Particle{constructor(){this.reset()}reset(){this.x=Math.random()*canvas.width;this.y=Math.random()*canvas.height;this.size=Math.random()*1.5+0.5;this.speedX=(Math.random()-0.5)*0.25;this.speedY=(Math.random()-0.5)*0.25;this.opacity=Math.random()*0.2+0.05;const c=['0,212,106','34,211,238','245,158,11'];this.color=c[Math.floor(Math.random()*c.length)]}update(){this.x+=this.speedX;this.y+=this.speedY;if(this.x<0||this.x>canvas.width||this.y<0||this.y>canvas.height)this.reset()}draw(){ctx.beginPath();ctx.arc(this.x,this.y,this.size,0,Math.PI*2);ctx.fillStyle=`rgba(${this.color},${this.opacity})`;ctx.fill()}}
+for(let i=0;i<35;i++)particles.push(new Particle());
+function animP(){ctx.clearRect(0,0,canvas.width,canvas.height);particles.forEach(p=>{p.update();p.draw()});requestAnimationFrame(animP)}animP();
+setTimeout(()=>{document.querySelector('#section-0 .section-content').classList.add('visible')},100);
+</script>
+</body>
+</html>

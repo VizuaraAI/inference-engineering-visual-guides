@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compute vs Memory Bound | Inference Engineering</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a;
+  --bg-card: #121212;
+  --bg-card-hover: #1a1a1a;
+  --border: #262626;
+  --primary: #00d46a;
+  --secondary: #00c8e6;
+  --tertiary: #a855f7;
+  --success: #10b981;
+  --text: #f2f2f2;
+  --text-muted: #a3a3a3;
+  --text-dim: #737373;
+  --danger: #ef4444;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow-x: hidden;
+  line-height: 1.6;
+}
+code, .mono { font-family: 'JetBrains Mono', monospace; }
+h1, h2 { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; }
+
+.gradient-text {
+  background: linear-gradient(135deg, #00d46a, #00c8e6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.badge {
+  border: 1px solid rgba(0,212,106,0.3);
+  background: rgba(0,212,106,0.1);
+  color: var(--primary);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.bg-grid {
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  z-index: 0; pointer-events: none;
+}
+
+.glow-orb { position: fixed; border-radius: 50%; filter: blur(80px); pointer-events: none; z-index: 0; }
+.glow-orb.primary { width: 600px; height: 600px; background: rgba(0,212,106,0.08); top: -200px; left: -200px; }
+.glow-orb.secondary { width: 500px; height: 500px; background: rgba(0,200,230,0.06); bottom: -150px; right: -150px; }
+
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+  background: rgba(10,10,10,0.85); backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 2rem; height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+nav .nav-title { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.2rem; }
+.nav-dots { display: flex; gap: 8px; }
+.nav-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--border); cursor: pointer; transition: all 0.3s;
+}
+.nav-dot.active { background: var(--primary); box-shadow: 0 0 10px rgba(0,212,106,0.5); }
+
+.progress-bar {
+  position: fixed; top: 60px; left: 0; height: 3px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  z-index: 1001; transition: width 0.3s;
+}
+
+section {
+  min-height: 100vh; padding: 100px 2rem 60px;
+  position: relative; z-index: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+
+.section-inner {
+  max-width: 1200px; width: 100%;
+  opacity: 0; transform: translateY(40px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+.section-inner.visible { opacity: 1; transform: translateY(0); }
+
+.section-desc { color: var(--text-muted); font-size: 1.1rem; max-width: 700px; margin-bottom: 2rem; }
+
+h2 { font-size: 2.8rem; margin-bottom: 1rem; line-height: 1.2; }
+
+.card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 16px; padding: 2rem; transition: all 0.3s ease;
+}
+.card:hover {
+  background: var(--bg-card-hover);
+  box-shadow: 0 0 20px rgba(0,212,106,0.15);
+  border-color: rgba(0,212,106,0.3);
+}
+
+.metrics-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem; margin: 2rem 0;
+}
+.metric-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.25rem; text-align: center; transition: all 0.3s;
+}
+.metric-card:hover { border-color: rgba(0,212,106,0.3); box-shadow: 0 0 15px rgba(0,212,106,0.1); }
+.metric-val { font-size: 1.8rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.metric-val.primary { color: var(--primary); }
+.metric-val.secondary { color: var(--secondary); }
+.metric-val.tertiary { color: var(--tertiary); }
+.metric-label { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+.info-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem; margin: 2rem 0;
+}
+
+/* Roofline chart */
+.roofline-container {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2rem;
+  margin: 2rem 0;
+}
+
+.roofline-canvas-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+canvas#rooflineChart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.roofline-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+  justify-content: center;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+/* Sliders */
+.slider-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.slider-container {
+  padding: 1.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.slider-label {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 0.75rem;
+}
+.slider-label span { font-size: 0.9rem; font-weight: 500; }
+.slider-label .value { font-family: 'JetBrains Mono', monospace; color: var(--primary); font-weight: 600; }
+
+input[type="range"] {
+  width: 100%; -webkit-appearance: none; height: 6px;
+  background: var(--border); border-radius: 3px; outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 20px; height: 20px;
+  background: var(--primary); border-radius: 50%; cursor: pointer;
+  box-shadow: 0 0 10px rgba(0,212,106,0.4);
+}
+
+/* Operation cards */
+.op-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.op-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+
+.op-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 3px;
+  background: var(--border);
+  transition: background 0.3s;
+}
+
+.op-card.compute-bound::before { background: var(--primary); }
+.op-card.memory-bound::before { background: var(--danger); }
+
+.op-card:hover {
+  border-color: rgba(0,212,106,0.3);
+  box-shadow: 0 0 15px rgba(0,212,106,0.1);
+}
+
+.op-card.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 20px rgba(0,212,106,0.2);
+}
+
+.op-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.5rem; }
+.op-type {
+  font-size: 0.75rem; font-family: 'JetBrains Mono', monospace;
+  padding: 2px 8px; border-radius: 4px; display: inline-block;
+  margin-bottom: 0.5rem;
+}
+.op-type.compute { background: rgba(0,212,106,0.15); color: var(--primary); }
+.op-type.memory { background: rgba(239,68,68,0.15); color: var(--danger); }
+.op-stat { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem; }
+.op-stat .val { color: var(--secondary); font-family: 'JetBrains Mono', monospace; }
+
+/* Bar chart */
+.bar-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.bar-label {
+  min-width: 140px;
+  font-size: 0.85rem;
+  text-align: right;
+  color: var(--text-muted);
+}
+
+.bar-track {
+  flex: 1;
+  height: 28px;
+  background: var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 1.5s ease;
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+  font-size: 0.75rem;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--bg);
+  font-weight: 600;
+}
+
+/* Toggle buttons */
+.toggle-group {
+  display: flex;
+  gap: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  display: inline-flex;
+}
+
+.toggle-btn {
+  padding: 8px 20px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.toggle-btn.active {
+  background: var(--primary);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+/* Intensity meter */
+.intensity-meter {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.intensity-bar-wrap {
+  position: relative;
+  height: 40px;
+  background: var(--border);
+  border-radius: 8px;
+  overflow: visible;
+  margin: 1rem 0;
+}
+
+.intensity-gradient {
+  height: 100%;
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--danger), #f59e0b, var(--primary));
+}
+
+.intensity-marker {
+  position: absolute;
+  top: -8px;
+  width: 4px;
+  height: 56px;
+  background: white;
+  border-radius: 2px;
+  transition: left 0.5s ease;
+  box-shadow: 0 0 10px rgba(255,255,255,0.3);
+}
+
+.intensity-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.ridge-label {
+  position: absolute;
+  top: -30px;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+/* Tooltip */
+.tooltip {
+  position: absolute;
+  background: var(--bg-card);
+  border: 1px solid var(--primary);
+  border-radius: 8px;
+  padding: 0.75rem;
+  font-size: 0.8rem;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  max-width: 250px;
+}
+.tooltip.show { opacity: 1; }
+
+@media (max-width: 768px) {
+  h2 { font-size: 2rem; }
+  section { padding: 80px 1rem 40px; }
+  .slider-row { grid-template-columns: 1fr; }
+  canvas#rooflineChart { height: 300px; }
+}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="glow-orb primary"></div>
+<div class="glow-orb secondary"></div>
+
+<nav>
+  <div class="nav-title">Compute vs Memory Bound</div>
+  <div class="nav-dots">
+    <div class="nav-dot active" data-section="0"></div>
+    <div class="nav-dot" data-section="1"></div>
+    <div class="nav-dot" data-section="2"></div>
+    <div class="nav-dot" data-section="3"></div>
+    <div class="nav-dot" data-section="4"></div>
+    <div class="nav-dot" data-section="5"></div>
+  </div>
+</nav>
+<div class="progress-bar" id="progressBar"></div>
+
+<!-- Section 0: Hero -->
+<section id="sec0">
+  <div class="section-inner">
+    <span class="badge">MODULE 07</span>
+    <h2><span class="gradient-text">Compute vs Memory Bound</span></h2>
+    <p class="section-desc">Understanding the Roofline Model -- why some operations are limited by compute (FLOPS) and others by memory bandwidth (bytes/sec). The key to optimizing GPU inference.</p>
+    <div class="metrics-row">
+      <div class="metric-card">
+        <div class="metric-val primary">989</div>
+        <div class="metric-label">H100 TFLOPS (FP16)</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val secondary">3.35</div>
+        <div class="metric-label">TB/s HBM Bandwidth</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val tertiary">295</div>
+        <div class="metric-label">Ridge Point (FLOP/byte)</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val primary">80</div>
+        <div class="metric-label">GB HBM3 Memory</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 1: Roofline Model -->
+<section id="sec1">
+  <div class="section-inner">
+    <span class="badge">ROOFLINE MODEL</span>
+    <h2>The <span class="gradient-text">Roofline Chart</span></h2>
+    <p class="section-desc">The roofline model shows achievable performance as a function of arithmetic intensity (FLOPs per byte of memory accessed).</p>
+    <div class="slider-row">
+      <div class="slider-container">
+        <div class="slider-label">
+          <span>Batch Size</span>
+          <span class="value" id="batchValue">1</span>
+        </div>
+        <input type="range" id="batchSlider" min="0" max="8" value="0">
+        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-dim);margin-top:4px;">
+          <span>1</span><span>2</span><span>4</span><span>8</span><span>16</span><span>32</span><span>64</span><span>128</span><span>256</span>
+        </div>
+      </div>
+      <div class="slider-container">
+        <div class="slider-label">
+          <span>Sequence Length</span>
+          <span class="value" id="seqValue">128</span>
+        </div>
+        <input type="range" id="seqSlider" min="0" max="7" value="0">
+        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-dim);margin-top:4px;">
+          <span>128</span><span>256</span><span>512</span><span>1K</span><span>2K</span><span>4K</span><span>8K</span><span>16K</span>
+        </div>
+      </div>
+    </div>
+    <div class="roofline-container">
+      <div class="roofline-canvas-wrap">
+        <canvas id="rooflineChart" width="900" height="500"></canvas>
+      </div>
+      <div class="roofline-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--primary);"></div> Compute Roof</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--danger);"></div> Memory Bandwidth Roof</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--secondary);"></div> MatMul / Linear</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--tertiary);"></div> Attention</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;"></div> Softmax / LayerNorm</div>
+      </div>
+    </div>
+    <div id="rooflineDetail" class="card">
+      <p style="color:var(--text-dim);">Adjust batch size and sequence length to see how operations move on the roofline chart.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Section 2: Arithmetic Intensity -->
+<section id="sec2">
+  <div class="section-inner">
+    <span class="badge">KEY CONCEPT</span>
+    <h2><span class="gradient-text">Arithmetic Intensity</span></h2>
+    <p class="section-desc">Arithmetic intensity = FLOPs / Bytes accessed. This ratio determines whether an operation is compute-bound or memory-bound.</p>
+    <div class="intensity-meter">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+        <span style="font-weight:600;">Operation Intensity Spectrum</span>
+        <span class="mono" style="color:var(--primary);font-size:0.85rem;">Ridge Point: <span id="ridgeVal">295</span> FLOP/byte</span>
+      </div>
+      <div class="intensity-bar-wrap">
+        <div class="intensity-gradient"></div>
+        <div class="intensity-marker" id="intensityMarker" style="left:15%;"></div>
+        <div class="ridge-label" style="left:50%;">Ridge Point</div>
+      </div>
+      <div class="intensity-labels">
+        <span>0.1 FLOP/byte</span>
+        <span>Memory Bound</span>
+        <span>295 FLOP/byte</span>
+        <span>Compute Bound</span>
+        <span>10K FLOP/byte</span>
+      </div>
+    </div>
+    <div class="op-grid" id="opGrid">
+      <div class="op-card memory-bound" data-op="softmax" data-intensity="2">
+        <div class="op-name">Softmax</div>
+        <div class="op-type memory">MEMORY BOUND</div>
+        <div class="op-stat">Intensity: <span class="val">~2 FLOP/byte</span></div>
+        <div class="op-stat">Reads entire row, writes same size</div>
+      </div>
+      <div class="op-card memory-bound" data-op="layernorm" data-intensity="5">
+        <div class="op-name">LayerNorm</div>
+        <div class="op-type memory">MEMORY BOUND</div>
+        <div class="op-stat">Intensity: <span class="val">~5 FLOP/byte</span></div>
+        <div class="op-stat">Element-wise with reduction</div>
+      </div>
+      <div class="op-card memory-bound" data-op="gelu" data-intensity="1">
+        <div class="op-name">GELU / ReLU</div>
+        <div class="op-type memory">MEMORY BOUND</div>
+        <div class="op-stat">Intensity: <span class="val">~1 FLOP/byte</span></div>
+        <div class="op-stat">1 op per element loaded</div>
+      </div>
+      <div class="op-card memory-bound" data-op="attention" data-intensity="10">
+        <div class="op-name">Attention (BS=1)</div>
+        <div class="op-type memory">MEMORY BOUND</div>
+        <div class="op-stat">Intensity: <span class="val">~10 FLOP/byte</span></div>
+        <div class="op-stat">KV cache reads dominate</div>
+      </div>
+      <div class="op-card compute-bound" data-op="matmul" data-intensity="512">
+        <div class="op-name">MatMul (Large)</div>
+        <div class="op-type compute">COMPUTE BOUND</div>
+        <div class="op-stat">Intensity: <span class="val">~512 FLOP/byte</span></div>
+        <div class="op-stat">O(n^3) compute, O(n^2) memory</div>
+      </div>
+      <div class="op-card compute-bound" data-op="conv" data-intensity="800">
+        <div class="op-name">Conv2D (3x3)</div>
+        <div class="op-type compute">COMPUTE BOUND</div>
+        <div class="op-stat">Intensity: <span class="val">~800 FLOP/byte</span></div>
+        <div class="op-stat">High reuse of filter weights</div>
+      </div>
+      <div class="op-card compute-bound" data-op="linear_batched" data-intensity="350">
+        <div class="op-name">Linear (BS=64)</div>
+        <div class="op-type compute">COMPUTE BOUND</div>
+        <div class="op-stat">Intensity: <span class="val">~350 FLOP/byte</span></div>
+        <div class="op-stat">Batch amortizes weight loading</div>
+      </div>
+      <div class="op-card memory-bound" data-op="linear_single" data-intensity="8">
+        <div class="op-name">Linear (BS=1)</div>
+        <div class="op-type memory">MEMORY BOUND</div>
+        <div class="op-stat">Intensity: <span class="val">~8 FLOP/byte</span></div>
+        <div class="op-stat">Weight loading dominates</div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:1rem;">
+      <h3 style="font-size:1rem; color:var(--primary); margin-bottom:0.5rem;">The Formula</h3>
+      <code style="font-size:1rem; display:block; text-align:center; padding:1rem; background:rgba(0,212,106,0.05); border-radius:8px; color:var(--secondary);">
+        Arithmetic Intensity = FLOPs / Bytes Transferred
+      </code>
+      <p style="font-size:0.85rem; color:var(--text-muted); margin-top:0.75rem;">
+        If intensity &lt; ridge point &rarr; <span style="color:var(--danger);">memory-bound</span> (waiting for data). If intensity &gt; ridge point &rarr; <span style="color:var(--primary);">compute-bound</span> (GPU fully utilized).
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- Section 3: Operations Deep Dive -->
+<section id="sec3">
+  <div class="section-inner">
+    <span class="badge">DEEP DIVE</span>
+    <h2>How Batch Size <span class="gradient-text">Changes Everything</span></h2>
+    <p class="section-desc">Increasing batch size amortizes weight loading across more input tokens, shifting operations from memory-bound to compute-bound.</p>
+    <div class="slider-container" style="margin:2rem 0;">
+      <div class="slider-label">
+        <span>Batch Size for Linear Layer (d=4096)</span>
+        <span class="value" id="bsLinearVal">1</span>
+      </div>
+      <input type="range" id="bsLinearSlider" min="0" max="9" value="0">
+    </div>
+    <div class="card" id="bsAnalysis" style="margin:1rem 0;">
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1.5rem; text-align:center;">
+        <div>
+          <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:0.5rem;">FLOPs</div>
+          <div class="mono" style="font-size:1.5rem; color:var(--primary);" id="bsFLOPs">33.6M</div>
+        </div>
+        <div>
+          <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:0.5rem;">Bytes Accessed</div>
+          <div class="mono" style="font-size:1.5rem; color:var(--secondary);" id="bsBytes">33.6MB</div>
+        </div>
+        <div>
+          <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:0.5rem;">Arithmetic Intensity</div>
+          <div class="mono" style="font-size:1.5rem;" id="bsIntensity">1.0</div>
+        </div>
+      </div>
+      <div style="margin-top:1.5rem;">
+        <div style="height:12px; background:var(--border); border-radius:6px; overflow:hidden; position:relative;">
+          <div id="bsIntensityBar" style="height:100%; border-radius:6px; transition:all 0.5s; width:5%; background:var(--danger);"></div>
+          <div style="position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-size:0.65rem;color:var(--text-dim);">Ridge (295)</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.7rem;color:var(--text-dim);margin-top:4px;">
+          <span>Memory Bound</span>
+          <span>Compute Bound</span>
+        </div>
+      </div>
+      <div id="bsBoundLabel" style="text-align:center;margin-top:1rem;font-weight:600;font-size:1.1rem;color:var(--danger);">MEMORY BOUND</div>
+    </div>
+    <div class="bar-chart" id="bsCompare">
+      <div style="font-weight:600; margin-bottom:0.5rem;">Time Breakdown (Linear Layer, d_model=4096)</div>
+      <div class="bar-row">
+        <div class="bar-label">Compute Time</div>
+        <div class="bar-track">
+          <div class="bar-fill" id="computeBar" style="width:10%; background:var(--primary);">
+            <span id="computeBarLabel">0.03ms</span>
+          </div>
+        </div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Memory Time</div>
+        <div class="bar-track">
+          <div class="bar-fill" id="memoryBar" style="width:80%; background:var(--danger);">
+            <span id="memoryBarLabel">10ms</span>
+          </div>
+        </div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Total Time</div>
+        <div class="bar-track">
+          <div class="bar-fill" id="totalBar" style="width:80%; background:linear-gradient(90deg, var(--danger), var(--primary));">
+            <span id="totalBarLabel">10ms</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 4: GPU Comparison -->
+<section id="sec4">
+  <div class="section-inner">
+    <span class="badge">GPU SPECS</span>
+    <h2><span class="gradient-text">GPU Roofline</span> Comparison</h2>
+    <p class="section-desc">Different GPUs have different ridge points. Higher-end GPUs shift the ridge point higher, requiring more arithmetic intensity to become compute-bound.</p>
+    <div style="margin-bottom:1.5rem;">
+      <div class="toggle-group">
+        <button class="toggle-btn active" data-gpu="h100">H100 SXM</button>
+        <button class="toggle-btn" data-gpu="a100">A100</button>
+        <button class="toggle-btn" data-gpu="l40s">L40S</button>
+        <button class="toggle-btn" data-gpu="4090">RTX 4090</button>
+      </div>
+    </div>
+    <div class="metrics-row" id="gpuMetrics">
+      <div class="metric-card">
+        <div class="metric-val primary" id="gpuFlops">989</div>
+        <div class="metric-label">TFLOPS (FP16)</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val secondary" id="gpuBW">3.35</div>
+        <div class="metric-label">TB/s Bandwidth</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val tertiary" id="gpuRidge">295</div>
+        <div class="metric-label">Ridge Point</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val primary" id="gpuMem">80</div>
+        <div class="metric-label">GB HBM</div>
+      </div>
+    </div>
+    <div class="roofline-container">
+      <canvas id="gpuRoofline" width="900" height="450"></canvas>
+    </div>
+    <div class="info-grid">
+      <div class="card">
+        <h3 style="font-size:1rem; color:var(--primary); margin-bottom:0.5rem;">What This Means for LLM Inference</h3>
+        <p style="font-size:0.85rem; color:var(--text-muted);">LLM decode (single token generation) is almost always <span style="color:var(--danger);">memory-bound</span>. The bottleneck is loading model weights from HBM, not computing with them. This is why memory bandwidth matters more than TFLOPS for serving.</p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:1rem; color:var(--secondary); margin-bottom:0.5rem;">Prefill vs Decode</h3>
+        <p style="font-size:0.85rem; color:var(--text-muted);">Prefill processes many tokens at once (high arithmetic intensity, <span style="color:var(--primary);">compute-bound</span>). Decode generates one token at a time (low intensity, <span style="color:var(--danger);">memory-bound</span>). This duality drives many optimization strategies.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 5: Summary -->
+<section id="sec5">
+  <div class="section-inner">
+    <span class="badge">SUMMARY</span>
+    <h2>Optimization <span class="gradient-text">Strategies</span></h2>
+    <p class="section-desc">Different bottlenecks require different optimization approaches.</p>
+    <div class="info-grid">
+      <div class="card" style="border-left:3px solid var(--danger);">
+        <h3 style="font-size:1.1rem; color:var(--danger); margin-bottom:0.75rem;">Memory-Bound Optimizations</h3>
+        <ul style="list-style:none; font-size:0.9rem; color:var(--text-muted);">
+          <li style="padding:0.4rem 0; border-bottom:1px solid var(--border);">
+            <span style="color:var(--text); font-weight:600;">Quantization</span> -- FP16/FP8/INT4 reduces bytes loaded
+          </li>
+          <li style="padding:0.4rem 0; border-bottom:1px solid var(--border);">
+            <span style="color:var(--text); font-weight:600;">Kernel Fusion</span> -- reduce memory round-trips
+          </li>
+          <li style="padding:0.4rem 0; border-bottom:1px solid var(--border);">
+            <span style="color:var(--text); font-weight:600;">FlashAttention</span> -- fuse attention into single kernel
+          </li>
+          <li style="padding:0.4rem 0; border-bottom:1px solid var(--border);">
+            <span style="color:var(--text); font-weight:600;">Batching</span> -- increase arithmetic intensity
+          </li>
+          <li style="padding:0.4rem 0;">
+            <span style="color:var(--text); font-weight:600;">Speculative Decoding</span> -- use smaller model to draft
+          </li>
+        </ul>
+      </div>
+      <div class="card" style="border-left:3px solid var(--primary);">
+        <h3 style="font-size:1.1rem; color:var(--primary); margin-bottom:0.75rem;">Compute-Bound Optimizations</h3>
+        <ul style="list-style:none; font-size:0.9rem; color:var(--text-muted);">
+          <li style="padding:0.4rem 0; border-bottom:1px solid var(--border);">
+            <span style="color:var(--text); font-weight:600;">Tensor Cores</span> -- use mixed-precision (FP16, FP8)
+          </li>
+          <li style="padding:0.4rem 0; border-bottom:1px solid var(--border);">
+            <span style="color:var(--text); font-weight:600;">Tensor Parallelism</span> -- split across GPUs
+          </li>
+          <li style="padding:0.4rem 0; border-bottom:1px solid var(--border);">
+            <span style="color:var(--text); font-weight:600;">Model Pruning</span> -- reduce FLOPs directly
+          </li>
+          <li style="padding:0.4rem 0; border-bottom:1px solid var(--border);">
+            <span style="color:var(--text); font-weight:600;">Distillation</span> -- smaller model, fewer ops
+          </li>
+          <li style="padding:0.4rem 0;">
+            <span style="color:var(--text); font-weight:600;">Compiler Optimization</span> -- TensorRT, Triton
+          </li>
+        </ul>
+      </div>
+      <div class="card" style="border-left:3px solid var(--secondary);">
+        <h3 style="font-size:1.1rem; color:var(--secondary); margin-bottom:0.75rem;">Key Takeaways</h3>
+        <ul style="list-style:none; font-size:0.9rem; color:var(--text-muted);">
+          <li style="padding:0.4rem 0; border-bottom:1px solid var(--border);">
+            <span style="color:var(--text); font-weight:600;">Profile first</span> -- determine your bottleneck before optimizing
+          </li>
+          <li style="padding:0.4rem 0; border-bottom:1px solid var(--border);">
+            <span style="color:var(--text); font-weight:600;">LLM decode is memory-bound</span> -- bandwidth > TFLOPS
+          </li>
+          <li style="padding:0.4rem 0; border-bottom:1px solid var(--border);">
+            <span style="color:var(--text); font-weight:600;">LLM prefill is compute-bound</span> -- TFLOPS matter
+          </li>
+          <li style="padding:0.4rem 0; border-bottom:1px solid var(--border);">
+            <span style="color:var(--text); font-weight:600;">Batching changes the game</span> -- amortize weight loading
+          </li>
+          <li style="padding:0.4rem 0;">
+            <span style="color:var(--text); font-weight:600;">The ridge point is GPU-specific</span> -- know your hardware
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+// === Navigation & Scroll ===
+const sections = document.querySelectorAll('section');
+const navDots = document.querySelectorAll('.nav-dot');
+const progressBar = document.getElementById('progressBar');
+
+function updateScroll() {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  progressBar.style.width = (scrollTop / docHeight * 100) + '%';
+
+  sections.forEach((sec, i) => {
+    const rect = sec.getBoundingClientRect();
+    const inner = sec.querySelector('.section-inner');
+    if (rect.top < window.innerHeight * 0.75 && rect.bottom > 0) {
+      if (inner) inner.classList.add('visible');
+      navDots.forEach(d => d.classList.remove('active'));
+      if (navDots[i]) navDots[i].classList.add('active');
+    }
+  });
+}
+
+window.addEventListener('scroll', updateScroll);
+window.addEventListener('load', updateScroll);
+navDots.forEach(dot => {
+  dot.addEventListener('click', () => {
+    sections[parseInt(dot.dataset.section)].scrollIntoView({ behavior: 'smooth' });
+  });
+});
+
+// === Roofline Chart ===
+const batchSizes = [1, 2, 4, 8, 16, 32, 64, 128, 256];
+const seqLengths = [128, 256, 512, 1024, 2048, 4096, 8192, 16384];
+
+function drawRoofline(canvas, gpuFlops, gpuBW, batch, seqLen) {
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const padL = 80, padR = 40, padT = 40, padB = 60;
+  const chartW = w - padL - padR;
+  const chartH = h - padT - padB;
+
+  // Log scale axes
+  const xMin = 0.1, xMax = 10000;
+  const yMin = 0.01, yMax = gpuFlops * 1.5;
+
+  function toX(val) { return padL + (Math.log10(val) - Math.log10(xMin)) / (Math.log10(xMax) - Math.log10(xMin)) * chartW; }
+  function toY(val) { return padT + chartH - (Math.log10(val) - Math.log10(yMin)) / (Math.log10(yMax) - Math.log10(yMin)) * chartH; }
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 1;
+  for (let e = -1; e <= 4; e++) {
+    const x = toX(Math.pow(10, e));
+    ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + chartH); ctx.stroke();
+  }
+  for (let e = -2; e <= 4; e++) {
+    const y = toY(Math.pow(10, e));
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + chartW, y); ctx.stroke();
+  }
+
+  // Axes labels
+  ctx.fillStyle = 'var(--text-dim)';
+  ctx.font = '11px JetBrains Mono';
+  ctx.textAlign = 'center';
+  for (let e = -1; e <= 4; e++) {
+    ctx.fillText(Math.pow(10, e).toString(), toX(Math.pow(10, e)), padT + chartH + 20);
+  }
+  ctx.textAlign = 'right';
+  for (let e = -2; e <= 4; e++) {
+    ctx.fillText(Math.pow(10, e) >= 1 ? Math.pow(10, e).toString() : Math.pow(10, e).toFixed(2), padL - 10, toY(Math.pow(10, e)) + 4);
+  }
+
+  // Axis titles
+  ctx.fillStyle = '#a3a3a3';
+  ctx.font = '12px Inter';
+  ctx.textAlign = 'center';
+  ctx.fillText('Arithmetic Intensity (FLOPs / Byte)', padL + chartW / 2, h - 5);
+  ctx.save();
+  ctx.translate(15, padT + chartH / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('Performance (TFLOPS)', 0, 0);
+  ctx.restore();
+
+  const ridgePoint = gpuFlops * 1e12 / (gpuBW * 1e12);
+
+  // Memory roof (sloped line)
+  ctx.strokeStyle = '#ef4444';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  const memStart = xMin;
+  const memEnd = ridgePoint;
+  ctx.moveTo(toX(memStart), toY(memStart * gpuBW));
+  ctx.lineTo(toX(memEnd), toY(gpuFlops));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Compute roof (horizontal line)
+  ctx.strokeStyle = '#00d46a';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(toX(ridgePoint), toY(gpuFlops));
+  ctx.lineTo(toX(xMax), toY(gpuFlops));
+  ctx.stroke();
+
+  // Ridge point marker
+  ctx.fillStyle = '#f59e0b';
+  ctx.beginPath();
+  ctx.arc(toX(ridgePoint), toY(gpuFlops), 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#f59e0b';
+  ctx.font = '10px JetBrains Mono';
+  ctx.textAlign = 'center';
+  ctx.fillText('Ridge: ' + ridgePoint.toFixed(0), toX(ridgePoint), toY(gpuFlops) - 12);
+
+  // Shade memory-bound region
+  ctx.fillStyle = 'rgba(239, 68, 68, 0.05)';
+  ctx.beginPath();
+  ctx.moveTo(toX(xMin), toY(yMin));
+  ctx.lineTo(toX(xMin), toY(xMin * gpuBW));
+  ctx.lineTo(toX(ridgePoint), toY(gpuFlops));
+  ctx.lineTo(toX(ridgePoint), toY(yMin));
+  ctx.closePath();
+  ctx.fill();
+
+  // Shade compute-bound region
+  ctx.fillStyle = 'rgba(0, 212, 106, 0.03)';
+  ctx.beginPath();
+  ctx.moveTo(toX(ridgePoint), toY(yMin));
+  ctx.lineTo(toX(ridgePoint), toY(gpuFlops));
+  ctx.lineTo(toX(xMax), toY(gpuFlops));
+  ctx.lineTo(toX(xMax), toY(yMin));
+  ctx.closePath();
+  ctx.fill();
+
+  // Plot operations
+  const dModel = 4096;
+  const ops = [
+    {
+      name: 'MatMul',
+      intensity: batch * seqLen * dModel / (2 * (batch * seqLen + dModel)),
+      perf: Math.min(gpuFlops, (batch * seqLen * dModel / (2 * (batch * seqLen + dModel))) * gpuBW),
+      color: '#00c8e6'
+    },
+    {
+      name: 'Attention',
+      intensity: Math.max(1, batch * seqLen / 4),
+      perf: Math.min(gpuFlops, Math.max(1, batch * seqLen / 4) * gpuBW),
+      color: '#a855f7'
+    },
+    {
+      name: 'Softmax',
+      intensity: 2,
+      perf: Math.min(gpuFlops, 2 * gpuBW),
+      color: '#f59e0b'
+    },
+    {
+      name: 'LayerNorm',
+      intensity: 5,
+      perf: Math.min(gpuFlops, 5 * gpuBW),
+      color: '#f59e0b'
+    },
+    {
+      name: 'FFN Linear',
+      intensity: Math.max(1, batch * 2 * dModel / (2 * (batch + 2 * dModel / seqLen))),
+      perf: Math.min(gpuFlops, Math.max(1, batch * 2 * dModel / (2 * (batch + 2))) * gpuBW),
+      color: '#00c8e6'
+    }
+  ];
+
+  ops.forEach(op => {
+    const x = toX(Math.max(xMin, Math.min(xMax, op.intensity)));
+    const achievable = Math.min(gpuFlops, op.intensity * gpuBW);
+    const y = toY(Math.max(yMin, Math.min(yMax, achievable)));
+
+    ctx.fillStyle = op.color;
+    ctx.beginPath();
+    ctx.arc(x, y, 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = op.color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, y, 12, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.fillStyle = op.color;
+    ctx.font = '10px Inter';
+    ctx.textAlign = 'left';
+    ctx.fillText(op.name, x + 15, y + 4);
+  });
+}
+
+const batchSlider = document.getElementById('batchSlider');
+const seqSlider = document.getElementById('seqSlider');
+const batchValue = document.getElementById('batchValue');
+const seqValue = document.getElementById('seqValue');
+const rooflineCanvas = document.getElementById('rooflineChart');
+
+function updateRoofline() {
+  const batch = batchSizes[parseInt(batchSlider.value)];
+  const seq = seqLengths[parseInt(seqSlider.value)];
+  batchValue.textContent = batch;
+  seqValue.textContent = seq >= 1024 ? (seq / 1024) + 'K' : seq;
+  drawRoofline(rooflineCanvas, 989, 3.35, batch, seq);
+
+  const detail = document.getElementById('rooflineDetail');
+  const dModel = 4096;
+  const matmulIntensity = (batch * seq * dModel / (2 * (batch * seq + dModel))).toFixed(1);
+  const bound = matmulIntensity > 295 ? 'compute-bound' : 'memory-bound';
+  const boundColor = bound === 'compute-bound' ? 'var(--primary)' : 'var(--danger)';
+  detail.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;text-align:center;">
+      <div><div style="font-size:0.75rem;color:var(--text-dim);">Batch Size</div><div class="mono" style="font-size:1.3rem;color:var(--primary);">${batch}</div></div>
+      <div><div style="font-size:0.75rem;color:var(--text-dim);">Seq Length</div><div class="mono" style="font-size:1.3rem;color:var(--secondary);">${seq}</div></div>
+      <div><div style="font-size:0.75rem;color:var(--text-dim);">MatMul Intensity</div><div class="mono" style="font-size:1.3rem;color:${boundColor};">${matmulIntensity} FLOP/B</div></div>
+    </div>
+    <p style="text-align:center;margin-top:1rem;font-size:0.9rem;color:var(--text-muted);">MatMul is <span style="color:${boundColor};font-weight:600;">${bound}</span> at this configuration.</p>
+  `;
+}
+
+batchSlider.addEventListener('input', updateRoofline);
+seqSlider.addEventListener('input', updateRoofline);
+updateRoofline();
+
+// === Op cards -> intensity marker ===
+document.querySelectorAll('.op-card').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.op-card').forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+    const intensity = parseFloat(card.dataset.intensity);
+    const maxLog = Math.log10(10000);
+    const minLog = Math.log10(0.1);
+    const pct = (Math.log10(intensity) - minLog) / (maxLog - minLog) * 100;
+    document.getElementById('intensityMarker').style.left = pct + '%';
+  });
+});
+
+// === Batch Size Linear Analysis ===
+const bsLinearSlider = document.getElementById('bsLinearSlider');
+const bsPowers = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
+
+function updateBSLinear() {
+  const bs = bsPowers[parseInt(bsLinearSlider.value)];
+  document.getElementById('bsLinearVal').textContent = bs;
+
+  const dModel = 4096;
+  const flops = 2 * bs * dModel * dModel;
+  const weightBytes = dModel * dModel * 2; // FP16
+  const inputBytes = bs * dModel * 2;
+  const outputBytes = bs * dModel * 2;
+  const totalBytes = weightBytes + inputBytes + outputBytes;
+
+  const intensity = flops / totalBytes;
+
+  const gpuFlops = 989e12;
+  const gpuBW = 3.35e12;
+  const computeTime = flops / gpuFlops * 1000;
+  const memTime = totalBytes / gpuBW * 1000;
+  const totalTime = Math.max(computeTime, memTime);
+
+  document.getElementById('bsFLOPs').textContent = flops >= 1e9 ? (flops / 1e9).toFixed(1) + 'G' : (flops / 1e6).toFixed(1) + 'M';
+  document.getElementById('bsBytes').textContent = totalBytes >= 1e9 ? (totalBytes / 1e9).toFixed(1) + 'GB' : (totalBytes / 1e6).toFixed(1) + 'MB';
+  document.getElementById('bsIntensity').textContent = intensity.toFixed(1) + ' FLOP/B';
+
+  const isBound = intensity < 295;
+  document.getElementById('bsIntensity').style.color = isBound ? 'var(--danger)' : 'var(--primary)';
+  document.getElementById('bsBoundLabel').textContent = isBound ? 'MEMORY BOUND' : 'COMPUTE BOUND';
+  document.getElementById('bsBoundLabel').style.color = isBound ? 'var(--danger)' : 'var(--primary)';
+
+  const barPct = Math.min(100, (Math.log10(intensity) - Math.log10(0.1)) / (Math.log10(10000) - Math.log10(0.1)) * 100);
+  document.getElementById('bsIntensityBar').style.width = barPct + '%';
+  document.getElementById('bsIntensityBar').style.background = isBound ? 'var(--danger)' : 'var(--primary)';
+
+  const maxTime = Math.max(computeTime, memTime, 0.001);
+  document.getElementById('computeBar').style.width = (computeTime / maxTime * 100) + '%';
+  document.getElementById('memoryBar').style.width = (memTime / maxTime * 100) + '%';
+  document.getElementById('totalBar').style.width = '100%';
+
+  document.getElementById('computeBarLabel').textContent = computeTime >= 1 ? computeTime.toFixed(1) + 'ms' : (computeTime * 1000).toFixed(0) + 'us';
+  document.getElementById('memoryBarLabel').textContent = memTime >= 1 ? memTime.toFixed(2) + 'ms' : (memTime * 1000).toFixed(0) + 'us';
+  document.getElementById('totalBarLabel').textContent = totalTime >= 1 ? totalTime.toFixed(2) + 'ms' : (totalTime * 1000).toFixed(0) + 'us';
+}
+
+bsLinearSlider.addEventListener('input', updateBSLinear);
+updateBSLinear();
+
+// === GPU Comparison ===
+const gpuSpecs = {
+  h100: { name: 'H100 SXM', flops: 989, bw: 3.35, mem: 80 },
+  a100: { name: 'A100 SXM', flops: 312, bw: 2.0, mem: 80 },
+  l40s: { name: 'L40S', flops: 362, bw: 0.864, mem: 48 },
+  '4090': { name: 'RTX 4090', flops: 330, bw: 1.008, mem: 24 }
+};
+
+document.querySelectorAll('.toggle-btn[data-gpu]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.toggle-btn[data-gpu]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const gpu = gpuSpecs[btn.dataset.gpu];
+    document.getElementById('gpuFlops').textContent = gpu.flops;
+    document.getElementById('gpuBW').textContent = gpu.bw;
+    document.getElementById('gpuRidge').textContent = Math.round(gpu.flops * 1e12 / (gpu.bw * 1e12));
+    document.getElementById('gpuMem').textContent = gpu.mem;
+    document.getElementById('ridgeVal').textContent = Math.round(gpu.flops * 1e12 / (gpu.bw * 1e12));
+
+    drawGPURoofline(gpu);
+  });
+});
+
+function drawGPURoofline(gpu) {
+  const canvas = document.getElementById('gpuRoofline');
+  drawRoofline(canvas, gpu.flops, gpu.bw, batchSizes[parseInt(batchSlider.value)], seqLengths[parseInt(seqSlider.value)]);
+}
+
+// Initial GPU draw
+drawGPURoofline(gpuSpecs.h100);
+</script>
+</body>
+</html>

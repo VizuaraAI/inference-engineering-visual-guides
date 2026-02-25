@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Disaggregated Serving | Inference Engineering</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a;
+  --bg-card: #121212;
+  --bg-card-hover: #1a1a1a;
+  --border: #262626;
+  --primary: #00d46a;
+  --secondary: #00c8e6;
+  --tertiary: #a855f7;
+  --success: #10b981;
+  --text: #f2f2f2;
+  --text-muted: #a3a3a3;
+  --text-dim: #737373;
+  --danger: #ef4444;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); overflow-x: hidden; }
+code, .mono { font-family: 'JetBrains Mono', monospace; }
+h1, h2 { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; }
+.gradient-text { background: linear-gradient(135deg, #00d46a, #00c8e6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+.grid-bg { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 60px 60px; z-index: 0; pointer-events: none; }
+.glow-orb { position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; }
+.glow-orb.green { width: 400px; height: 400px; background: rgba(0,212,106,0.08); top: 10%; left: -100px; }
+.glow-orb.cyan { width: 350px; height: 350px; background: rgba(0,200,230,0.06); bottom: 10%; right: -80px; }
+
+nav { position: fixed; top: 0; left: 0; width: 100%; z-index: 1000; background: rgba(10,10,10,0.85); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); padding: 0 2rem; height: 60px; display: flex; align-items: center; justify-content: space-between; }
+nav .logo { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.3rem; }
+nav .nav-links { display: flex; gap: 2rem; }
+nav .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 0.85rem; transition: color 0.3s; }
+nav .nav-links a:hover { color: var(--primary); }
+
+.progress-bar { position: fixed; top: 60px; left: 0; height: 3px; z-index: 999; background: linear-gradient(90deg, var(--primary), var(--secondary)); transition: width 0.3s ease; }
+.section-dots { position: fixed; right: 1.5rem; top: 50%; transform: translateY(-50%); z-index: 999; display: flex; flex-direction: column; gap: 12px; }
+.section-dots .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--text-dim); background: transparent; cursor: pointer; transition: all 0.3s; }
+.section-dots .dot.active { background: var(--primary); border-color: var(--primary); box-shadow: 0 0 10px rgba(0,212,106,0.5); }
+
+section { min-height: 100vh; position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; padding: 80px 2rem 2rem; }
+.section-inner { max-width: 1200px; width: 100%; opacity: 0; transform: translateY(40px); transition: all 0.8s cubic-bezier(0.16,1,0.3,1); }
+.section-inner.visible { opacity: 1; transform: translateY(0); }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; transition: all 0.3s; }
+.card:hover { background: var(--bg-card-hover); box-shadow: 0 0 40px rgba(0,212,106,0.15); }
+.badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; border: 1px solid var(--primary); background: rgba(0,212,106,0.1); color: var(--primary); margin-bottom: 1rem; }
+
+.hero h1 { font-size: clamp(2.5rem, 5vw, 4rem); line-height: 1.1; margin-bottom: 1rem; }
+.hero p { color: var(--text-muted); font-size: 1.15rem; max-width: 650px; line-height: 1.7; }
+
+.section-tag { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; color: var(--primary); margin-bottom: 0.5rem; }
+.section-title { font-size: clamp(1.8rem, 3vw, 2.5rem); margin-bottom: 1rem; }
+.section-desc { color: var(--text-muted); font-size: 1rem; max-width: 700px; line-height: 1.7; margin-bottom: 2rem; }
+
+.btn { padding: 0.6rem 1.5rem; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-family: 'Inter', sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.3s; }
+.btn:hover { border-color: var(--primary); box-shadow: 0 0 20px rgba(0,212,106,0.15); }
+.btn.active { background: rgba(0,212,106,0.15); border-color: var(--primary); color: var(--primary); }
+
+.explain-panel { margin-top: 1.5rem; padding: 1.5rem; background: rgba(0,212,106,0.03); border: 1px solid rgba(0,212,106,0.15); border-radius: 12px; font-size: 0.9rem; color: var(--text-muted); line-height: 1.7; }
+.explain-panel strong { color: var(--text); }
+
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+.stat-card { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; text-align: center; }
+.stat-card .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 1.8rem; font-weight: 700; margin-bottom: 0.25rem; }
+.stat-card .stat-label { font-size: 0.75rem; color: var(--text-muted); }
+
+/* Architecture SVG */
+.arch-svg { width: 100%; min-height: 350px; }
+
+/* GPU box */
+.gpu-box {
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  width: 100px; height: 80px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;
+  transition: all 0.4s; position: relative;
+}
+.gpu-box.prefill {
+  background: rgba(0,200,230,0.1); border: 1px solid rgba(0,200,230,0.3); color: var(--secondary);
+}
+.gpu-box.decode {
+  background: rgba(0,212,106,0.1); border: 1px solid rgba(0,212,106,0.3); color: var(--primary);
+}
+.gpu-box.monolithic {
+  background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.3); color: var(--tertiary);
+}
+.gpu-box.active { box-shadow: 0 0 20px rgba(0,200,230,0.3); }
+
+/* Utilization bars */
+.util-bar-track {
+  width: 100%; height: 20px; background: rgba(255,255,255,0.03); border-radius: 4px;
+  overflow: hidden; position: relative;
+}
+.util-bar-fill {
+  height: 100%; border-radius: 4px; transition: width 0.5s ease;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.65rem; font-weight: 600; color: var(--bg);
+}
+
+/* Request flow */
+.flow-request {
+  display: inline-flex; align-items: center; gap: 0.3rem; padding: 4px 10px;
+  border-radius: 6px; font-size: 0.7rem; font-weight: 500; transition: all 0.4s;
+  font-family: 'JetBrains Mono', monospace;
+}
+.flow-request.queued { background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text-dim); }
+.flow-request.prefilling { background: rgba(0,200,230,0.15); border: 1px solid rgba(0,200,230,0.3); color: var(--secondary); }
+.flow-request.transferring { background: rgba(168,85,247,0.15); border: 1px solid rgba(168,85,247,0.3); color: var(--tertiary); animation: pulse-transfer 0.8s ease infinite; }
+.flow-request.decoding { background: rgba(0,212,106,0.15); border: 1px solid rgba(0,212,106,0.3); color: var(--primary); }
+.flow-request.done { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); color: var(--success); opacity: 0.7; }
+
+@keyframes pulse-transfer {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(168,85,247,0.3); }
+  50% { box-shadow: 0 0 10px 2px rgba(168,85,247,0.15); }
+}
+
+/* Timeline */
+.timeline-track {
+  position: relative; height: 44px; background: rgba(255,255,255,0.02);
+  border-radius: 8px; overflow: hidden; margin-bottom: 4px;
+}
+.timeline-block {
+  position: absolute; top: 4px; height: 36px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.65rem; font-weight: 500; transition: all 0.5s;
+}
+
+@media (max-width: 768px) {
+  section { padding: 80px 1rem 1rem; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div class="glow-orb green"></div>
+<div class="glow-orb cyan"></div>
+
+<nav>
+  <div class="logo"><span class="gradient-text">Vizuara</span> Inference Engineering</div>
+  <div class="nav-links">
+    <a href="#hero">Overview</a>
+    <a href="#problem">Problem</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#flow">Request Flow</a>
+    <a href="#comparison">Comparison</a>
+    <a href="#summary">Summary</a>
+  </div>
+</nav>
+
+<div class="progress-bar" id="progressBar"></div>
+<div class="section-dots" id="sectionDots"></div>
+
+<!-- Hero -->
+<section id="hero">
+  <div class="section-inner hero">
+    <div class="badge">Module 20</div>
+    <h1><span class="gradient-text">Disaggregated</span> Serving</h1>
+    <p>Separate prefill and decode into independent, specialized engine pools. This eliminates the fundamental resource conflict between compute-heavy prefill and memory-bandwidth-heavy decode operations.</p>
+    <div style="display: flex; gap: 1rem; margin-top: 2rem; flex-wrap: wrap;">
+      <div class="stat-card" style="padding: 0.75rem 1.25rem;">
+        <div class="stat-value" style="font-size: 1rem; color: var(--secondary);">Prefill</div>
+        <div class="stat-label">Compute Bound</div>
+      </div>
+      <div class="stat-card" style="padding: 0.75rem 1.25rem;">
+        <div class="stat-value" style="font-size: 1rem; color: var(--primary);">Decode</div>
+        <div class="stat-label">Memory BW Bound</div>
+      </div>
+      <div class="stat-card" style="padding: 0.75rem 1.25rem;">
+        <div class="stat-value" style="font-size: 1rem; color: var(--tertiary);">2-4x</div>
+        <div class="stat-label">Better Utilization</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Problem -->
+<section id="problem">
+  <div class="section-inner">
+    <div class="section-tag">The Problem</div>
+    <h2 class="section-title"><span class="gradient-text">Why Monolithic Serving Wastes GPUs</span></h2>
+    <div class="section-desc">In traditional serving, each GPU handles both prefill and decode. These operations have completely different resource profiles, leading to poor utilization.</div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+      <div class="card">
+        <h3 style="color: var(--secondary); font-size: 1rem; margin-bottom: 1rem;">Prefill Phase</h3>
+        <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.8; margin-bottom: 1.5rem;">
+          <p><strong style="color: var(--text);">Compute Bound.</strong> Process all input tokens in parallel through the model. Large matrix multiplications fully saturate the GPU's compute units (TFLOPs).</p>
+        </div>
+        <div style="margin-bottom: 0.5rem; font-size: 0.8rem; color: var(--text-dim);">GPU Compute Utilization:</div>
+        <div class="util-bar-track">
+          <div class="util-bar-fill" style="width: 90%; background: linear-gradient(90deg, rgba(0,200,230,0.6), rgba(0,200,230,0.9));">90%</div>
+        </div>
+        <div style="margin-top: 0.75rem; margin-bottom: 0.5rem; font-size: 0.8rem; color: var(--text-dim);">Memory BW Utilization:</div>
+        <div class="util-bar-track">
+          <div class="util-bar-fill" style="width: 30%; background: linear-gradient(90deg, rgba(0,200,230,0.3), rgba(0,200,230,0.5));">30%</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="color: var(--primary); font-size: 1rem; margin-bottom: 1rem;">Decode Phase</h3>
+        <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.8; margin-bottom: 1.5rem;">
+          <p><strong style="color: var(--text);">Memory BW Bound.</strong> Generate one token at a time. Must load entire model weights for each token, but does minimal compute. GPU compute sits mostly idle.</p>
+        </div>
+        <div style="margin-bottom: 0.5rem; font-size: 0.8rem; color: var(--text-dim);">GPU Compute Utilization:</div>
+        <div class="util-bar-track">
+          <div class="util-bar-fill" style="width: 15%; background: linear-gradient(90deg, rgba(0,212,106,0.3), rgba(0,212,106,0.5));">15%</div>
+        </div>
+        <div style="margin-top: 0.75rem; margin-bottom: 0.5rem; font-size: 0.8rem; color: var(--text-dim);">Memory BW Utilization:</div>
+        <div class="util-bar-track">
+          <div class="util-bar-fill" style="width: 85%; background: linear-gradient(90deg, rgba(0,212,106,0.6), rgba(0,212,106,0.9));">85%</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="explain-panel">
+      <strong>The Conflict:</strong> When a monolithic server runs prefill for a new request, it interrupts ongoing decode for existing requests (increasing latency). When it runs decode, the GPU's compute is mostly wasted. You can't optimize for both simultaneously on the same hardware.
+    </div>
+  </div>
+</section>
+
+<!-- Architecture -->
+<section id="architecture">
+  <div class="section-inner">
+    <div class="section-tag">Architecture</div>
+    <h2 class="section-title"><span class="gradient-text">Disaggregated Architecture</span></h2>
+    <div class="section-desc">Separate prefill and decode into independent pools connected by a KV cache transfer layer.</div>
+
+    <div class="card">
+      <div style="position: relative; min-height: 450px; padding: 1rem;">
+        <!-- Router -->
+        <div style="text-align: center; margin-bottom: 2rem;">
+          <div style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 2rem; border-radius: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border);">
+            <div style="width: 8px; height: 8px; border-radius: 50%; background: var(--primary);"></div>
+            <span style="font-size: 0.9rem; font-weight: 600;">Request Router / Load Balancer</span>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 1.5rem; align-items: start;">
+          <!-- Prefill Pool -->
+          <div>
+            <div style="text-align: center; font-size: 0.85rem; font-weight: 600; color: var(--secondary); margin-bottom: 1rem; padding: 0.5rem; background: rgba(0,200,230,0.05); border-radius: 8px; border: 1px solid rgba(0,200,230,0.2);">Prefill Engine Pool</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;" id="prefillPool">
+              <div class="gpu-box prefill" id="p0"><div style="font-size: 0.65rem;">GPU 0</div><div>Prefill</div><div class="util-bar-track" style="width: 80px; height: 8px; margin-top: 4px;"><div class="util-bar-fill prefill-util" style="width: 0; background: var(--secondary);"></div></div></div>
+              <div class="gpu-box prefill" id="p1"><div style="font-size: 0.65rem;">GPU 1</div><div>Prefill</div><div class="util-bar-track" style="width: 80px; height: 8px; margin-top: 4px;"><div class="util-bar-fill prefill-util" style="width: 0; background: var(--secondary);"></div></div></div>
+              <div class="gpu-box prefill" id="p2"><div style="font-size: 0.65rem;">GPU 2</div><div>Prefill</div><div class="util-bar-track" style="width: 80px; height: 8px; margin-top: 4px;"><div class="util-bar-fill prefill-util" style="width: 0; background: var(--secondary);"></div></div></div>
+              <div class="gpu-box prefill" id="p3"><div style="font-size: 0.65rem;">GPU 3</div><div>Prefill</div><div class="util-bar-track" style="width: 80px; height: 8px; margin-top: 4px;"><div class="util-bar-fill prefill-util" style="width: 0; background: var(--secondary);"></div></div></div>
+            </div>
+          </div>
+
+          <!-- Transfer -->
+          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding-top: 3rem;">
+            <div style="width: 2px; height: 80px; background: linear-gradient(to bottom, var(--secondary), var(--tertiary), var(--primary)); border-radius: 1px;"></div>
+            <div style="padding: 0.5rem 1rem; background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.3); border-radius: 8px; margin: 0.5rem 0; font-size: 0.7rem; color: var(--tertiary); font-weight: 600; text-align: center;">KV Cache<br>Transfer</div>
+            <div style="width: 2px; height: 80px; background: linear-gradient(to bottom, var(--tertiary), var(--primary)); border-radius: 1px;"></div>
+            <div style="color: var(--text-dim); font-size: 0.65rem; margin-top: 0.25rem;">NVLink/IB</div>
+          </div>
+
+          <!-- Decode Pool -->
+          <div>
+            <div style="text-align: center; font-size: 0.85rem; font-weight: 600; color: var(--primary); margin-bottom: 1rem; padding: 0.5rem; background: rgba(0,212,106,0.05); border-radius: 8px; border: 1px solid rgba(0,212,106,0.2);">Decode Engine Pool</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;" id="decodePool">
+              <div class="gpu-box decode" id="d0"><div style="font-size: 0.65rem;">GPU 4</div><div>Decode</div><div class="util-bar-track" style="width: 80px; height: 8px; margin-top: 4px;"><div class="util-bar-fill decode-util" style="width: 0; background: var(--primary);"></div></div></div>
+              <div class="gpu-box decode" id="d1"><div style="font-size: 0.65rem;">GPU 5</div><div>Decode</div><div class="util-bar-track" style="width: 80px; height: 8px; margin-top: 4px;"><div class="util-bar-fill decode-util" style="width: 0; background: var(--primary);"></div></div></div>
+              <div class="gpu-box decode" id="d2"><div style="font-size: 0.65rem;">GPU 6</div><div>Decode</div><div class="util-bar-track" style="width: 80px; height: 8px; margin-top: 4px;"><div class="util-bar-fill decode-util" style="width: 0; background: var(--primary);"></div></div></div>
+              <div class="gpu-box decode" id="d3"><div style="font-size: 0.65rem;">GPU 7</div><div>Decode</div><div class="util-bar-track" style="width: 80px; height: 8px; margin-top: 4px;"><div class="util-bar-fill decode-util" style="width: 0; background: var(--primary);"></div></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Request status area -->
+        <div style="margin-top: 2rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 12px;">
+          <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.5rem;">Request Pipeline:</div>
+          <div id="pipelineRequests" style="display: flex; flex-wrap: wrap; gap: 0.5rem; min-height: 40px;"></div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem;">
+        <button class="btn" onclick="simulateDisaggregated()">Run Simulation</button>
+        <button class="btn" onclick="resetSimulation()">Reset</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Request Flow -->
+<section id="flow">
+  <div class="section-inner">
+    <div class="section-tag">Request Flow</div>
+    <h2 class="section-title"><span class="gradient-text">Request Lifecycle</span></h2>
+    <div class="section-desc">Follow a single request through the disaggregated pipeline from arrival to completion.</div>
+
+    <div class="card">
+      <div style="display: flex; flex-direction: column; gap: 1.5rem;" id="flowSteps">
+        <div class="flow-step" data-step="0">
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--text-dim); font-size: 0.85rem; flex-shrink: 0;">1</div>
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem;">Request Arrives at Router</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">User sends prompt with 2048 input tokens. Router selects least-loaded prefill engine.</div>
+            </div>
+          </div>
+        </div>
+        <div class="flow-step" data-step="1">
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: rgba(0,200,230,0.1); border: 1px solid rgba(0,200,230,0.3); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--secondary); font-size: 0.85rem; flex-shrink: 0;">2</div>
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem; color: var(--secondary);">Prefill on Dedicated Engine</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">Prefill engine processes all 2048 tokens in a single forward pass. Compute-optimized, batches large prefills together for maximum FLOP utilization.</div>
+            </div>
+          </div>
+        </div>
+        <div class="flow-step" data-step="2">
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.3); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--tertiary); font-size: 0.85rem; flex-shrink: 0;">3</div>
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem; color: var(--tertiary);">KV Cache Transfer</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">Generated KV cache (~1.2 GB for 70B model, 2048 tokens) transferred from prefill GPU to decode GPU via NVLink (~900 GB/s) or InfiniBand (~400 GB/s). Transfer takes 1-3ms.</div>
+            </div>
+          </div>
+        </div>
+        <div class="flow-step" data-step="3">
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: rgba(0,212,106,0.1); border: 1px solid rgba(0,212,106,0.3); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--primary); font-size: 0.85rem; flex-shrink: 0;">4</div>
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem; color: var(--primary);">Decode on Dedicated Engine</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">Decode engine generates tokens one by one. Memory-bandwidth optimized, runs large decode batches (hundreds of concurrent sequences) to maximize memory bandwidth utilization.</div>
+            </div>
+          </div>
+        </div>
+        <div class="flow-step" data-step="4">
+          <div style="display: flex; align-items: center; gap: 1rem;">
+            <div style="width: 36px; height: 36px; border-radius: 50%; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--success); font-size: 0.85rem; flex-shrink: 0;">5</div>
+            <div>
+              <div style="font-weight: 600; font-size: 0.9rem; color: var(--success);">Response Streamed</div>
+              <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">Tokens are streamed back to the user as they are generated. Decode engine's KV cache memory is freed upon completion.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn" style="margin-top: 1.5rem;" onclick="animateFlow()">Animate Flow</button>
+    </div>
+  </div>
+</section>
+
+<!-- Comparison -->
+<section id="comparison">
+  <div class="section-inner">
+    <div class="section-tag">Comparison</div>
+    <h2 class="section-title"><span class="gradient-text">Monolithic vs Disaggregated</span></h2>
+    <div class="section-desc">See the impact on GPU utilization, throughput, and latency.</div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+      <div class="card">
+        <h3 style="color: var(--tertiary); font-size: 1rem; margin-bottom: 1.5rem;">Monolithic Serving</h3>
+        <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.5rem;">GPU Timeline (single GPU):</div>
+        <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem;">
+          <div class="timeline-track">
+            <div class="timeline-block" style="left: 0; width: 25%; background: rgba(0,200,230,0.4); border: 1px solid rgba(0,200,230,0.6); color: var(--secondary);">Prefill</div>
+            <div class="timeline-block" style="left: 25%; width: 15%; background: rgba(0,212,106,0.4); border: 1px solid rgba(0,212,106,0.6); color: var(--primary);">Decode</div>
+            <div class="timeline-block" style="left: 40%; width: 20%; background: rgba(0,200,230,0.4); border: 1px solid rgba(0,200,230,0.6); color: var(--secondary);">Prefill</div>
+            <div class="timeline-block" style="left: 60%; width: 30%; background: rgba(0,212,106,0.4); border: 1px solid rgba(0,212,106,0.6); color: var(--primary);">Decode</div>
+            <div class="timeline-block" style="left: 90%; width: 10%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); color: var(--text-dim);">Idle</div>
+          </div>
+        </div>
+        <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
+          <div style="margin-bottom: 0.5rem;"><span style="color: var(--danger);">Problem 1:</span> Prefill interrupts decode, causing latency spikes (stalls)</div>
+          <div style="margin-bottom: 0.5rem;"><span style="color: var(--danger);">Problem 2:</span> During decode, compute is ~15% utilized</div>
+          <div><span style="color: var(--danger);">Problem 3:</span> During prefill, memory BW is underused</div>
+        </div>
+        <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr);">
+          <div class="stat-card">
+            <div class="stat-value" style="font-size: 1.2rem; color: var(--danger);">~35%</div>
+            <div class="stat-label">Avg GPU Util</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="font-size: 1.2rem; color: var(--danger);">~50ms</div>
+            <div class="stat-label">P99 TPOT Spike</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="border-color: rgba(0,212,106,0.3);">
+        <h3 style="color: var(--primary); font-size: 1rem; margin-bottom: 1.5rem;">Disaggregated Serving</h3>
+        <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.5rem;">GPU Timelines (prefill + decode GPUs):</div>
+        <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem;">
+          <div style="font-size: 0.65rem; color: var(--secondary); margin-bottom: 2px;">Prefill GPU:</div>
+          <div class="timeline-track" style="margin-bottom: 6px;">
+            <div class="timeline-block" style="left: 0; width: 30%; background: rgba(0,200,230,0.4); border: 1px solid rgba(0,200,230,0.6); color: var(--secondary);">Prefill A</div>
+            <div class="timeline-block" style="left: 32%; width: 30%; background: rgba(0,200,230,0.4); border: 1px solid rgba(0,200,230,0.6); color: var(--secondary);">Prefill B</div>
+            <div class="timeline-block" style="left: 64%; width: 30%; background: rgba(0,200,230,0.4); border: 1px solid rgba(0,200,230,0.6); color: var(--secondary);">Prefill C</div>
+          </div>
+          <div style="font-size: 0.65rem; color: var(--primary); margin-bottom: 2px;">Decode GPU:</div>
+          <div class="timeline-track">
+            <div class="timeline-block" style="left: 0; width: 100%; background: rgba(0,212,106,0.4); border: 1px solid rgba(0,212,106,0.6); color: var(--primary);">Continuous Decode (batched, 200+ seqs)</div>
+          </div>
+        </div>
+        <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
+          <div style="margin-bottom: 0.5rem;"><span style="color: var(--primary);">Benefit 1:</span> No prefill-decode interference</div>
+          <div style="margin-bottom: 0.5rem;"><span style="color: var(--primary);">Benefit 2:</span> Each pool optimized for its workload</div>
+          <div><span style="color: var(--primary);">Benefit 3:</span> Scale pools independently based on traffic</div>
+        </div>
+        <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr);">
+          <div class="stat-card">
+            <div class="stat-value" style="font-size: 1.2rem; color: var(--primary);">~75%</div>
+            <div class="stat-label">Avg GPU Util</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="font-size: 1.2rem; color: var(--primary);">~18ms</div>
+            <div class="stat-label">P99 TPOT</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 1.5rem;">
+      <h3 style="font-size: 1rem; margin-bottom: 1rem;">Throughput & Cost Comparison</h3>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;" id="benchCards">
+        <div class="stat-card">
+          <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.5rem;">Throughput (tokens/sec)</div>
+          <div style="display: flex; gap: 0.5rem; justify-content: center;">
+            <div><div class="stat-value" style="font-size: 1.2rem; color: var(--danger);">2.1K</div><div class="stat-label">Monolithic</div></div>
+            <div><div class="stat-value" style="font-size: 1.2rem; color: var(--primary);">4.8K</div><div class="stat-label">Disaggregated</div></div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.5rem;">Cost / 1M tokens</div>
+          <div style="display: flex; gap: 0.5rem; justify-content: center;">
+            <div><div class="stat-value" style="font-size: 1.2rem; color: var(--danger);">$2.40</div><div class="stat-label">Monolithic</div></div>
+            <div><div class="stat-value" style="font-size: 1.2rem; color: var(--primary);">$1.05</div><div class="stat-label">Disaggregated</div></div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.5rem;">GPUs for 10K req/s</div>
+          <div style="display: flex; gap: 0.5rem; justify-content: center;">
+            <div><div class="stat-value" style="font-size: 1.2rem; color: var(--danger);">32</div><div class="stat-label">Monolithic</div></div>
+            <div><div class="stat-value" style="font-size: 1.2rem; color: var(--primary);">16</div><div class="stat-label">Disaggregated</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Summary -->
+<section id="summary">
+  <div class="section-inner" style="text-align: center;">
+    <div class="section-tag">Summary</div>
+    <h2 class="section-title"><span class="gradient-text">Disaggregated Serving Summary</span></h2>
+    <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); max-width: 800px; margin: 0 auto 2rem;">
+      <div class="stat-card">
+        <div class="stat-value" style="font-size: 1.3rem; color: var(--primary);">2x+</div>
+        <div class="stat-label">Throughput Gain</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="font-size: 1.3rem; color: var(--secondary);">~75%</div>
+        <div class="stat-label">GPU Utilization</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="font-size: 1.3rem; color: var(--tertiary);">1-3ms</div>
+        <div class="stat-label">KV Transfer Cost</div>
+      </div>
+    </div>
+    <div class="explain-panel" style="text-align: left; max-width: 800px; margin: 0 auto;">
+      <strong>Key Tradeoff:</strong> Disaggregation adds complexity (KV cache transfer, two pools to manage, routing logic) but the utilization and cost benefits are substantial at scale. Systems like DistServe, Splitwise, and Mooncake have demonstrated 2x+ improvements in cost-efficiency. This architecture is becoming the standard for large-scale LLM serving deployments.
+    </div>
+    <div style="margin-top: 2rem; color: var(--text-dim); font-size: 0.85rem;">
+      Module 20 of Inference Engineering &mdash; <span class="gradient-text" style="font-weight: 600;">VizuaraAI</span>
+    </div>
+  </div>
+</section>
+
+<script>
+const sections = document.querySelectorAll('section');
+const sectionIds = Array.from(sections).map(s => s.id);
+const dotsContainer = document.getElementById('sectionDots');
+sectionIds.forEach(id => {
+  const dot = document.createElement('div');
+  dot.className = 'dot';
+  dot.onclick = () => document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+  dotsContainer.appendChild(dot);
+});
+const dots = dotsContainer.querySelectorAll('.dot');
+
+function updateProgress() {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  document.getElementById('progressBar').style.width = ((scrollTop / docHeight) * 100) + '%';
+  sections.forEach((section, i) => {
+    const rect = section.getBoundingClientRect();
+    const inner = section.querySelector('.section-inner');
+    if (rect.top < window.innerHeight * 0.75 && rect.bottom > 0) {
+      if (inner) inner.classList.add('visible');
+      dots[i].classList.add('active');
+    } else { dots[i].classList.remove('active'); }
+  });
+}
+window.addEventListener('scroll', updateProgress);
+window.addEventListener('load', updateProgress);
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Disaggregated simulation
+let simRunning = false;
+async function simulateDisaggregated() {
+  if (simRunning) return;
+  simRunning = true;
+  resetSimulation();
+
+  const pipeline = document.getElementById('pipelineRequests');
+  const requests = ['R1', 'R2', 'R3', 'R4', 'R5', 'R6'];
+  const prefillUtils = document.querySelectorAll('.prefill-util');
+  const decodeUtils = document.querySelectorAll('.decode-util');
+
+  // Add requests to pipeline
+  for (let i = 0; i < requests.length; i++) {
+    const req = document.createElement('span');
+    req.className = 'flow-request queued';
+    req.textContent = requests[i];
+    req.id = 'req-' + i;
+    pipeline.appendChild(req);
+    await sleep(100);
+  }
+
+  // Prefill phase - process 2 at a time across 4 prefill GPUs
+  for (let batch = 0; batch < 3; batch++) {
+    const i1 = batch * 2;
+    const i2 = batch * 2 + 1;
+
+    // Assign to prefill GPUs
+    const gpu1 = document.getElementById('p' + (batch % 4));
+    const gpu2 = document.getElementById('p' + ((batch + 1) % 4));
+    gpu1.classList.add('active');
+    gpu2.classList.add('active');
+
+    document.getElementById('req-' + i1).className = 'flow-request prefilling';
+    if (i2 < requests.length) document.getElementById('req-' + i2).className = 'flow-request prefilling';
+
+    prefillUtils.forEach(u => u.style.width = '85%');
+    await sleep(800);
+
+    // Transfer
+    document.getElementById('req-' + i1).className = 'flow-request transferring';
+    if (i2 < requests.length) document.getElementById('req-' + i2).className = 'flow-request transferring';
+    gpu1.classList.remove('active');
+    gpu2.classList.remove('active');
+    prefillUtils.forEach(u => u.style.width = '0');
+
+    await sleep(400);
+
+    // Move to decode
+    document.getElementById('req-' + i1).className = 'flow-request decoding';
+    if (i2 < requests.length) document.getElementById('req-' + i2).className = 'flow-request decoding';
+    decodeUtils.forEach(u => u.style.width = '75%');
+
+    await sleep(600);
+  }
+
+  // Complete
+  await sleep(500);
+  requests.forEach((_, i) => {
+    document.getElementById('req-' + i).className = 'flow-request done';
+  });
+  decodeUtils.forEach(u => u.style.width = '0');
+
+  simRunning = false;
+}
+
+function resetSimulation() {
+  document.getElementById('pipelineRequests').innerHTML = '';
+  document.querySelectorAll('.prefill-util').forEach(u => u.style.width = '0');
+  document.querySelectorAll('.decode-util').forEach(u => u.style.width = '0');
+  document.querySelectorAll('.gpu-box').forEach(g => g.classList.remove('active'));
+  simRunning = false;
+}
+
+// Flow animation
+let flowAnimating = false;
+async function animateFlow() {
+  if (flowAnimating) return;
+  flowAnimating = true;
+
+  const steps = document.querySelectorAll('.flow-step');
+  steps.forEach(s => { s.style.opacity = '0.3'; s.style.transition = 'opacity 0.5s'; });
+
+  for (let i = 0; i < steps.length; i++) {
+    steps[i].style.opacity = '1';
+    const circle = steps[i].querySelector('div > div:first-child');
+    if (circle) {
+      circle.style.transform = 'scale(1.2)';
+      circle.style.transition = 'transform 0.3s';
+    }
+    await sleep(1200);
+    if (circle) circle.style.transform = 'scale(1)';
+  }
+
+  flowAnimating = false;
+}
+</script>
+</body>
+</html>

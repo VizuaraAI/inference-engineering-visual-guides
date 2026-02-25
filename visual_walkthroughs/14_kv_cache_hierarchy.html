@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KV Cache Storage: The G1-G4 Memory Hierarchy</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#0a0a0a;color:#f2f2f2;overflow-x:hidden;line-height:1.6}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#0a0a0a}
+::-webkit-scrollbar-thumb{background:#00d46a;border-radius:3px}
+.progress-bar{position:fixed;top:0;left:0;width:0%;height:3px;background:linear-gradient(90deg,#00d46a,#00c8e6);z-index:1000;transition:width .3s}
+.nav-dots{position:fixed;right:20px;top:50%;transform:translateY(-50%);z-index:100;display:flex;flex-direction:column;gap:12px}
+.nav-dot{width:10px;height:10px;border-radius:50%;background:#333;cursor:pointer;transition:all .3s;border:2px solid transparent}
+.nav-dot.active{background:#00d46a;border-color:#00c8e6;transform:scale(1.3)}
+section{min-height:100vh;padding:80px 60px;display:flex;flex-direction:column;justify-content:center;align-items:center}
+.hero-section{background:radial-gradient(ellipse at center,#1a1a1a 0%,#0a0a0a 70%)}
+.hero-title{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:3rem;text-align:center;margin-bottom:20px;background:linear-gradient(135deg,#00d46a,#00c8e6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero-subtitle{font-size:1.2rem;color:#a3a3a3;text-align:center;max-width:700px;margin-bottom:40px}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(0,212,106,.15);border:1px solid rgba(0,212,106,.3);border-radius:20px;padding:8px 20px;font-size:.85rem;color:#00d46a;margin-bottom:20px}
+.section-title{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:2rem;margin-bottom:10px;text-align:center}
+.section-desc{color:#a3a3a3;text-align:center;max-width:650px;margin-bottom:40px}
+.highlight{color:#22d3ee}.highlight-amber{color:#f59e0b}.highlight-green{color:#10b981}.highlight-red{color:#ef4444}
+.card{background:rgba(18,18,18,.6);border:1px solid #262626;border-radius:16px;padding:30px;transition:all .3s}
+.card:hover{border-color:#00d46a;box-shadow:0 0 20px rgba(0,212,106,.15),0 0 60px rgba(0,212,106,.05)}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+.gradient-bg{background:linear-gradient(135deg,#0a0a0a,#121212,#0a0a0a);background-size:200% 200%;animation:gradientShift 8s ease infinite}
+@keyframes glow{0%,100%{box-shadow:0 0 20px rgba(239,68,68,.3)}50%{box-shadow:0 0 40px rgba(239,68,68,.6)}}
+@keyframes warmGlow{0%,100%{box-shadow:0 0 15px rgba(245,158,11,.2)}50%{box-shadow:0 0 30px rgba(245,158,11,.4)}}
+
+/* Pyramid */
+.pyramid-container{position:relative;width:600px;height:450px;margin:0 auto}
+.pyramid-level{position:absolute;left:50%;transform:translateX(-50%);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-direction:column;cursor:pointer;transition:all .4s;text-align:center}
+.pyramid-level:hover{transform:translateX(-50%) scale(1.03)}
+.pyramid-level.g1{top:0;width:200px;height:90px;background:linear-gradient(135deg,rgba(239,68,68,.2),rgba(239,68,68,.1));border:2px solid #ef4444;animation:glow 3s infinite}
+.pyramid-level.g2{top:110px;width:300px;height:90px;background:linear-gradient(135deg,rgba(245,158,11,.15),rgba(245,158,11,.05));border:2px solid #f59e0b;animation:warmGlow 4s infinite}
+.pyramid-level.g3{top:220px;width:420px;height:90px;background:linear-gradient(135deg,rgba(0,212,106,.1),rgba(0,212,106,.05));border:2px solid #00d46a}
+.pyramid-level.g4{top:330px;width:540px;height:90px;background:linear-gradient(135deg,rgba(100,116,139,.1),rgba(100,116,139,.05));border:2px solid #64748b}
+.pyramid-label{font-weight:700;font-size:1rem}
+.pyramid-detail{font-size:.7rem;color:#94a3b8;margin-top:4px}
+.pyramid-speed{font-size:.75rem;font-weight:600;margin-top:2px}
+
+/* Level detail cards */
+.level-detail{display:none;max-width:500px;margin-top:20px;animation:fadeInUp .4s ease}
+.level-detail.show{display:block}
+
+/* KV cache animation */
+.kv-anim-container{position:relative;width:700px;height:350px;margin:20px auto}
+.kv-block{position:absolute;width:40px;height:25px;border-radius:5px;font-size:.55rem;font-weight:700;display:flex;align-items:center;justify-content:center;transition:all 1.5s cubic-bezier(.4,0,.2,1)}
+
+/* Slider */
+.cache-slider-container{max-width:500px;width:100%;margin:20px auto;text-align:center}
+.cache-slider{width:100%;accent-color:#00d46a;margin:10px 0}
+.cache-viz{display:flex;gap:0;height:50px;border-radius:10px;overflow:hidden;margin-top:15px;width:100%}
+.cache-segment{display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:600;transition:all .5s;overflow:hidden;white-space:nowrap}
+
+/* B200 config */
+.b200-diagram{display:flex;gap:15px;align-items:center;flex-wrap:wrap;justify-content:center;margin-top:20px}
+.b200-block{padding:15px 20px;border-radius:12px;text-align:center;min-width:120px}
+.b200-bar{display:flex;height:40px;border-radius:8px;overflow:hidden;width:500px;margin-top:15px}
+.b200-segment{display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:600;transition:width 1s}
+
+/* Eviction animation */
+.eviction-container{position:relative;width:600px;height:300px;margin:20px auto}
+.eviction-level{position:absolute;left:50%;transform:translateX(-50%);height:50px;border-radius:10px;display:flex;align-items:center;padding:0 15px;gap:5px;overflow:hidden}
+.eviction-level.el1{top:0;width:200px;background:rgba(239,68,68,.15);border:1px solid #ef4444}
+.eviction-level.el2{top:70px;width:300px;background:rgba(245,158,11,.1);border:1px solid #f59e0b}
+.eviction-level.el3{top:140px;width:400px;background:rgba(0,212,106,.08);border:1px solid #00d46a}
+.eviction-level.el4{top:210px;width:500px;background:rgba(100,116,139,.05);border:1px solid #64748b}
+.eviction-block{width:25px;height:30px;border-radius:4px;font-size:.5rem;display:flex;align-items:center;justify-content:center;font-weight:700;transition:all .8s}
+.ev-label{position:absolute;right:-60px;font-size:.7rem;font-weight:600}
+
+.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;max-width:900px}
+</style>
+</head>
+<body>
+<div class="progress-bar" id="progressBar"></div>
+<nav class="nav-dots" id="navDots"></nav>
+
+<!-- Section 1: Hero -->
+<section class="hero-section" id="sec0">
+<div class="hero-badge">Chapter 14 -- Memory Management</div>
+<h1 class="hero-title">KV Cache Hierarchy</h1>
+<p class="hero-subtitle">The G1-G4 memory hierarchy that keeps inference fast by placing KV cache data at the right speed tier.</p>
+<div style="display:flex;gap:15px;margin-top:20px;flex-wrap:wrap;justify-content:center">
+<div class="card" style="text-align:center;padding:15px 20px;border-color:rgba(239,68,68,.3)">
+<div style="font-size:1.3rem;font-weight:800;color:#ef4444">G1: VRAM</div>
+<div style="font-size:.7rem;color:#94a3b8">3.35 TB/s</div>
+</div>
+<div class="card" style="text-align:center;padding:15px 20px;border-color:rgba(245,158,11,.3)">
+<div style="font-size:1.3rem;font-weight:800;color:#f59e0b">G2: CPU RAM</div>
+<div style="font-size:.7rem;color:#94a3b8">100-900 GB/s</div>
+</div>
+<div class="card" style="text-align:center;padding:15px 20px;border-color:rgba(0,212,106,.3)">
+<div style="font-size:1.3rem;font-weight:800;color:#00d46a">G3: Local SSD</div>
+<div style="font-size:.7rem;color:#94a3b8">~7 GB/s</div>
+</div>
+<div class="card" style="text-align:center;padding:15px 20px;border-color:rgba(100,116,139,.3)">
+<div style="font-size:1.3rem;font-weight:800;color:#64748b">G4: Network</div>
+<div style="font-size:.7rem;color:#94a3b8">~3 GB/s</div>
+</div>
+</div>
+</section>
+
+<!-- Section 2: Pyramid -->
+<section class="gradient-bg" id="sec1">
+<h2 class="section-title">The Memory <span class="highlight">Pyramid</span></h2>
+<p class="section-desc">Click each level to see details. Faster at top, more capacity at bottom.</p>
+<div class="pyramid-container">
+<div class="pyramid-level g1" onclick="showLevel(1)">
+<div class="pyramid-label" style="color:#ef4444">G1: GPU VRAM (HBM)</div>
+<div class="pyramid-speed" style="color:#fca5a5">3.35 TB/s -- 80-192 GB</div>
+<div class="pyramid-detail">"Hot" cache -- active requests</div>
+</div>
+<div class="pyramid-level g2" onclick="showLevel(2)">
+<div class="pyramid-label" style="color:#f59e0b">G2: CPU RAM (DRAM)</div>
+<div class="pyramid-speed" style="color:#fbbf24">100-900 GB/s -- 512 GB-2 TB</div>
+<div class="pyramid-detail">"Warm" cache -- recent/idle requests</div>
+</div>
+<div class="pyramid-level g3" onclick="showLevel(3)">
+<div class="pyramid-label" style="color:#00d46a">G3: Local SSD (NVMe)</div>
+<div class="pyramid-speed" style="color:#00d46a">~7 GB/s -- 2-8 TB</div>
+<div class="pyramid-detail">"Cold" cache -- infrequent reuse</div>
+</div>
+<div class="pyramid-level g4" onclick="showLevel(4)">
+<div class="pyramid-label" style="color:#64748b">G4: Network Storage</div>
+<div class="pyramid-speed" style="color:#94a3b8">~3 GB/s -- Unlimited</div>
+<div class="pyramid-detail">"Archive" -- cross-node sharing</div>
+</div>
+</div>
+<div class="level-detail card" id="levelDetail"></div>
+</section>
+
+<!-- Section 3: Cache Slider -->
+<section id="sec2">
+<h2 class="section-title">Interactive: <span class="highlight-amber">Cache Overflow</span></h2>
+<p class="section-desc">Drag the slider to increase the KV cache size needed. Watch it overflow from G1 to G2, G3, and G4.</p>
+<div class="cache-slider-container">
+<div style="display:flex;justify-content:space-between;font-size:.8rem;color:#64748b">
+<span>10 GB</span>
+<span>KV Cache Size Needed</span>
+<span>2 TB</span>
+</div>
+<input type="range" class="cache-slider" id="cacheSlider" min="10" max="2000" value="50" oninput="updateCacheViz()">
+<div id="cacheValue" style="font-size:1.5rem;font-weight:700;color:#22d3ee;margin:10px 0">50 GB</div>
+<div class="cache-viz" id="cacheViz"></div>
+<div style="display:flex;justify-content:space-between;margin-top:8px;font-size:.65rem;color:#64748b">
+<span>G1: VRAM (80 GB)</span>
+<span>G2: RAM (512 GB)</span>
+<span>G3: SSD (4 TB)</span>
+<span>G4: Net</span>
+</div>
+<div id="cacheNote" style="margin-top:15px;font-size:.8rem;color:#94a3b8;min-height:40px"></div>
+</div>
+</section>
+
+<!-- Section 4: B200 Config -->
+<section class="gradient-bg" id="sec3">
+<h2 class="section-title">B200 Config <span class="highlight-green">Example</span></h2>
+<p class="section-desc">NVIDIA B200: 192 GB HBM3e. How does the memory get divided?</p>
+<div class="b200-diagram">
+<div class="b200-block" style="background:rgba(0,212,106,.15);border:1px solid #00d46a">
+<div style="font-size:1.5rem;font-weight:800;color:#00d46a">192 GB</div>
+<div style="font-size:.75rem;color:#94a3b8">Total VRAM</div>
+</div>
+<div style="font-size:1.5rem;color:#475569">=</div>
+<div class="b200-block" style="background:rgba(245,158,11,.15);border:1px solid #f59e0b">
+<div style="font-size:1.3rem;font-weight:700;color:#f59e0b">100 GB</div>
+<div style="font-size:.7rem;color:#94a3b8">Model Weights</div>
+</div>
+<div style="font-size:1.5rem;color:#475569">+</div>
+<div class="b200-block" style="background:rgba(34,211,238,.15);border:1px solid #22d3ee">
+<div style="font-size:1.3rem;font-weight:700;color:#22d3ee">64 GB</div>
+<div style="font-size:.7rem;color:#94a3b8">KV Cache (G1)</div>
+</div>
+<div style="font-size:1.5rem;color:#475569">+</div>
+<div class="b200-block" style="background:rgba(100,116,139,.15);border:1px solid #64748b">
+<div style="font-size:1.3rem;font-weight:700;color:#94a3b8">~28 GB</div>
+<div style="font-size:.7rem;color:#94a3b8">Activations/OS</div>
+</div>
+</div>
+<div class="b200-bar" id="b200bar" style="margin-top:25px">
+<div class="b200-segment" id="b200w" style="width:0;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff">Weights</div>
+<div class="b200-segment" id="b200k" style="width:0;background:linear-gradient(135deg,#22d3ee,#0891b2);color:#0a0a0a">KV Cache</div>
+<div class="b200-segment" id="b200a" style="width:0;background:linear-gradient(135deg,#64748b,#475569);color:#fff">Other</div>
+</div>
+<p style="margin-top:20px;font-size:.8rem;color:#94a3b8;max-width:500px;text-align:center">When the 64 GB KV cache fills up, overflow goes to <span class="highlight-amber">G2 (CPU RAM)</span>. With Grace CPU's NVLink-C2C, G2 runs at <span class="highlight">900 GB/s</span> instead of PCIe's 64 GB/s.</p>
+</section>
+
+<!-- Section 5: Eviction Animation -->
+<section id="sec4">
+<h2 class="section-title">Cache <span class="highlight-red">Eviction</span></h2>
+<p class="section-desc">When G1 fills up, least-recently-used cache blocks are evicted to lower tiers. Click "Fill G1" to watch.</p>
+<button id="fillBtn" onclick="startEviction()" style="padding:12px 30px;border:none;border-radius:10px;background:linear-gradient(135deg,#00d46a,#00a854);color:#fff;font-weight:600;cursor:pointer;font-size:.9rem;margin-bottom:20px;font-family:'Inter',sans-serif">Fill G1 & Watch Eviction</button>
+<div class="eviction-container" id="evictionContainer">
+<div class="eviction-level el1" id="el1">
+<span class="ev-label" style="color:#ef4444">G1</span>
+</div>
+<div class="eviction-level el2" id="el2">
+<span class="ev-label" style="color:#f59e0b">G2</span>
+</div>
+<div class="eviction-level el3" id="el3">
+<span class="ev-label" style="color:#00d46a">G3</span>
+</div>
+<div class="eviction-level el4" id="el4">
+<span class="ev-label" style="color:#64748b">G4</span>
+</div>
+</div>
+<div id="evictionStatus" style="font-size:.8rem;color:#94a3b8;text-align:center;margin-top:10px;min-height:24px"></div>
+</section>
+
+<!-- Section 6: Grace NVLink-C2C -->
+<section class="gradient-bg" id="sec5">
+<h2 class="section-title">Grace CPU: <span class="highlight">NVLink-C2C</span></h2>
+<p class="section-desc">The NVIDIA Grace CPU connects to B200 via NVLink-C2C, making G2 dramatically faster.</p>
+<div style="display:flex;gap:40px;flex-wrap:wrap;justify-content:center">
+<div class="card" style="max-width:350px;text-align:center">
+<h3 style="color:#64748b;margin-bottom:10px">Traditional: PCIe</h3>
+<div style="font-size:2.5rem;font-weight:800;color:#64748b">64 GB/s</div>
+<div style="font-size:.8rem;color:#94a3b8;margin-top:5px">CPU to GPU bandwidth</div>
+<div style="margin-top:15px;padding:10px;background:rgba(100,116,139,.1);border-radius:8px;font-size:.75rem;color:#94a3b8">
+G2 offload adds significant latency.<br>Each KV block transfer takes microseconds.
+</div>
+</div>
+<div class="card" style="max-width:350px;text-align:center;border-color:rgba(16,185,129,.3)">
+<h3 style="color:#10b981;margin-bottom:10px">Grace: NVLink-C2C</h3>
+<div style="font-size:2.5rem;font-weight:800;color:#10b981">900 GB/s</div>
+<div style="font-size:.8rem;color:#94a3b8;margin-top:5px">CPU to GPU bandwidth</div>
+<div style="margin-top:15px;padding:10px;background:rgba(16,185,129,.1);border-radius:8px;font-size:.75rem;color:#6ee7b7">
+14x faster! G2 becomes viable for<br>active inference, not just overflow.
+</div>
+</div>
+</div>
+<div class="card" style="margin-top:30px;max-width:600px">
+<div style="display:flex;align-items:center;gap:20px">
+<div style="flex:1">
+<div style="font-size:.75rem;color:#64748b;margin-bottom:5px">PCIe G2 access</div>
+<div style="height:12px;background:#222;border-radius:6px;overflow:hidden"><div style="width:7%;height:100%;background:#64748b;border-radius:6px"></div></div>
+</div>
+<div style="flex:1">
+<div style="font-size:.75rem;color:#10b981;margin-bottom:5px">NVLink-C2C G2 access</div>
+<div style="height:12px;background:#222;border-radius:6px;overflow:hidden"><div style="width:100%;height:100%;background:#10b981;border-radius:6px"></div></div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- Section 7: Hot/Warm/Cold -->
+<section id="sec6">
+<h2 class="section-title"><span class="highlight-red">Hot</span>, <span class="highlight-amber">Warm</span> & <span class="highlight">Cold</span> Cache</h2>
+<p class="section-desc">Cache placement follows access patterns. Active requests stay hot in G1.</p>
+<div class="info-grid" style="margin-top:20px">
+<div class="card" style="border-color:rgba(239,68,68,.3)">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+<div style="width:12px;height:12px;border-radius:50%;background:#ef4444;box-shadow:0 0 15px rgba(239,68,68,.5)"></div>
+<h4 style="color:#ef4444">Hot (G1: VRAM)</h4>
+</div>
+<p style="font-size:.8rem;color:#94a3b8">Actively generating tokens. Must be in VRAM for GPU compute. Every decode step reads from this cache.</p>
+<div style="margin-top:10px;font-size:.75rem;color:#fca5a5">Access time: ~microseconds</div>
+</div>
+<div class="card" style="border-color:rgba(245,158,11,.3)">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+<div style="width:12px;height:12px;border-radius:50%;background:#f59e0b;box-shadow:0 0 10px rgba(245,158,11,.3)"></div>
+<h4 style="color:#f59e0b">Warm (G2: CPU RAM)</h4>
+</div>
+<p style="font-size:.8rem;color:#94a3b8">Recently idle or preempted requests. Can be swapped back to G1 quickly if the user sends another message.</p>
+<div style="margin-top:10px;font-size:.75rem;color:#fbbf24">Access time: ~100 microseconds</div>
+</div>
+<div class="card" style="border-color:rgba(0,212,106,.3)">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+<div style="width:12px;height:12px;border-radius:50%;background:#00d46a"></div>
+<h4 style="color:#00d46a">Cold (G3: SSD)</h4>
+</div>
+<p style="font-size:.8rem;color:#94a3b8">Long-idle sessions. Multi-turn conversations where the user might come back later. Stored for potential reuse.</p>
+<div style="margin-top:10px;font-size:.75rem;color:#00d46a">Access time: ~milliseconds</div>
+</div>
+<div class="card" style="border-color:rgba(100,116,139,.3)">
+<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+<div style="width:12px;height:12px;border-radius:50%;background:#64748b"></div>
+<h4 style="color:#64748b">Archive (G4: Network)</h4>
+</div>
+<p style="font-size:.8rem;color:#94a3b8">Cross-node cache sharing. System prompts cached once, shared across the cluster. Rarely accessed per-user caches.</p>
+<div style="margin-top:10px;font-size:.75rem;color:#94a3b8">Access time: ~10s of milliseconds</div>
+</div>
+</div>
+</section>
+
+<!-- Section 8: Takeaways -->
+<section class="gradient-bg" id="sec7">
+<h2 class="section-title">Key <span class="highlight-amber">Takeaways</span></h2>
+<div class="info-grid" style="margin-top:20px">
+<div class="card">
+<div style="font-size:1.5rem;margin-bottom:10px">1</div>
+<h4 style="color:#ef4444;margin-bottom:8px">G1 Is Precious</h4>
+<p style="font-size:.82rem;color:#94a3b8">GPU VRAM is shared between model weights and KV cache. A 100B parameter model leaves only 64 GB for KV cache on a 192 GB B200.</p>
+</div>
+<div class="card">
+<div style="font-size:1.5rem;margin-bottom:10px">2</div>
+<h4 style="color:#f59e0b;margin-bottom:8px">Tiered Offload Extends Capacity</h4>
+<p style="font-size:.82rem;color:#94a3b8">By offloading cold cache to lower tiers, you can serve more concurrent users without adding GPUs.</p>
+</div>
+<div class="card">
+<div style="font-size:1.5rem;margin-bottom:10px">3</div>
+<h4 style="color:#10b981;margin-bottom:8px">NVLink-C2C Changes the Game</h4>
+<p style="font-size:.82rem;color:#94a3b8">Grace's 900 GB/s CPU-GPU link makes G2 almost as fast as G1 for KV cache access. This effectively extends VRAM capacity.</p>
+</div>
+<div class="card">
+<div style="font-size:1.5rem;margin-bottom:10px">4</div>
+<h4 style="color:#00d46a;margin-bottom:8px">Access Pattern Matters</h4>
+<p style="font-size:.82rem;color:#94a3b8">Hot/warm/cold classification must match actual access patterns. Evicting an active request's cache to G3 would be catastrophic for latency.</p>
+</div>
+</div>
+</section>
+
+<script>
+const sections = document.querySelectorAll('section');
+const navDots = document.getElementById('navDots');
+sections.forEach((s,i) => {
+  const dot = document.createElement('div');
+  dot.className = 'nav-dot';
+  dot.onclick = () => s.scrollIntoView({behavior:'smooth'});
+  navDots.appendChild(dot);
+});
+window.addEventListener('scroll', () => {
+  const scrollPct = window.scrollY / (document.body.scrollHeight - window.innerHeight);
+  document.getElementById('progressBar').style.width = (scrollPct*100)+'%';
+  const dots = document.querySelectorAll('.nav-dot');
+  sections.forEach((s,i) => {
+    const rect = s.getBoundingClientRect();
+    if(rect.top < window.innerHeight/2 && rect.bottom > window.innerHeight/2){
+      dots.forEach(d => d.classList.remove('active'));
+      dots[i].classList.add('active');
+    }
+  });
+});
+
+// Level details
+const levelData = {
+  1:{title:'G1: GPU VRAM (HBM3e)',color:'#ef4444',speed:'3.35 TB/s',capacity:'80-192 GB',desc:'The fastest memory tier. KV cache blocks for actively decoding requests live here. Every token generation step reads K and V tensors from this memory. Bandwidth-limited, not capacity-limited for most workloads.'},
+  2:{title:'G2: CPU RAM (DDR5/LPDDR5)',color:'#f59e0b',speed:'100-900 GB/s',capacity:'512 GB - 2 TB',desc:'Overflow tier for preempted or idle requests. With NVLink-C2C on Grace, transfer speed reaches 900 GB/s -- fast enough to reload KV cache in microseconds. With PCIe, limited to 64 GB/s.'},
+  3:{title:'G3: Local NVMe SSD',color:'#00d46a',speed:'~7 GB/s',capacity:'2-8 TB per node',desc:'For long-idle sessions that might resume. Reloading from SSD takes milliseconds, so this is only viable for multi-turn conversations with long pauses between messages.'},
+  4:{title:'G4: Network Storage / Remote SSD',color:'#64748b',speed:'~3 GB/s',capacity:'Unlimited',desc:'Cross-node cache sharing. System prompts cached once and distributed. Also used for KV cache persistence across node restarts.'}
+};
+
+function showLevel(n) {
+  const d = levelData[n];
+  const el = document.getElementById('levelDetail');
+  el.innerHTML = `<h3 style="color:${d.color};margin-bottom:8px">${d.title}</h3>
+    <div style="display:flex;gap:20px;margin-bottom:10px">
+      <span style="font-size:.8rem;color:${d.color}">Speed: ${d.speed}</span>
+      <span style="font-size:.8rem;color:${d.color}">Capacity: ${d.capacity}</span>
+    </div>
+    <p style="font-size:.82rem;color:#94a3b8">${d.desc}</p>`;
+  el.classList.add('show');
+}
+
+// Cache slider
+function updateCacheViz() {
+  const val = parseInt(document.getElementById('cacheSlider').value);
+  document.getElementById('cacheValue').textContent = val >= 1000 ? (val/1000).toFixed(1)+' TB' : val+' GB';
+
+  const g1Cap = 80, g2Cap = 512, g3Cap = 4000;
+  let g1 = Math.min(val, g1Cap);
+  let g2 = Math.min(Math.max(val - g1Cap, 0), g2Cap);
+  let g3 = Math.min(Math.max(val - g1Cap - g2Cap, 0), g3Cap);
+  let g4 = Math.max(val - g1Cap - g2Cap - g3Cap, 0);
+  const total = g1 + g2 + g3 + g4;
+
+  const viz = document.getElementById('cacheViz');
+  viz.innerHTML = '';
+  if(g1>0) viz.innerHTML += `<div class="cache-segment" style="width:${g1/total*100}%;background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff">G1: ${g1}GB</div>`;
+  if(g2>0) viz.innerHTML += `<div class="cache-segment" style="width:${g2/total*100}%;background:linear-gradient(135deg,#f59e0b,#d97706);color:#0a0a0a">G2: ${g2}GB</div>`;
+  if(g3>0) viz.innerHTML += `<div class="cache-segment" style="width:${g3/total*100}%;background:linear-gradient(135deg,#00d46a,#00a854);color:#fff">G3: ${g3>=1000?(g3/1000).toFixed(1)+'TB':g3+'GB'}</div>`;
+  if(g4>0) viz.innerHTML += `<div class="cache-segment" style="width:${g4/total*100}%;background:linear-gradient(135deg,#64748b,#475569);color:#fff">G4: ${g4>=1000?(g4/1000).toFixed(1)+'TB':g4+'GB'}</div>`;
+
+  const note = document.getElementById('cacheNote');
+  if(val <= 80) note.textContent = 'All KV cache fits in GPU VRAM (G1). Optimal performance.';
+  else if(val <= 592) note.textContent = 'G1 is full! Overflow to CPU RAM (G2). With NVLink-C2C, still fast at 900 GB/s.';
+  else if(val <= 4592) note.textContent = 'G1 + G2 full. Cold cache spills to local SSD (G3). Expect millisecond-level reload times.';
+  else note.textContent = 'Massive cache requirement! Spilling to network storage (G4). Consider adding more GPUs.';
+}
+updateCacheViz();
+
+// B200 bar animation
+let b200Animated = false;
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if(e.isIntersecting && e.target.id === 'sec3' && !b200Animated) {
+      b200Animated = true;
+      setTimeout(() => {
+        document.getElementById('b200w').style.width = '52%';
+        document.getElementById('b200k').style.width = '33%';
+        document.getElementById('b200a').style.width = '15%';
+      }, 300);
+    }
+  });
+},{threshold:.3});
+sections.forEach(s => observer.observe(s));
+
+// Eviction
+let evictionRunning = false;
+function startEviction() {
+  if(evictionRunning) return;
+  evictionRunning = true;
+  const el1 = document.getElementById('el1');
+  const el2 = document.getElementById('el2');
+  const el3 = document.getElementById('el3');
+  const el4 = document.getElementById('el4');
+  const status = document.getElementById('evictionStatus');
+
+  // Clear previous
+  document.querySelectorAll('.eviction-block').forEach(b => b.remove());
+
+  const colors = ['#ef4444','#f59e0b','#22d3ee','#10b981','#00d46a','#a855f7','#ec4899','#f97316'];
+  let blockId = 0;
+
+  // Fill G1
+  function addBlock(level, delay) {
+    return new Promise(resolve => {
+      setTimeout(() => {
+        const b = document.createElement('div');
+        b.className = 'eviction-block';
+        b.id = 'eb' + blockId;
+        b.style.background = colors[blockId % colors.length];
+        b.textContent = 'K' + blockId;
+        b.style.color = '#fff';
+        level.insertBefore(b, level.querySelector('.ev-label'));
+        blockId++;
+        resolve();
+      }, delay);
+    });
+  }
+
+  async function run() {
+    status.textContent = 'Filling G1 with KV cache blocks...';
+    for(let i = 0; i < 5; i++) await addBlock(el1, 300);
+
+    status.textContent = 'G1 is full! New request arrives... evicting oldest to G2';
+    await new Promise(r => setTimeout(r, 800));
+
+    // Move first block to G2
+    const first = el1.querySelector('.eviction-block');
+    if(first) {first.remove(); el2.insertBefore(first, el2.querySelector('.ev-label'));}
+    await addBlock(el1, 500);
+
+    status.textContent = 'Another request... evicting to G2';
+    await new Promise(r => setTimeout(r, 600));
+    const second = el1.querySelector('.eviction-block');
+    if(second) {second.remove(); el2.insertBefore(second, el2.querySelector('.ev-label'));}
+    await addBlock(el1, 500);
+
+    status.textContent = 'G2 filling up... cold blocks move to G3 (SSD)';
+    await new Promise(r => setTimeout(r, 800));
+    const g2First = el2.querySelector('.eviction-block');
+    if(g2First) {g2First.remove(); el3.insertBefore(g2First, el3.querySelector('.ev-label'));}
+
+    status.textContent = 'Hierarchy in action: Hot in G1, Warm in G2, Cold in G3.';
+    evictionRunning = false;
+  }
+  run();
+}
+</script>
+</body>
+</html>

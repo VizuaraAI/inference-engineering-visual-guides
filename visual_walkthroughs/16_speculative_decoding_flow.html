@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Speculative Decoding Flow | Inference Engineering</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a;
+  --bg-card: #121212;
+  --bg-card-hover: #1a1a1a;
+  --border: #262626;
+  --primary: #00d46a;
+  --secondary: #00c8e6;
+  --tertiary: #a855f7;
+  --success: #10b981;
+  --text: #f2f2f2;
+  --text-muted: #a3a3a3;
+  --text-dim: #737373;
+  --danger: #ef4444;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow-x: hidden;
+}
+
+code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+h1, h2 { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; }
+
+.gradient-text {
+  background: linear-gradient(135deg, #00d46a, #00c8e6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Grid background */
+.grid-bg {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.glow-orb {
+  position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0;
+}
+.glow-orb.green { width: 400px; height: 400px; background: rgba(0,212,106,0.08); top: 10%; left: -100px; }
+.glow-orb.cyan { width: 350px; height: 350px; background: rgba(0,200,230,0.06); bottom: 10%; right: -80px; }
+
+/* Nav */
+nav {
+  position: fixed; top: 0; left: 0; width: 100%; z-index: 1000;
+  background: rgba(10,10,10,0.85); backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border); padding: 0 2rem; height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+nav .logo { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.3rem; }
+nav .nav-links { display: flex; gap: 2rem; }
+nav .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 0.85rem; transition: color 0.3s; }
+nav .nav-links a:hover { color: var(--primary); }
+
+/* Progress bar */
+.progress-bar {
+  position: fixed; top: 60px; left: 0; height: 3px; z-index: 999;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  transition: width 0.3s ease;
+}
+
+/* Section dots */
+.section-dots {
+  position: fixed; right: 1.5rem; top: 50%; transform: translateY(-50%);
+  z-index: 999; display: flex; flex-direction: column; gap: 12px;
+}
+.section-dots .dot {
+  width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--text-dim);
+  background: transparent; cursor: pointer; transition: all 0.3s;
+}
+.section-dots .dot.active { background: var(--primary); border-color: var(--primary); box-shadow: 0 0 10px rgba(0,212,106,0.5); }
+
+/* Sections */
+section {
+  min-height: 100vh; position: relative; z-index: 1;
+  display: flex; align-items: center; justify-content: center;
+  padding: 80px 2rem 2rem;
+}
+
+.section-inner {
+  max-width: 1200px; width: 100%; opacity: 0; transform: translateY(40px);
+  transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.section-inner.visible { opacity: 1; transform: translateY(0); }
+
+/* Cards */
+.card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px;
+  padding: 2rem; transition: all 0.3s;
+}
+.card:hover { background: var(--bg-card-hover); box-shadow: 0 0 40px rgba(0,212,106,0.15); }
+
+.badge {
+  display: inline-block; padding: 4px 12px; border-radius: 20px;
+  font-size: 0.75rem; font-weight: 600; border: 1px solid var(--primary);
+  background: rgba(0,212,106,0.1); color: var(--primary); margin-bottom: 1rem;
+}
+
+/* Hero */
+.hero h1 { font-size: clamp(2.5rem, 5vw, 4rem); line-height: 1.1; margin-bottom: 1rem; }
+.hero p { color: var(--text-muted); font-size: 1.15rem; max-width: 600px; line-height: 1.7; }
+
+/* Flow animation area */
+.flow-container {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px;
+  padding: 2rem; position: relative; overflow: hidden; min-height: 400px;
+}
+
+.model-box {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.75rem 1.25rem; border-radius: 12px; font-weight: 600;
+  font-size: 0.9rem;
+}
+.model-box.draft { background: rgba(168,85,247,0.15); border: 1px solid var(--tertiary); color: var(--tertiary); }
+.model-box.target { background: rgba(0,212,106,0.15); border: 1px solid var(--primary); color: var(--primary); }
+
+.token-stream {
+  display: flex; gap: 6px; flex-wrap: wrap; margin: 1rem 0; min-height: 50px; align-items: center;
+}
+.token {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 6px 14px; border-radius: 8px; font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem; font-weight: 500; transition: all 0.3s;
+  opacity: 0; transform: scale(0.8);
+}
+.token.draft-token { background: rgba(168,85,247,0.15); border: 1px solid rgba(168,85,247,0.3); color: var(--tertiary); }
+.token.accepted { background: rgba(0,212,106,0.15); border: 1px solid rgba(0,212,106,0.4); color: var(--primary); }
+.token.rejected { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); color: var(--danger); text-decoration: line-through; }
+.token.show { opacity: 1; transform: scale(1); }
+.token.verifying { animation: pulse-verify 0.5s ease infinite; }
+
+@keyframes pulse-verify {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0,200,230,0.4); }
+  50% { box-shadow: 0 0 15px 3px rgba(0,200,230,0.2); }
+}
+
+.arrow-flow {
+  display: flex; align-items: center; justify-content: center;
+  gap: 0.5rem; color: var(--text-dim); font-size: 1.5rem; margin: 0.5rem 0;
+}
+
+/* Controls */
+.controls {
+  display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1.5rem; align-items: center;
+}
+.btn {
+  padding: 0.6rem 1.5rem; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text); font-family: 'Inter', sans-serif;
+  font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.3s;
+}
+.btn:hover { border-color: var(--primary); box-shadow: 0 0 20px rgba(0,212,106,0.15); }
+.btn.active { background: rgba(0,212,106,0.15); border-color: var(--primary); color: var(--primary); }
+
+.slider-group { display: flex; flex-direction: column; gap: 4px; }
+.slider-group label { font-size: 0.75rem; color: var(--text-muted); }
+.slider-group input[type="range"] {
+  -webkit-appearance: none; width: 200px; height: 6px; border-radius: 3px;
+  background: var(--border); outline: none;
+}
+.slider-group input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--primary); cursor: pointer; box-shadow: 0 0 10px rgba(0,212,106,0.3);
+}
+
+/* Stats */
+.stats-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem; margin-top: 1.5rem;
+}
+.stat-card {
+  background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.25rem; text-align: center;
+}
+.stat-card .stat-value {
+  font-family: 'JetBrains Mono', monospace; font-size: 1.8rem;
+  font-weight: 700; margin-bottom: 0.25rem;
+}
+.stat-card .stat-label { font-size: 0.75rem; color: var(--text-muted); }
+
+/* Comparison chart */
+.comparison-bars {
+  display: flex; flex-direction: column; gap: 1.5rem; margin-top: 1.5rem;
+}
+.bar-row { display: flex; align-items: center; gap: 1rem; }
+.bar-label { width: 160px; font-size: 0.85rem; color: var(--text-muted); flex-shrink: 0; }
+.bar-track { flex: 1; height: 36px; background: rgba(255,255,255,0.03); border-radius: 8px; overflow: hidden; position: relative; }
+.bar-fill {
+  height: 100%; border-radius: 8px; display: flex; align-items: center;
+  justify-content: flex-end; padding-right: 12px; font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem; font-weight: 600; transition: width 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+  width: 0;
+}
+.bar-fill.standard { background: linear-gradient(90deg, rgba(239,68,68,0.3), rgba(239,68,68,0.6)); }
+.bar-fill.speculative { background: linear-gradient(90deg, rgba(0,212,106,0.3), rgba(0,212,106,0.6)); }
+
+/* Timeline animation */
+.timeline-container {
+  position: relative; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 16px; padding: 2rem; overflow: hidden;
+}
+.timeline-row {
+  display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;
+}
+.timeline-label {
+  width: 120px; font-size: 0.8rem; color: var(--text-muted); flex-shrink: 0; text-align: right;
+}
+.timeline-track {
+  flex: 1; height: 44px; background: rgba(255,255,255,0.02); border-radius: 8px;
+  position: relative; overflow: hidden;
+}
+.timeline-block {
+  position: absolute; top: 4px; height: 36px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 500;
+  opacity: 0; transition: opacity 0.5s;
+}
+.timeline-block.show { opacity: 1; }
+
+/* Step indicator */
+.step-indicators {
+  display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap;
+}
+.step-ind {
+  padding: 6px 16px; border-radius: 20px; font-size: 0.8rem; font-weight: 500;
+  background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+  color: var(--text-dim); transition: all 0.3s;
+}
+.step-ind.active { background: rgba(0,212,106,0.1); border-color: var(--primary); color: var(--primary); }
+.step-ind.done { background: rgba(0,212,106,0.05); border-color: rgba(0,212,106,0.3); color: var(--success); }
+
+/* Explanation panel */
+.explain-panel {
+  margin-top: 1.5rem; padding: 1.5rem; background: rgba(0,212,106,0.03);
+  border: 1px solid rgba(0,212,106,0.15); border-radius: 12px;
+  font-size: 0.9rem; color: var(--text-muted); line-height: 1.7;
+}
+.explain-panel strong { color: var(--text); }
+
+/* Section headings */
+.section-tag { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; color: var(--primary); margin-bottom: 0.5rem; }
+.section-title { font-size: clamp(1.8rem, 3vw, 2.5rem); margin-bottom: 1rem; }
+.section-desc { color: var(--text-muted); font-size: 1rem; max-width: 700px; line-height: 1.7; margin-bottom: 2rem; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  section { padding: 80px 1rem 1rem; }
+  .bar-label { width: 100px; font-size: 0.75rem; }
+  .timeline-label { width: 80px; font-size: 0.7rem; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .controls { flex-direction: column; }
+  .slider-group input[type="range"] { width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div class="glow-orb green"></div>
+<div class="glow-orb cyan"></div>
+
+<nav>
+  <div class="logo"><span class="gradient-text">Vizuara</span> Inference Engineering</div>
+  <div class="nav-links">
+    <a href="#hero">Overview</a>
+    <a href="#concept">Concept</a>
+    <a href="#flow">Flow</a>
+    <a href="#interactive">Interactive</a>
+    <a href="#comparison">Comparison</a>
+    <a href="#summary">Summary</a>
+  </div>
+</nav>
+
+<div class="progress-bar" id="progressBar"></div>
+
+<div class="section-dots" id="sectionDots"></div>
+
+<!-- Section 1: Hero -->
+<section id="hero">
+  <div class="section-inner hero">
+    <div class="badge">Module 16</div>
+    <h1><span class="gradient-text">Speculative Decoding</span> Flow</h1>
+    <p>Accelerate autoregressive generation by drafting tokens with a fast model and verifying them in parallel with a powerful model. Achieve up to 2-3x speedup with zero quality loss.</p>
+    <div style="margin-top: 2rem; display: flex; gap: 1rem; flex-wrap: wrap;">
+      <div class="stat-card" style="text-align: left; padding: 1rem 1.5rem;">
+        <div class="stat-value" style="font-size: 1.2rem; color: var(--primary);">2-3x</div>
+        <div class="stat-label">Typical Speedup</div>
+      </div>
+      <div class="stat-card" style="text-align: left; padding: 1rem 1.5rem;">
+        <div class="stat-value" style="font-size: 1.2rem; color: var(--secondary);">0%</div>
+        <div class="stat-label">Quality Loss</div>
+      </div>
+      <div class="stat-card" style="text-align: left; padding: 1rem 1.5rem;">
+        <div class="stat-value" style="font-size: 1.2rem; color: var(--tertiary);">~70-90%</div>
+        <div class="stat-label">Accept Rate</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 2: Concept -->
+<section id="concept">
+  <div class="section-inner">
+    <div class="section-tag">Core Idea</div>
+    <h2 class="section-title"><span class="gradient-text">Why Speculative Decoding?</span></h2>
+    <div class="section-desc">Standard autoregressive decoding is memory-bandwidth bound. The GPU sits idle most of the time. Speculative decoding fills this gap by drafting multiple tokens cheaply, then verifying them all at once.</div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+      <div class="card">
+        <h3 style="color: var(--danger); margin-bottom: 1rem; font-size: 1.1rem;">Standard Decoding</h3>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; line-height: 2; color: var(--text-muted);">
+          <div>Step 1: Generate token<sub>1</sub> <span style="color: var(--danger);">~50ms</span></div>
+          <div>Step 2: Generate token<sub>2</sub> <span style="color: var(--danger);">~50ms</span></div>
+          <div>Step 3: Generate token<sub>3</sub> <span style="color: var(--danger);">~50ms</span></div>
+          <div>Step 4: Generate token<sub>4</sub> <span style="color: var(--danger);">~50ms</span></div>
+          <div>Step 5: Generate token<sub>5</sub> <span style="color: var(--danger);">~50ms</span></div>
+          <div style="border-top: 1px solid var(--border); margin-top: 0.5rem; padding-top: 0.5rem; color: var(--danger);">Total: ~250ms for 5 tokens</div>
+        </div>
+      </div>
+      <div class="card" style="border-color: rgba(0,212,106,0.3);">
+        <h3 style="color: var(--primary); margin-bottom: 1rem; font-size: 1.1rem;">Speculative Decoding</h3>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; line-height: 2; color: var(--text-muted);">
+          <div>Step 1: Draft 5 tokens <span style="color: var(--tertiary);">~25ms</span></div>
+          <div>Step 2: Verify all 5 in parallel <span style="color: var(--primary);">~55ms</span></div>
+          <div>Step 3: Accept 4, resample 1 <span style="color: var(--secondary);">~5ms</span></div>
+          <div style="opacity: 0.3;">...</div>
+          <div style="opacity: 0.3;">...</div>
+          <div style="border-top: 1px solid rgba(0,212,106,0.3); margin-top: 0.5rem; padding-top: 0.5rem; color: var(--primary);">Total: ~85ms for 5 tokens (2.9x faster)</div>
+        </div>
+      </div>
+    </div>
+    <div class="explain-panel">
+      <strong>Key Insight:</strong> Verification of N tokens with the large model costs roughly the same as generating 1 token, because all N positions can be processed in a single forward pass (like prefill). This parallelism is what makes speculative decoding effective.
+    </div>
+  </div>
+</section>
+
+<!-- Section 3: Animated Flow -->
+<section id="flow">
+  <div class="section-inner">
+    <div class="section-tag">Step by Step</div>
+    <h2 class="section-title"><span class="gradient-text">The Decoding Flow</span></h2>
+    <div class="section-desc">Watch the draft-then-verify cycle unfold token by token.</div>
+
+    <div class="step-indicators" id="stepIndicators">
+      <div class="step-ind" data-step="0">1. Draft</div>
+      <div class="step-ind" data-step="1">2. Verify</div>
+      <div class="step-ind" data-step="2">3. Accept/Reject</div>
+      <div class="step-ind" data-step="3">4. Continue</div>
+    </div>
+
+    <div class="flow-container" id="flowContainer">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <div class="model-box draft">Draft Model (68M)</div>
+        <div style="color: var(--text-dim); font-size: 0.85rem;">Token Generation Pipeline</div>
+        <div class="model-box target">Target Model (70B)</div>
+      </div>
+
+      <div style="margin-bottom: 1rem;">
+        <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 6px;">Prompt:</div>
+        <div class="token-stream" style="min-height: auto;">
+          <span class="token show" style="opacity:1;transform:scale(1);background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text-muted);">The</span>
+          <span class="token show" style="opacity:1;transform:scale(1);background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text-muted);">quick</span>
+          <span class="token show" style="opacity:1;transform:scale(1);background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text-muted);">brown</span>
+          <span class="token show" style="opacity:1;transform:scale(1);background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text-muted);">fox</span>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 6px;">Draft Tokens:</div>
+        <div class="token-stream" id="draftTokens"></div>
+      </div>
+
+      <div class="arrow-flow" id="arrowFlow" style="opacity: 0; transition: opacity 0.5s;">
+        <span style="font-size: 0.8rem;">Bulk verification</span> <span style="color: var(--secondary);">&darr;</span>
+      </div>
+
+      <div>
+        <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 6px;">Verified Output:</div>
+        <div class="token-stream" id="verifiedTokens"></div>
+      </div>
+
+      <div id="flowExplanation" class="explain-panel" style="margin-top: 1rem; min-height: 60px;">
+        Click "Run Flow" to see speculative decoding in action.
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn" id="runFlowBtn" onclick="runFlow()">Run Flow</button>
+      <button class="btn" onclick="resetFlow()">Reset</button>
+    </div>
+  </div>
+</section>
+
+<!-- Section 4: Interactive Playground -->
+<section id="interactive">
+  <div class="section-inner">
+    <div class="section-tag">Playground</div>
+    <h2 class="section-title"><span class="gradient-text">Interactive Simulation</span></h2>
+    <div class="section-desc">Adjust parameters and see how they affect speculative decoding performance.</div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+      <div class="card">
+        <h3 style="font-size: 1rem; margin-bottom: 1.5rem; color: var(--primary);">Parameters</h3>
+        <div class="slider-group" style="margin-bottom: 1.5rem;">
+          <label>Draft Length (K): <span id="draftLenVal" class="mono" style="color: var(--primary);">5</span></label>
+          <input type="range" id="draftLen" min="1" max="12" value="5" oninput="updateSim()">
+          <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-dim);"><span>1</span><span>12</span></div>
+        </div>
+        <div class="slider-group" style="margin-bottom: 1.5rem;">
+          <label>Acceptance Rate: <span id="acceptRateVal" class="mono" style="color: var(--primary);">80%</span></label>
+          <input type="range" id="acceptRate" min="30" max="99" value="80" oninput="updateSim()">
+          <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-dim);"><span>30%</span><span>99%</span></div>
+        </div>
+        <div class="slider-group" style="margin-bottom: 1.5rem;">
+          <label>Draft Model Latency: <span id="draftLatVal" class="mono" style="color: var(--tertiary);">5ms</span></label>
+          <input type="range" id="draftLat" min="1" max="20" value="5" oninput="updateSim()">
+        </div>
+        <div class="slider-group" style="margin-bottom: 1.5rem;">
+          <label>Target Model Latency: <span id="targetLatVal" class="mono" style="color: var(--secondary);">50ms</span></label>
+          <input type="range" id="targetLat" min="20" max="150" value="50" oninput="updateSim()">
+        </div>
+
+        <button class="btn" style="width: 100%; margin-top: 1rem;" onclick="runSimulation()">Run 100-Token Simulation</button>
+      </div>
+
+      <div class="card">
+        <h3 style="font-size: 1rem; margin-bottom: 1.5rem; color: var(--secondary);">Results</h3>
+        <div class="stats-grid" style="grid-template-columns: 1fr 1fr; margin-top: 0;">
+          <div class="stat-card">
+            <div class="stat-value" id="simStandard" style="color: var(--danger);">5000ms</div>
+            <div class="stat-label">Standard Decoding</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="simSpeculative" style="color: var(--primary);">1850ms</div>
+            <div class="stat-label">Speculative Decoding</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="simSpeedup" style="color: var(--secondary);">2.7x</div>
+            <div class="stat-label">Speedup</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="simEfficiency" style="color: var(--tertiary);">4.0</div>
+            <div class="stat-label">Avg Accepted/Iter</div>
+          </div>
+        </div>
+
+        <div style="margin-top: 1.5rem;">
+          <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.5rem;">Simulation Token Stream:</div>
+          <div id="simTokenStream" class="token-stream" style="max-height: 150px; overflow-y: auto; padding: 0.5rem; background: rgba(0,0,0,0.3); border-radius: 8px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 5: Latency Comparison -->
+<section id="comparison">
+  <div class="section-inner">
+    <div class="section-tag">Benchmarks</div>
+    <h2 class="section-title"><span class="gradient-text">Latency Comparison</span></h2>
+    <div class="section-desc">See how speculative decoding stacks up across different scenarios.</div>
+
+    <div class="card">
+      <h3 style="font-size: 1rem; margin-bottom: 0.5rem;">Time to Generate 100 Tokens</h3>
+      <p style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 1.5rem;">Lower is better. Speculative decoding provides consistent speedups.</p>
+      <div class="comparison-bars" id="comparisonBars">
+        <div class="bar-row">
+          <div class="bar-label">Standard (7B)</div>
+          <div class="bar-track"><div class="bar-fill standard" data-width="85" style="width:0;">3.2s</div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">Spec. Decode (7B+68M)</div>
+          <div class="bar-track"><div class="bar-fill speculative" data-width="38" style="width:0;">1.2s</div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">Standard (70B)</div>
+          <div class="bar-track"><div class="bar-fill standard" data-width="100" style="width:0;">5.0s</div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">Spec. Decode (70B+7B)</div>
+          <div class="bar-track"><div class="bar-fill speculative" data-width="45" style="width:0;">1.8s</div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">Standard (405B)</div>
+          <div class="bar-track"><div class="bar-fill standard" data-width="95" style="width:0;">12.5s</div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-label">Spec. Decode (405B+8B)</div>
+          <div class="bar-track"><div class="bar-fill speculative" data-width="35" style="width:0;">4.5s</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-top: 1.5rem;">
+      <div class="card">
+        <h3 style="font-size: 1rem; color: var(--primary); margin-bottom: 1rem;">When Speculation Works Best</h3>
+        <ul style="list-style: none; font-size: 0.9rem; color: var(--text-muted); line-height: 2;">
+          <li style="color: var(--success);">+ Large target models (70B+)</li>
+          <li style="color: var(--success);">+ Predictable outputs (code, structured)</li>
+          <li style="color: var(--success);">+ High draft-target alignment</li>
+          <li style="color: var(--success);">+ Memory-bandwidth bound scenarios</li>
+          <li style="color: var(--success);">+ Batch size = 1 (latency-sensitive)</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="font-size: 1rem; color: var(--danger); margin-bottom: 1rem;">When It Struggles</h3>
+        <ul style="list-style: none; font-size: 0.9rem; color: var(--text-muted); line-height: 2;">
+          <li style="color: var(--danger);">- Small target models (already fast)</li>
+          <li style="color: var(--danger);">- Creative/diverse outputs (low accept rate)</li>
+          <li style="color: var(--danger);">- High temperature sampling</li>
+          <li style="color: var(--danger);">- Large batch sizes (compute bound)</li>
+          <li style="color: var(--danger);">- Poor draft model quality</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 6: Summary -->
+<section id="summary">
+  <div class="section-inner" style="text-align: center;">
+    <div class="section-tag">Key Takeaways</div>
+    <h2 class="section-title"><span class="gradient-text">Speculative Decoding Summary</span></h2>
+    <div style="max-width: 700px; margin: 0 auto;">
+      <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 2rem;">
+        <div class="stat-card">
+          <div class="stat-value" style="color: var(--primary);">2-3x</div>
+          <div class="stat-label">Speedup Range</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color: var(--secondary);">100%</div>
+          <div class="stat-label">Quality Preserved</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color: var(--tertiary);">K=4-8</div>
+          <div class="stat-label">Optimal Draft Length</div>
+        </div>
+      </div>
+      <div class="explain-panel" style="text-align: left;">
+        <strong>The Verification Guarantee:</strong> Speculative decoding produces <em>exactly</em> the same output distribution as standard decoding. Rejected draft tokens are resampled from an adjusted distribution. This mathematical guarantee means you get speed for free &mdash; no quality compromise whatsoever.
+      </div>
+      <div style="margin-top: 2rem; color: var(--text-dim); font-size: 0.85rem;">
+        Module 16 of Inference Engineering &mdash; <span class="gradient-text" style="font-weight: 600;">VizuaraAI</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+// Section management
+const sections = document.querySelectorAll('section');
+const sectionIds = Array.from(sections).map(s => s.id);
+const dotsContainer = document.getElementById('sectionDots');
+
+sectionIds.forEach((id, i) => {
+  const dot = document.createElement('div');
+  dot.className = 'dot';
+  dot.onclick = () => document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+  dotsContainer.appendChild(dot);
+});
+
+const dots = dotsContainer.querySelectorAll('.dot');
+
+function updateProgress() {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  const progress = (scrollTop / docHeight) * 100;
+  document.getElementById('progressBar').style.width = progress + '%';
+
+  sections.forEach((section, i) => {
+    const rect = section.getBoundingClientRect();
+    const inner = section.querySelector('.section-inner');
+    if (rect.top < window.innerHeight * 0.75 && rect.bottom > 0) {
+      if (inner) inner.classList.add('visible');
+      dots[i].classList.add('active');
+    } else {
+      dots[i].classList.remove('active');
+    }
+  });
+
+  // Animate comparison bars when visible
+  const barsSection = document.getElementById('comparisonBars');
+  if (barsSection) {
+    const rect = barsSection.getBoundingClientRect();
+    if (rect.top < window.innerHeight * 0.8) {
+      barsSection.querySelectorAll('.bar-fill').forEach(bar => {
+        bar.style.width = bar.dataset.width + '%';
+      });
+    }
+  }
+}
+
+window.addEventListener('scroll', updateProgress);
+window.addEventListener('load', () => { updateProgress(); });
+
+// Flow animation
+const draftWords = ['jumps', 'over', 'the', 'lazy', 'dog'];
+const verifyResults = [true, true, true, false, true]; // accept/reject pattern
+let flowRunning = false;
+
+function resetFlow() {
+  flowRunning = false;
+  document.getElementById('draftTokens').innerHTML = '';
+  document.getElementById('verifiedTokens').innerHTML = '';
+  document.getElementById('arrowFlow').style.opacity = '0';
+  document.getElementById('flowExplanation').innerHTML = 'Click "Run Flow" to see speculative decoding in action.';
+  document.querySelectorAll('.step-ind').forEach(s => { s.classList.remove('active', 'done'); });
+}
+
+async function runFlow() {
+  if (flowRunning) return;
+  flowRunning = true;
+  resetFlow();
+  await sleep(200);
+
+  const draftContainer = document.getElementById('draftTokens');
+  const verifiedContainer = document.getElementById('verifiedTokens');
+  const explanation = document.getElementById('flowExplanation');
+  const steps = document.querySelectorAll('.step-ind');
+
+  // Step 1: Draft tokens
+  steps[0].classList.add('active');
+  explanation.innerHTML = '<strong>Step 1 - Drafting:</strong> The small draft model (68M params) generates K=5 candidate tokens autoregressively. This is fast because the model is tiny.';
+
+  for (let i = 0; i < draftWords.length; i++) {
+    const token = document.createElement('span');
+    token.className = 'token draft-token';
+    token.textContent = draftWords[i];
+    draftContainer.appendChild(token);
+    await sleep(150);
+    token.classList.add('show');
+  }
+
+  await sleep(600);
+  steps[0].classList.remove('active');
+  steps[0].classList.add('done');
+
+  // Step 2: Verify
+  steps[1].classList.add('active');
+  explanation.innerHTML = '<strong>Step 2 - Verification:</strong> The target model (70B) processes ALL 5 draft tokens in a single forward pass (like prefill). It computes the probability of each token at each position.';
+  document.getElementById('arrowFlow').style.opacity = '1';
+
+  const draftTokenEls = draftContainer.querySelectorAll('.token');
+  draftTokenEls.forEach(t => t.classList.add('verifying'));
+  await sleep(1500);
+  draftTokenEls.forEach(t => t.classList.remove('verifying'));
+
+  steps[1].classList.remove('active');
+  steps[1].classList.add('done');
+
+  // Step 3: Accept/Reject
+  steps[2].classList.add('active');
+  explanation.innerHTML = '<strong>Step 3 - Accept/Reject:</strong> Each drafted token is compared against the target model\'s distribution. Tokens are accepted from left to right until the first rejection. The rejected token is resampled from an adjusted distribution.';
+
+  let accepted = 0;
+  for (let i = 0; i < draftWords.length; i++) {
+    await sleep(400);
+    const vToken = document.createElement('span');
+    if (verifyResults[i]) {
+      vToken.className = 'token accepted show';
+      vToken.textContent = draftWords[i];
+      draftTokenEls[i].classList.add('accepted');
+      draftTokenEls[i].classList.remove('draft-token');
+      accepted++;
+    } else {
+      vToken.className = 'token rejected show';
+      vToken.textContent = draftWords[i];
+      draftTokenEls[i].classList.add('rejected');
+      draftTokenEls[i].classList.remove('draft-token');
+
+      // Add resampled token
+      await sleep(300);
+      const resampledToken = document.createElement('span');
+      resampledToken.className = 'token accepted';
+      resampledToken.textContent = 'sleepy';
+      resampledToken.style.boxShadow = '0 0 12px rgba(0,200,230,0.3)';
+      verifiedContainer.appendChild(vToken);
+      await sleep(200);
+      verifiedContainer.appendChild(resampledToken);
+      await sleep(100);
+      resampledToken.classList.add('show');
+      // Stop accepting after first rejection
+      for (let j = i + 1; j < draftTokenEls.length; j++) {
+        draftTokenEls[j].style.opacity = '0.3';
+      }
+      break;
+    }
+    verifiedContainer.appendChild(vToken);
+  }
+
+  await sleep(500);
+  steps[2].classList.remove('active');
+  steps[2].classList.add('done');
+
+  // Step 4: Continue
+  steps[3].classList.add('active');
+  explanation.innerHTML = `<strong>Step 4 - Continue:</strong> We accepted <span style="color:var(--primary)">${accepted}</span> tokens and got 1 bonus resampled token, for a total of <span style="color:var(--primary)">${accepted + 1}</span> tokens in this iteration. The draft model now continues from the last accepted position. This cycle repeats until generation is complete.`;
+
+  await sleep(1000);
+  steps[3].classList.remove('active');
+  steps[3].classList.add('done');
+  flowRunning = false;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Interactive simulation
+function updateSim() {
+  document.getElementById('draftLenVal').textContent = document.getElementById('draftLen').value;
+  document.getElementById('acceptRateVal').textContent = document.getElementById('acceptRate').value + '%';
+  document.getElementById('draftLatVal').textContent = document.getElementById('draftLat').value + 'ms';
+  document.getElementById('targetLatVal').textContent = document.getElementById('targetLat').value + 'ms';
+}
+
+function runSimulation() {
+  const K = parseInt(document.getElementById('draftLen').value);
+  const acceptRate = parseInt(document.getElementById('acceptRate').value) / 100;
+  const draftLat = parseInt(document.getElementById('draftLat').value);
+  const targetLat = parseInt(document.getElementById('targetLat').value);
+  const totalTokens = 100;
+
+  // Standard decoding
+  const standardTime = totalTokens * targetLat;
+
+  // Speculative simulation
+  let specTokens = 0;
+  let specTime = 0;
+  let iterations = 0;
+  const streamContainer = document.getElementById('simTokenStream');
+  streamContainer.innerHTML = '';
+
+  while (specTokens < totalTokens) {
+    iterations++;
+    let accepted = 0;
+    const iterTokens = [];
+
+    // Draft K tokens
+    const draftTime = K * draftLat;
+
+    // Check acceptance
+    for (let i = 0; i < K; i++) {
+      if (Math.random() < acceptRate) {
+        accepted++;
+        iterTokens.push({ text: `t${specTokens + accepted}`, status: 'accepted' });
+      } else {
+        iterTokens.push({ text: `t${specTokens + accepted + 1}`, status: 'rejected' });
+        break;
+      }
+    }
+
+    // Always get one bonus token from resampling or when all accepted
+    accepted = Math.min(accepted + 1, K + 1);
+    specTokens += accepted;
+
+    // Time: draft all K + one target forward pass
+    specTime += draftTime + targetLat;
+
+    // Add to stream visualization (show first 5 iterations)
+    if (iterations <= 8) {
+      const iterDiv = document.createElement('div');
+      iterDiv.style.cssText = 'display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 4px; align-items: center;';
+      iterDiv.innerHTML = `<span style="font-size:0.65rem;color:var(--text-dim);width:30px;">i${iterations}:</span>`;
+      iterTokens.forEach(t => {
+        const span = document.createElement('span');
+        span.className = `token ${t.status} show`;
+        span.style.cssText = 'padding: 2px 8px; font-size: 0.7rem; opacity: 1; transform: scale(1);';
+        span.textContent = t.text;
+        iterDiv.appendChild(span);
+      });
+      streamContainer.appendChild(iterDiv);
+    }
+  }
+
+  const speedup = standardTime / specTime;
+  const avgAccepted = totalTokens / iterations;
+
+  document.getElementById('simStandard').textContent = standardTime + 'ms';
+  document.getElementById('simSpeculative').textContent = Math.round(specTime) + 'ms';
+  document.getElementById('simSpeedup').textContent = speedup.toFixed(1) + 'x';
+  document.getElementById('simEfficiency').textContent = avgAccepted.toFixed(1);
+}
+
+updateSim();
+runSimulation();
+</script>
+</body>
+</html>

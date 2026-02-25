@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Structured Output & Logit Biasing - Inference Engineering</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0a;--bg-card:#121212;--bg-card-hover:#1a1a1a;--border:#262626;--primary:#00d46a;--secondary:#00c8e6;--tertiary:#a855f7;--success:#10b981;--text:#f2f2f2;--text-muted:#a3a3a3;--text-dim:#737373;--danger:#ef4444}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
+h1,h2{font-family:'Instrument Serif',serif;font-style:italic}
+code,.mono{font-family:'JetBrains Mono',monospace}
+.gradient-text{background:linear-gradient(135deg,#00d46a,#00c8e6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+nav{position:fixed;top:0;left:0;right:0;z-index:1000;background:rgba(10,10,10,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0.75rem 2rem;display:flex;align-items:center;justify-content:space-between}
+nav .logo{font-family:'Instrument Serif',serif;font-style:italic;font-size:1.25rem}
+nav .badge{border:1px solid rgba(0,212,106,0.3);background:rgba(0,212,106,0.1);color:var(--primary);padding:0.25rem 0.75rem;border-radius:9999px;font-size:0.75rem;font-weight:500}
+.progress-bar{position:fixed;top:0;left:0;height:3px;z-index:1001;background:linear-gradient(90deg,var(--primary),var(--secondary));transition:width 0.3s ease}
+.dot-nav{position:fixed;right:2rem;top:50%;transform:translateY(-50%);z-index:999;display:flex;flex-direction:column;gap:12px}
+.dot-nav .dot{width:10px;height:10px;border-radius:50%;background:var(--border);cursor:pointer;transition:all 0.3s;border:2px solid transparent}
+.dot-nav .dot.active{background:var(--primary);border-color:var(--primary);box-shadow:0 0 10px rgba(0,212,106,0.5)}
+section{min-height:100vh;padding:6rem 2rem 4rem;position:relative;display:flex;align-items:center;justify-content:center}
+.section-inner{max-width:1200px;width:100%;margin:0 auto}
+.grid-bg{position:absolute;inset:0;z-index:0;background-image:linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px);background-size:60px 60px}
+.glow-green{position:absolute;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(0,212,106,0.1),transparent 70%);pointer-events:none}
+.glow-cyan{position:absolute;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(0,200,230,0.08),transparent 70%);pointer-events:none}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;transition:all 0.3s}
+.card:hover{background:var(--bg-card-hover);border-color:rgba(0,212,106,0.3)}
+.fade-in{opacity:0;transform:translateY(30px);transition:all 0.8s cubic-bezier(0.16,1,0.3,1)}
+.fade-in.visible{opacity:1;transform:translateY(0)}
+.btn{padding:0.6rem 1.5rem;border:1px solid var(--primary);background:rgba(0,212,106,0.1);color:var(--primary);border-radius:8px;cursor:pointer;font-family:'Inter',sans-serif;font-weight:500;transition:all 0.3s;font-size:0.85rem}
+.btn:hover{background:rgba(0,212,106,0.2)}
+.btn.active{background:var(--primary);color:var(--bg)}
+.btn.secondary{border-color:var(--secondary);background:rgba(0,200,230,0.1);color:var(--secondary)}
+.btn.danger{border-color:var(--danger);background:rgba(239,68,68,0.1);color:var(--danger)}
+.controls{display:flex;gap:0.75rem;flex-wrap:wrap;margin:1.5rem 0}
+.section-title{font-size:3rem;margin-bottom:1rem;line-height:1.2}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:start}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin:1.5rem 0}
+.stat-card{background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:1rem;text-align:center}
+.stat-card .stat-value{font-size:1.4rem;font-weight:700;font-family:'JetBrains Mono',monospace}
+.stat-card .stat-label{font-size:0.7rem;color:var(--text-muted);margin-top:0.25rem}
+
+/* Token visualization */
+.token-viz{background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:1.5rem;overflow-x:auto}
+.token-row{display:flex;gap:3px;flex-wrap:wrap;margin:0.5rem 0}
+.token{display:inline-flex;align-items:center;padding:0.3rem 0.6rem;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:0.75rem;transition:all 0.3s;cursor:default;border:1px solid transparent}
+.token.allowed{background:rgba(0,212,106,0.15);border-color:rgba(0,212,106,0.3);color:var(--primary)}
+.token.blocked{background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.2);color:var(--danger);opacity:0.5;text-decoration:line-through}
+.token.selected{background:var(--primary);color:var(--bg);font-weight:600;box-shadow:0 0 10px rgba(0,212,106,0.4)}
+.token.structural{background:rgba(0,200,230,0.15);border-color:rgba(0,200,230,0.3);color:var(--secondary)}
+.token.neutral{background:rgba(255,255,255,0.05);color:var(--text-dim)}
+
+/* Logit bars */
+.logit-bars{margin:1rem 0}
+.logit-row{display:flex;align-items:center;gap:0.5rem;margin:3px 0}
+.logit-label{width:80px;font-size:0.75rem;font-family:'JetBrains Mono',monospace;text-align:right;color:var(--text-muted)}
+.logit-track{flex:1;height:20px;background:var(--border);border-radius:4px;overflow:hidden;position:relative}
+.logit-fill{height:100%;border-radius:4px;transition:width 0.5s ease;display:flex;align-items:center;padding:0 0.5rem;font-size:0.65rem;font-family:'JetBrains Mono',monospace}
+.logit-value{width:60px;font-size:0.7rem;font-family:'JetBrains Mono',monospace;text-align:right}
+
+/* Schema editor */
+.schema-editor{background:rgba(0,0,0,0.4);border:1px solid var(--border);border-radius:8px;padding:1rem;font-family:'JetBrains Mono',monospace;font-size:0.78rem;line-height:1.7;color:var(--text-muted);white-space:pre;overflow-x:auto}
+.schema-editor .key{color:var(--secondary)}
+.schema-editor .val{color:var(--primary)}
+.schema-editor .type{color:var(--tertiary)}
+
+/* Decoding animation */
+.decode-output{background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:1rem;min-height:100px;font-family:'JetBrains Mono',monospace;font-size:0.85rem;line-height:1.8}
+.decode-cursor{display:inline-block;width:2px;height:1em;background:var(--primary);animation:blink 1s infinite;vertical-align:text-bottom}
+@keyframes blink{0%,50%{opacity:1}51%,100%{opacity:0}}
+
+/* Grammar state */
+.grammar-state{display:flex;flex-wrap:wrap;gap:0.5rem;margin:1rem 0}
+.state-node{padding:0.4rem 0.8rem;border-radius:6px;font-size:0.75rem;font-family:'JetBrains Mono',monospace;border:1px solid var(--border);transition:all 0.3s}
+.state-node.current{border-color:var(--primary);background:rgba(0,212,106,0.15);color:var(--primary);box-shadow:0 0 10px rgba(0,212,106,0.3)}
+.state-node.visited{border-color:var(--text-dim);color:var(--text-dim)}
+.state-node.next{border-color:var(--secondary);color:var(--secondary)}
+
+@media(max-width:768px){nav{padding:0.75rem 1rem}section{padding:5rem 1rem 3rem}.dot-nav{right:1rem}h1{font-size:2rem !important}.two-col{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+<nav>
+  <div class="logo"><span class="gradient-text">VizuaraAI</span></div>
+  <div style="display:flex;align-items:center;gap:1rem;">
+    <span class="badge">Lesson 29</span>
+    <span style="color:var(--text-muted);font-size:0.85rem;">Structured Output & Logit Biasing</span>
+  </div>
+</nav>
+<div class="dot-nav" id="dotNav"></div>
+
+<!-- Section 0: Hero -->
+<section id="sec0">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:-100px;left:-100px;"></div>
+  <div class="glow-cyan" style="bottom:-100px;right:-100px;"></div>
+  <div class="section-inner" style="text-align:center;">
+    <div class="fade-in">
+      <div class="badge" style="display:inline-block;margin-bottom:1.5rem;">Decoding</div>
+      <h1 class="section-title"><span class="gradient-text">Structured Output</span> & Logit Biasing</h1>
+      <p style="font-size:1.1rem;color:var(--text-muted);max-width:650px;margin:1rem auto;line-height:1.6;">
+        Forcing LLMs to produce valid JSON, SQL, or other structured formats by constraining the
+        decoding process. Logit biasing and grammar-constrained generation ensure outputs always
+        conform to a schema -- no more parsing failures.
+      </p>
+      <div class="stats-grid" style="max-width:700px;margin:2rem auto;">
+        <div class="stat-card"><div class="stat-value" style="color:var(--primary);">100%</div><div class="stat-label">Valid output guarantee</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--secondary);">~5%</div><div class="stat-label">Latency overhead</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--tertiary);">0</div><div class="stat-label">Retry needed</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--danger);">JSON</div><div class="stat-label">Most common format</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 1: Logit Biasing -->
+<section id="sec1">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:20%;right:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">How Logit Biasing Works</span></h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">At each decoding step, the model produces logits for every token in its vocabulary. Logit biasing modifies these scores before sampling.</p>
+
+      <div class="two-col">
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--primary);">Original vs Biased Logits</h3>
+            <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:1rem;">
+              Context: generating after <code style="color:var(--primary);">{"name": "</code> -- we want a string token, not a number or bracket.
+            </p>
+            <div class="controls">
+              <button class="btn active" onclick="showLogits('original', this)">Original Logits</button>
+              <button class="btn" onclick="showLogits('biased', this)">After Biasing</button>
+              <button class="btn secondary" onclick="showLogits('masked', this)">Hard Masked</button>
+            </div>
+            <div class="logit-bars" id="logitBars">
+              <!-- Generated by JS -->
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--secondary);">The Mechanism</h3>
+            <div class="schema-editor">
+<span class="key">// Step 1</span>: Model produces raw logits
+logits = model.forward(input_tokens)
+
+<span class="key">// Step 2</span>: Apply bias/mask
+<span class="type">for</span> token_id <span class="type">in</span> vocabulary:
+  <span class="type">if</span> token_id <span class="type">not in</span> allowed_set:
+    logits[token_id] = <span class="val">-inf</span>  <span class="key">// hard mask</span>
+    <span class="key">// or: logits[token_id] += bias</span>
+
+<span class="key">// Step 3</span>: Sample from modified distribution
+probs = softmax(logits)
+next_token = sample(probs)
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">Soft vs Hard Biasing</h3>
+            <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.8;">
+              <b style="color:var(--primary);">Soft bias</b>: Add a fixed value (+/-100) to specific token logits. Adjusts probabilities but doesn't eliminate options entirely.<br><br>
+              <b style="color:var(--secondary);">Hard mask</b>: Set disallowed token logits to negative infinity. Guarantees they're never sampled. Used in grammar-constrained generation.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 2: JSON Schema Constraint -->
+<section id="sec2">
+  <div class="grid-bg"></div>
+  <div class="glow-cyan" style="top:10%;left:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Schema-Constrained</span> Generation</h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">Define a JSON schema and watch which tokens are allowed at each generation step.</p>
+
+      <div class="two-col">
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--tertiary);">JSON Schema</h3>
+            <div class="controls">
+              <button class="btn active" onclick="selectSchema('simple', this)">Simple</button>
+              <button class="btn" onclick="selectSchema('nested', this)">Nested</button>
+              <button class="btn" onclick="selectSchema('enum', this)">With Enum</button>
+            </div>
+            <div class="schema-editor" id="schemaDisplay">
+{
+  <span class="key">"type"</span>: <span class="type">"object"</span>,
+  <span class="key">"properties"</span>: {
+    <span class="key">"name"</span>: { <span class="key">"type"</span>: <span class="type">"string"</span> },
+    <span class="key">"age"</span>: { <span class="key">"type"</span>: <span class="type">"integer"</span> }
+  },
+  <span class="key">"required"</span>: [<span class="val">"name"</span>, <span class="val">"age"</span>]
+}
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--primary);">Generated Output</h3>
+            <div class="decode-output" id="decodeOutput">
+              <span class="decode-cursor"></span>
+            </div>
+            <div class="controls" style="justify-content:center;">
+              <button class="btn" onclick="startDecode()">Generate with Constraints</button>
+              <button class="btn secondary" onclick="resetDecode()">Reset</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--secondary);">Allowed Tokens at Current Step</h3>
+            <div id="currentStep" style="font-size:0.85rem;color:var(--text-dim);margin-bottom:0.75rem;">Ready to generate. Click "Generate with Constraints".</div>
+            <div class="token-viz" id="tokenViz">
+              <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:0.5rem;">Token pool:</div>
+              <div class="token-row" id="tokenPool">
+                <!-- Generated by JS -->
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">Schema to Token Mask Pipeline</h3>
+            <div style="display:flex;flex-direction:column;gap:0.5rem;">
+              <div style="background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);border-radius:8px;padding:0.6rem;text-align:center;font-size:0.85rem;">
+                <span style="color:var(--tertiary);font-weight:600;">1. JSON Schema</span>
+                <div style="font-size:0.7rem;color:var(--text-dim);">Define expected structure</div>
+              </div>
+              <div style="text-align:center;color:var(--text-dim);">|</div>
+              <div style="background:rgba(0,200,230,0.1);border:1px solid rgba(0,200,230,0.3);border-radius:8px;padding:0.6rem;text-align:center;font-size:0.85rem;">
+                <span style="color:var(--secondary);font-weight:600;">2. Grammar Compiler</span>
+                <div style="font-size:0.7rem;color:var(--text-dim);">Convert schema to context-free grammar</div>
+              </div>
+              <div style="text-align:center;color:var(--text-dim);">|</div>
+              <div style="background:rgba(0,212,106,0.1);border:1px solid rgba(0,212,106,0.3);border-radius:8px;padding:0.6rem;text-align:center;font-size:0.85rem;">
+                <span style="color:var(--primary);font-weight:600;">3. Token Mask</span>
+                <div style="font-size:0.7rem;color:var(--text-dim);">At each step, compute valid next tokens</div>
+              </div>
+              <div style="text-align:center;color:var(--text-dim);">|</div>
+              <div style="background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:8px;padding:0.6rem;text-align:center;font-size:0.85rem;">
+                <span style="font-weight:600;">4. Constrained Sampling</span>
+                <div style="font-size:0.7rem;color:var(--text-dim);">Sample only from allowed tokens</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 3: Grammar Constrained Generation -->
+<section id="sec3">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="bottom:10%;right:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Grammar-Constrained</span> Generation</h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">A context-free grammar defines the valid token sequences. The decoder tracks its position in the grammar and only allows valid next tokens.</p>
+
+      <div class="two-col">
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--tertiary);">JSON Grammar (simplified)</h3>
+            <div class="schema-editor" style="font-size:0.73rem;">
+<span class="key">json</span>     ::= <span class="val">object</span>
+<span class="key">object</span>   ::= <span class="type">"{"</span> <span class="val">members</span> <span class="type">"}"</span>
+<span class="key">members</span>  ::= <span class="val">pair</span> (<span class="type">","</span> <span class="val">pair</span>)*
+<span class="key">pair</span>     ::= <span class="val">string</span> <span class="type">":"</span> <span class="val">value</span>
+<span class="key">value</span>    ::= <span class="val">string</span> | <span class="val">number</span> | <span class="val">object</span> | <span class="val">array</span> | <span class="type">"true"</span> | <span class="type">"false"</span> | <span class="type">"null"</span>
+<span class="key">string</span>   ::= <span class="type">'"'</span> <span class="val">chars</span> <span class="type">'"'</span>
+<span class="key">number</span>   ::= <span class="type">[0-9]+</span> (<span class="type">"."</span> <span class="type">[0-9]+</span>)?
+<span class="key">array</span>    ::= <span class="type">"["</span> <span class="val">values</span> <span class="type">"]"</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--primary);">Grammar State Machine</h3>
+            <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:1rem;">Watch the grammar state as tokens are generated.</p>
+            <div class="grammar-state" id="grammarStates">
+              <div class="state-node current">START</div>
+              <div class="state-node next">open_brace</div>
+              <div class="state-node">key_string</div>
+              <div class="state-node">colon</div>
+              <div class="state-node">value</div>
+              <div class="state-node">comma_or_close</div>
+              <div class="state-node">END</div>
+            </div>
+            <div class="controls">
+              <button class="btn" onclick="stepGrammar()">Step Forward</button>
+              <button class="btn secondary" onclick="resetGrammar()">Reset</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--secondary);">Tools & Frameworks</h3>
+            <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.8;">
+              <div style="margin-bottom:0.75rem;">
+                <b style="color:var(--primary);">Outlines</b> (dottxt)<br>
+                Python library. Compiles JSON schema / regex to finite state machine.
+                Pre-computes token masks for each state. Works with any HuggingFace model.
+              </div>
+              <div style="margin-bottom:0.75rem;">
+                <b style="color:var(--secondary);">llama.cpp GBNF</b><br>
+                Grammar specification format for llama.cpp. Supports BNF-style grammars
+                compiled to token masks at each step. Very efficient for local inference.
+              </div>
+              <div style="margin-bottom:0.75rem;">
+                <b style="color:var(--tertiary);">Instructor</b><br>
+                High-level library that uses Pydantic models to define output schema.
+                Works with OpenAI, Anthropic, and local models. Handles retries.
+              </div>
+              <div>
+                <b style="color:var(--danger);">vLLM guided decoding</b><br>
+                Built-in support for JSON schema and regex-constrained generation.
+                Uses Outlines under the hood with optimized batch processing.
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">Performance Considerations</h3>
+            <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.8;">
+              <div style="margin-bottom:0.5rem;">
+                <span style="color:var(--primary);font-weight:600;">Mask computation</span>: 0.1-1ms per step. Pre-computed for common schemas.
+              </div>
+              <div style="margin-bottom:0.5rem;">
+                <span style="color:var(--secondary);font-weight:600;">Index compilation</span>: 1-10s for complex schemas. Cached and reused.
+              </div>
+              <div style="margin-bottom:0.5rem;">
+                <span style="color:var(--tertiary);font-weight:600;">Quality impact</span>: Minimal. Constrained tokens are usually what the model would pick anyway (~95% of the time).
+              </div>
+              <div>
+                <span style="color:var(--danger);font-weight:600;">Batch overhead</span>: Each request may have different masks, complicating GPU batching. Solved by grouping same-schema requests.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 4: Interactive Demo -->
+<section id="sec4">
+  <div class="grid-bg"></div>
+  <div class="glow-cyan" style="top:20%;left:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Token-Level</span> Decoding Walkthrough</h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">Step through the decoding process token by token. See which tokens are allowed and which are blocked at each position.</p>
+
+      <div class="card" style="margin-bottom:1.5rem;">
+        <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:1rem;">Decoding: <code style="color:var(--primary);font-size:0.9rem;">{"name": "Alice", "age": 30}</code></h3>
+
+        <div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:1rem;" id="decodingTokens">
+          <!-- Generated by JS -->
+        </div>
+
+        <div id="stepInfo" style="background:rgba(0,0,0,0.3);border-radius:8px;padding:1rem;margin:1rem 0;">
+          <div style="font-size:0.85rem;color:var(--text-muted);" id="stepDescription">Click a token above to see the constraint at that step.</div>
+          <div style="margin-top:0.75rem;" id="stepAllowed"></div>
+        </div>
+
+        <div style="display:flex;gap:1rem;margin-top:1rem;">
+          <button class="btn" onclick="autoWalkthrough()">Auto Walkthrough</button>
+          <button class="btn secondary" onclick="resetWalkthrough()">Reset</button>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">Without Constraints</h3>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;margin-bottom:1rem;">
+            The model might produce invalid output that breaks your application:
+          </p>
+          <div class="schema-editor" style="color:var(--danger);">
+{"name": "Alice", "age": "thirty"}
+<span style="color:var(--text-dim);">// "age" should be integer, got string!</span>
+
+{"name": "Alice",}
+<span style="color:var(--text-dim);">// Trailing comma = invalid JSON!</span>
+
+{"name": "Alice", "age": 30,
+  "hobbies": ["reading"
+<span style="color:var(--text-dim);">// Incomplete output, missing brackets!</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">With Constraints</h3>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;margin-bottom:1rem;">
+            Every output is guaranteed valid -- always parseable, always matching schema:
+          </p>
+          <div class="schema-editor" style="color:var(--primary);">
+{"name": "Alice", "age": 30}
+<span style="color:var(--text-dim);">// Always valid JSON</span>
+
+{"name": "Bob", "age": 25}
+<span style="color:var(--text-dim);">// Always matches schema types</span>
+
+{"name": "Charlie", "age": 42}
+<span style="color:var(--text-dim);">// Always complete and well-formed</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 5: Advanced Topics -->
+<section id="sec5">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:30%;left:50%;transform:translateX(-50%);"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Advanced Techniques</span></h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">Beyond basic JSON schema constraints, several advanced techniques push structured output further.</p>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1.5rem;">
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(0,212,106,0.15);display:flex;align-items:center;justify-content:center;color:var(--primary);font-weight:700;">1</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Regex Constraints</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Force output to match a regex pattern. Useful for dates (<code>\\d{4}-\\d{2}-\\d{2}</code>),
+            phone numbers, IDs, etc. Compiled to a DFA, then each state maps to allowed tokens.
+            Outlines and vLLM support this natively.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(0,200,230,0.15);display:flex;align-items:center;justify-content:center;color:var(--secondary);font-weight:700;">2</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Type-Safe Function Calling</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Tool/function calling is structured output with function name + arguments schema.
+            Grammar constraints guarantee the function name is valid and arguments match
+            the type signature. No more "hallucinated" function names.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(168,85,247,0.15);display:flex;align-items:center;justify-content:center;color:var(--tertiary);font-weight:700;">3</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Speculative Constrained Decoding</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Combine speculative decoding with grammar constraints. The draft model generates
+            candidates, then the verifier checks both token quality AND grammar validity.
+            Rejects any speculated tokens that violate constraints, maintaining both speed and correctness.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;color:var(--danger);font-weight:700;">4</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Multi-Token Lookahead</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Basic constraints only check the next token. But some invalid paths only become
+            apparent several tokens ahead (e.g., a string that's too long for a field).
+            Lookahead techniques beam-search through the grammar to avoid dead-end paths.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(16,185,129,0.15);display:flex;align-items:center;justify-content:center;color:var(--success);font-weight:700;">5</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Semantic Constraints</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Beyond syntax, enforce semantic rules. Example: "age must be between 0 and 150",
+            "start_date before end_date". These require stateful validators that inspect
+            previously generated values. More complex but possible with custom grammar rules.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-weight:700;">6</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Streaming + Constraints</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Structured output works with streaming. Partial JSON is streamed as it's generated,
+            and the client can begin parsing incomplete-but-valid-so-far output.
+            Libraries like Partial JSON parsers enable incremental processing before the output is complete.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+// Navigation
+const sections = document.querySelectorAll('section');
+const dotNav = document.getElementById('dotNav');
+const progressBar = document.getElementById('progressBar');
+sections.forEach((_,i) => {
+  const dot = document.createElement('div');
+  dot.className = 'dot';
+  dot.onclick = () => sections[i].scrollIntoView({behavior:'smooth'});
+  dotNav.appendChild(dot);
+});
+function updateScroll() {
+  const scrollTop = window.scrollY;
+  const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+  progressBar.style.width = (scrollTop/scrollHeight*100)+'%';
+  const dots = dotNav.querySelectorAll('.dot');
+  sections.forEach((sec,i) => {
+    const rect = sec.getBoundingClientRect();
+    if (rect.top < window.innerHeight/2 && rect.bottom > window.innerHeight/2) {
+      dots.forEach(d => d.classList.remove('active'));
+      dots[i].classList.add('active');
+    }
+    sec.querySelectorAll('.fade-in').forEach(el => { if (rect.top < window.innerHeight*0.85) el.classList.add('visible'); });
+  });
+}
+window.addEventListener('scroll', updateScroll);
+updateScroll();
+
+// Logit visualization
+const tokenData = [
+  { token: '"Alice"', original: 8.2, biased: 9.5, masked: 8.2, allowed: true },
+  { token: '"Bob"', original: 7.8, biased: 9.1, masked: 7.8, allowed: true },
+  { token: '123', original: 6.5, biased: -100, masked: -Infinity, allowed: false },
+  { token: '"name"', original: 5.1, biased: 6.4, masked: 5.1, allowed: true },
+  { token: 'true', original: 4.2, biased: -100, masked: -Infinity, allowed: false },
+  { token: '{', original: 3.8, biased: -100, masked: -Infinity, allowed: false },
+  { token: '[', original: 3.1, biased: -100, masked: -Infinity, allowed: false },
+  { token: '"hello"', original: 6.9, biased: 8.2, masked: 6.9, allowed: true },
+  { token: 'null', original: 2.5, biased: -100, masked: -Infinity, allowed: false },
+  { token: '}', original: 1.8, biased: -100, masked: -Infinity, allowed: false },
+];
+
+function showLogits(mode, btn) {
+  if (btn) {
+    btn.parentElement.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  const container = document.getElementById('logitBars');
+  container.innerHTML = '';
+  const maxVal = 10;
+
+  tokenData.forEach(t => {
+    let val, color;
+    if (mode === 'original') { val = t.original; color = 'var(--text-muted)'; }
+    else if (mode === 'biased') {
+      val = t.biased;
+      color = t.allowed ? 'var(--primary)' : 'var(--danger)';
+    } else {
+      val = t.masked;
+      color = t.allowed ? 'var(--primary)' : 'var(--danger)';
+    }
+
+    const row = document.createElement('div');
+    row.className = 'logit-row';
+    const displayVal = val === -Infinity ? '-inf' : val === -100 ? '-100' : val.toFixed(1);
+    const barWidth = val > 0 ? (val / maxVal * 100) : 0;
+    row.innerHTML = `
+      <div class="logit-label">${t.token}</div>
+      <div class="logit-track">
+        <div class="logit-fill" style="width:${barWidth}%;background:${color};">${barWidth > 15 ? displayVal : ''}</div>
+      </div>
+      <div class="logit-value" style="color:${color};">${displayVal}</div>
+    `;
+    container.appendChild(row);
+  });
+}
+showLogits('original', null);
+
+// Schema selection
+const schemas = {
+  simple: `{
+  <span class="key">"type"</span>: <span class="type">"object"</span>,
+  <span class="key">"properties"</span>: {
+    <span class="key">"name"</span>: { <span class="key">"type"</span>: <span class="type">"string"</span> },
+    <span class="key">"age"</span>: { <span class="key">"type"</span>: <span class="type">"integer"</span> }
+  },
+  <span class="key">"required"</span>: [<span class="val">"name"</span>, <span class="val">"age"</span>]
+}`,
+  nested: `{
+  <span class="key">"type"</span>: <span class="type">"object"</span>,
+  <span class="key">"properties"</span>: {
+    <span class="key">"user"</span>: {
+      <span class="key">"type"</span>: <span class="type">"object"</span>,
+      <span class="key">"properties"</span>: {
+        <span class="key">"name"</span>: { <span class="key">"type"</span>: <span class="type">"string"</span> },
+        <span class="key">"email"</span>: { <span class="key">"type"</span>: <span class="type">"string"</span> }
+      }
+    },
+    <span class="key">"score"</span>: { <span class="key">"type"</span>: <span class="type">"number"</span> }
+  }
+}`,
+  enum: `{
+  <span class="key">"type"</span>: <span class="type">"object"</span>,
+  <span class="key">"properties"</span>: {
+    <span class="key">"sentiment"</span>: {
+      <span class="key">"type"</span>: <span class="type">"string"</span>,
+      <span class="key">"enum"</span>: [<span class="val">"positive"</span>, <span class="val">"negative"</span>, <span class="val">"neutral"</span>]
+    },
+    <span class="key">"confidence"</span>: { <span class="key">"type"</span>: <span class="type">"number"</span> }
+  }
+}`
+};
+
+function selectSchema(name, btn) {
+  if (btn) {
+    btn.parentElement.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  document.getElementById('schemaDisplay').innerHTML = schemas[name];
+}
+
+// Decode animation
+const decodeSequence = [
+  { token: '{', type: 'structural', desc: 'Start object', allowed: ['{'] },
+  { token: '"name"', type: 'structural', desc: 'Key: required "name" field', allowed: ['"name"'] },
+  { token: ':', type: 'structural', desc: 'Key-value separator', allowed: [':'] },
+  { token: ' "', type: 'structural', desc: 'Start string value', allowed: ['"', ' "'] },
+  { token: 'Alice', type: 'allowed', desc: 'String content (any text)', allowed: ['Alice','Bob','Charlie','...'] },
+  { token: '"', type: 'structural', desc: 'End string', allowed: ['"'] },
+  { token: ',', type: 'structural', desc: 'Property separator', allowed: [','] },
+  { token: ' "age"', type: 'structural', desc: 'Key: required "age" field', allowed: ['"age"'] },
+  { token: ':', type: 'structural', desc: 'Key-value separator', allowed: [':'] },
+  { token: ' 30', type: 'allowed', desc: 'Integer value (number tokens only)', allowed: ['0-9 digits'] },
+  { token: '}', type: 'structural', desc: 'End object (all required fields present)', allowed: ['}'] },
+];
+
+let decodeIdx = 0;
+let decodeTimer = null;
+
+function startDecode() {
+  resetDecode();
+  decodeTimer = setInterval(() => {
+    if (decodeIdx < decodeSequence.length) {
+      addDecodeToken(decodeIdx);
+      decodeIdx++;
+    } else {
+      clearInterval(decodeTimer);
+    }
+  }, 500);
+}
+
+function addDecodeToken(idx) {
+  const output = document.getElementById('decodeOutput');
+  const step = decodeSequence[idx];
+  output.innerHTML = output.innerHTML.replace('<span class="decode-cursor"></span>', '');
+  const span = document.createElement('span');
+  span.style.color = step.type === 'structural' ? 'var(--secondary)' : 'var(--primary)';
+  span.textContent = step.token;
+  output.appendChild(span);
+  output.innerHTML += '<span class="decode-cursor"></span>';
+
+  document.getElementById('currentStep').innerHTML =
+    `Step ${idx + 1}: <span style="color:var(--primary);font-weight:600;">${step.desc}</span>`;
+
+  const pool = document.getElementById('tokenPool');
+  pool.innerHTML = '';
+  const allTokens = ['{','}','[',']',':',',','"name"','"age"','"','"Alice"','"Bob"','30','25','true','false','null','\\n'];
+  allTokens.forEach(t => {
+    const el = document.createElement('span');
+    el.className = 'token ';
+    const isAllowed = step.allowed.some(a => t.includes(a) || a.includes(t) || a === '...' || a === '0-9 digits');
+    if (t === step.token) el.className += 'selected';
+    else if (isAllowed) el.className += 'allowed';
+    else el.className += 'blocked';
+    el.textContent = t;
+    pool.appendChild(el);
+  });
+}
+
+function resetDecode() {
+  if (decodeTimer) clearInterval(decodeTimer);
+  decodeIdx = 0;
+  document.getElementById('decodeOutput').innerHTML = '<span class="decode-cursor"></span>';
+  document.getElementById('currentStep').textContent = 'Ready to generate.';
+  document.getElementById('tokenPool').innerHTML = '';
+}
+
+// Grammar state machine
+const grammarSteps = [
+  { current: 0, generated: '' },
+  { current: 1, generated: '{' },
+  { current: 2, generated: '{"name"' },
+  { current: 3, generated: '{"name":' },
+  { current: 4, generated: '{"name": "Alice"' },
+  { current: 5, generated: '{"name": "Alice",' },
+  { current: 2, generated: '{"name": "Alice", "age"' },
+  { current: 3, generated: '{"name": "Alice", "age":' },
+  { current: 4, generated: '{"name": "Alice", "age": 30' },
+  { current: 5, generated: '{"name": "Alice", "age": 30}' },
+  { current: 6, generated: '{"name": "Alice", "age": 30}' },
+];
+let grammarIdx = 0;
+
+function stepGrammar() {
+  if (grammarIdx >= grammarSteps.length - 1) return;
+  grammarIdx++;
+  const step = grammarSteps[grammarIdx];
+  const states = document.querySelectorAll('#grammarStates .state-node');
+  states.forEach((s, i) => {
+    s.classList.remove('current', 'next', 'visited');
+    if (i < step.current) s.classList.add('visited');
+    else if (i === step.current) s.classList.add('current');
+    else if (i === step.current + 1) s.classList.add('next');
+  });
+}
+
+function resetGrammar() {
+  grammarIdx = 0;
+  const states = document.querySelectorAll('#grammarStates .state-node');
+  states.forEach((s, i) => {
+    s.classList.remove('current', 'next', 'visited');
+    if (i === 0) s.classList.add('current');
+    if (i === 1) s.classList.add('next');
+  });
+}
+
+// Walkthrough tokens
+const walkthroughTokens = [
+  { text: '{', constraint: 'Must start with open brace', allowed: ['{'], blocked: ['"','[','0-9','true'] },
+  { text: '"', constraint: 'Must start a key string', allowed: ['"'], blocked: ['}',':',',','0-9'] },
+  { text: 'name', constraint: 'Key content (must match schema property)', allowed: ['name','age'], blocked: ['foo','bar','123'] },
+  { text: '"', constraint: 'Must close key string', allowed: ['"'], blocked: ['a-z','0-9','{'] },
+  { text: ':', constraint: 'Key-value separator', allowed: [':'], blocked: [',','}','"'] },
+  { text: ' "', constraint: 'Start string value (name is type:string)', allowed: ['" (string start)'], blocked: ['0-9','true','{','['] },
+  { text: 'Alice', constraint: 'String content (free-form text)', allowed: ['any text token'], blocked: [] },
+  { text: '"', constraint: 'Close string', allowed: ['"'], blocked: ['a-z','0-9'] },
+  { text: ',', constraint: 'More required properties remain', allowed: [','], blocked: ['}'] },
+  { text: ' "age"', constraint: 'Next required key', allowed: ['"age"'], blocked: ['"foo"','0-9'] },
+  { text: ':', constraint: 'Key-value separator', allowed: [':'], blocked: [',','"'] },
+  { text: ' 30', constraint: 'Integer value (age is type:integer)', allowed: ['0-9 tokens'], blocked: ['"','true','{'] },
+  { text: '}', constraint: 'All required fields present, close object', allowed: ['}'], blocked: [',','"'] },
+];
+
+function buildWalkthroughTokens() {
+  const container = document.getElementById('decodingTokens');
+  container.innerHTML = '';
+  walkthroughTokens.forEach((t, i) => {
+    const el = document.createElement('span');
+    el.className = 'token neutral';
+    el.textContent = t.text;
+    el.dataset.idx = i;
+    el.onclick = () => highlightWalkthroughStep(i);
+    container.appendChild(el);
+  });
+}
+buildWalkthroughTokens();
+
+function highlightWalkthroughStep(idx) {
+  const tokens = document.querySelectorAll('#decodingTokens .token');
+  tokens.forEach((t, i) => {
+    t.classList.remove('selected','structural','allowed','neutral');
+    if (i < idx) t.classList.add('structural');
+    else if (i === idx) t.classList.add('selected');
+    else t.classList.add('neutral');
+  });
+
+  const step = walkthroughTokens[idx];
+  document.getElementById('stepDescription').innerHTML =
+    `<b>Step ${idx + 1}:</b> <span style="color:var(--primary);">${step.constraint}</span>`;
+
+  const allowedHtml = step.allowed.map(a => `<span class="token allowed">${a}</span>`).join(' ');
+  const blockedHtml = step.blocked.map(b => `<span class="token blocked">${b}</span>`).join(' ');
+  document.getElementById('stepAllowed').innerHTML =
+    `<div style="margin-bottom:0.5rem;"><span style="font-size:0.8rem;color:var(--primary);font-weight:600;">Allowed:</span> ${allowedHtml}</div>` +
+    (blockedHtml ? `<div><span style="font-size:0.8rem;color:var(--danger);font-weight:600;">Blocked:</span> ${blockedHtml}</div>` : '');
+}
+
+let walkTimer = null;
+function autoWalkthrough() {
+  if (walkTimer) clearInterval(walkTimer);
+  let idx = 0;
+  walkTimer = setInterval(() => {
+    if (idx < walkthroughTokens.length) {
+      highlightWalkthroughStep(idx);
+      idx++;
+    } else {
+      clearInterval(walkTimer);
+    }
+  }, 800);
+}
+
+function resetWalkthrough() {
+  if (walkTimer) clearInterval(walkTimer);
+  buildWalkthroughTokens();
+  document.getElementById('stepDescription').textContent = 'Click a token above to see the constraint at that step.';
+  document.getElementById('stepAllowed').innerHTML = '';
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transformer Block Internals - Inference Engineering</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a;
+  --bg-card: #121212;
+  --bg-card-hover: #1a1a1a;
+  --border: #262626;
+  --primary: #00d46a;
+  --secondary: #00c8e6;
+  --tertiary: #a855f7;
+  --success: #10b981;
+  --text: #f2f2f2;
+  --text-muted: #a3a3a3;
+  --text-dim: #737373;
+  --danger: #ef4444;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow-x: hidden;
+}
+
+h1, h2 { font-family: 'Instrument Serif', serif; font-style: italic; }
+code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+.gradient-text {
+  background: linear-gradient(135deg, #00d46a, #00c8e6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Nav */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+  background: rgba(10,10,10,0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 2rem;
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+nav .logo { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.25rem; }
+nav .badge {
+  border: 1px solid rgba(0,212,106,0.3);
+  background: rgba(0,212,106,0.1);
+  color: var(--primary);
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* Progress bar */
+.progress-bar {
+  position: fixed; top: 0; left: 0; height: 3px; z-index: 1001;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  transition: width 0.3s ease;
+}
+
+/* Dot nav */
+.dot-nav {
+  position: fixed; right: 2rem; top: 50%; transform: translateY(-50%); z-index: 999;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.dot-nav .dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--border); cursor: pointer; transition: all 0.3s;
+  border: 2px solid transparent;
+}
+.dot-nav .dot.active {
+  background: var(--primary); border-color: var(--primary);
+  box-shadow: 0 0 10px rgba(0,212,106,0.5);
+}
+.dot-nav .dot:hover { background: var(--text-muted); }
+
+/* Sections */
+section {
+  min-height: 100vh;
+  padding: 6rem 2rem 4rem;
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.section-inner {
+  max-width: 1200px; width: 100%; margin: 0 auto;
+}
+
+/* Grid background */
+.grid-bg {
+  position: absolute; inset: 0; z-index: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* Glows */
+.glow-green {
+  position: absolute; width: 400px; height: 400px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,212,106,0.1), transparent 70%);
+  pointer-events: none;
+}
+.glow-cyan {
+  position: absolute; width: 400px; height: 400px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,200,230,0.08), transparent 70%);
+  pointer-events: none;
+}
+
+/* Cards */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.3s;
+}
+.card:hover {
+  background: var(--bg-card-hover);
+  border-color: rgba(0,212,106,0.3);
+}
+
+/* Animations */
+.fade-in {
+  opacity: 0; transform: translateY(30px);
+  transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.fade-in.visible { opacity: 1; transform: translateY(0); }
+
+/* Transformer Block Diagram */
+.block-diagram {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 2rem 0;
+  position: relative;
+}
+
+.block-component {
+  width: 320px;
+  padding: 1rem 1.5rem;
+  border-radius: 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  z-index: 2;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.block-component:hover {
+  transform: scale(1.05);
+}
+
+.block-component.attention {
+  background: rgba(0,212,106,0.15);
+  border: 2px solid var(--primary);
+  color: var(--primary);
+}
+.block-component.addnorm {
+  background: rgba(0,200,230,0.12);
+  border: 2px solid var(--secondary);
+  color: var(--secondary);
+}
+.block-component.ffn {
+  background: rgba(168,85,247,0.15);
+  border: 2px solid var(--tertiary);
+  color: var(--tertiary);
+}
+.block-component.input-block, .block-component.output-block {
+  background: rgba(255,255,255,0.05);
+  border: 2px solid var(--border);
+  color: var(--text-muted);
+  width: 200px;
+}
+
+.block-component.active {
+  box-shadow: 0 0 30px rgba(0,212,106,0.3);
+  transform: scale(1.08);
+}
+
+.connector {
+  width: 2px; height: 30px;
+  background: linear-gradient(to bottom, var(--primary), var(--secondary));
+  position: relative;
+  z-index: 1;
+}
+
+.connector::after {
+  content: '';
+  position: absolute;
+  bottom: -4px; left: 50%; transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid var(--secondary);
+}
+
+/* Residual connection lines */
+.residual-line {
+  position: absolute;
+  border: 2px dashed rgba(239,68,68,0.4);
+  border-radius: 0 20px 20px 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Detail Panel */
+.detail-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2rem;
+  margin-top: 1rem;
+  display: none;
+  animation: slideIn 0.4s ease;
+}
+.detail-panel.show { display: block; }
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.detail-panel h3 {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.detail-panel .formula {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  margin: 1rem 0;
+  color: var(--primary);
+}
+
+/* Token flow animation */
+.token-flow-container {
+  position: relative;
+  width: 100%;
+  height: 500px;
+  overflow: hidden;
+}
+
+.token-particle {
+  position: absolute;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 10px rgba(0,212,106,0.6);
+  z-index: 10;
+  transition: all 0.5s ease;
+}
+
+/* Matrix visualization */
+.matrix-grid {
+  display: grid;
+  gap: 2px;
+  margin: 1rem auto;
+}
+.matrix-cell {
+  width: 100%; aspect-ratio: 1;
+  border-radius: 2px;
+  transition: all 0.3s;
+  min-width: 8px;
+}
+
+/* Interactive controls */
+.controls {
+  display: flex; gap: 1rem; flex-wrap: wrap;
+  margin: 1.5rem 0;
+}
+.btn {
+  padding: 0.6rem 1.5rem;
+  border: 1px solid var(--primary);
+  background: rgba(0,212,106,0.1);
+  color: var(--primary);
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  transition: all 0.3s;
+}
+.btn:hover { background: rgba(0,212,106,0.2); }
+.btn.active { background: var(--primary); color: var(--bg); }
+.btn.secondary {
+  border-color: var(--secondary);
+  background: rgba(0,200,230,0.1);
+  color: var(--secondary);
+}
+.btn.secondary:hover { background: rgba(0,200,230,0.2); }
+
+/* Layer norm visualization */
+.norm-bar-container {
+  display: flex; gap: 4px; align-items: flex-end;
+  height: 150px; padding: 1rem;
+  background: rgba(0,0,0,0.2);
+  border-radius: 8px;
+  margin: 1rem 0;
+}
+.norm-bar {
+  flex: 1;
+  border-radius: 4px 4px 0 0;
+  transition: height 0.6s ease, background 0.6s ease;
+  min-width: 20px;
+}
+
+/* FFN visualization */
+.ffn-layer {
+  display: flex; gap: 3px; justify-content: center;
+  margin: 0.5rem 0;
+}
+.neuron {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  transition: all 0.3s;
+}
+.neuron.active {
+  background: var(--tertiary);
+  box-shadow: 0 0 8px rgba(168,85,247,0.5);
+  border-color: var(--tertiary);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  nav { padding: 0.75rem 1rem; }
+  section { padding: 5rem 1rem 3rem; }
+  .block-component { width: 240px; font-size: 0.85rem; padding: 0.8rem 1rem; }
+  .dot-nav { right: 1rem; }
+  h1 { font-size: 2rem !important; }
+  h2 { font-size: 1.5rem !important; }
+}
+
+/* Section specific */
+.section-title {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  line-height: 1.2;
+}
+.section-subtitle {
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  max-width: 600px;
+  line-height: 1.6;
+}
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .two-col { grid-template-columns: 1fr; }
+}
+
+/* Attention matrix */
+.attn-matrix-wrapper {
+  display: flex; flex-direction: column; align-items: center;
+}
+.attn-matrix {
+  display: grid;
+  gap: 1px;
+  margin: 1rem 0;
+}
+.attn-cell {
+  width: 100%; aspect-ratio: 1;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+.attn-cell:hover { transform: scale(1.3); z-index: 5; }
+.attn-labels { display: flex; gap: 1px; }
+.attn-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-align: center;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Token flow section */
+.token-path {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  overflow-x: auto;
+  padding: 2rem 0;
+}
+.token-stage {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 0.5rem;
+  min-width: 120px;
+}
+.token-stage .stage-box {
+  padding: 0.8rem 1.2rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+  border: 2px solid;
+  transition: all 0.5s;
+}
+.token-stage .stage-values {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+.token-arrow {
+  width: 40px; height: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  position: relative;
+  flex-shrink: 0;
+}
+.token-arrow::after {
+  content: '';
+  position: absolute;
+  right: -4px; top: 50%; transform: translateY(-50%);
+  width: 0; height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid var(--secondary);
+}
+
+.highlight-flow .stage-box { opacity: 0.3; }
+.highlight-flow .stage-box.flow-active { opacity: 1; box-shadow: 0 0 20px rgba(0,212,106,0.3); }
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+.stat-card {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  text-align: center;
+}
+.stat-card .stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+.stat-card .stat-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+
+<nav>
+  <div class="logo"><span class="gradient-text">VizuaraAI</span></div>
+  <div style="display:flex; align-items:center; gap:1rem;">
+    <span class="badge">Lesson 25</span>
+    <span style="color:var(--text-muted); font-size:0.85rem;">Transformer Block Internals</span>
+  </div>
+</nav>
+
+<div class="dot-nav" id="dotNav"></div>
+
+<!-- Section 0: Hero -->
+<section id="sec0">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:-100px;left:-100px;"></div>
+  <div class="glow-cyan" style="bottom:-100px;right:-100px;"></div>
+  <div class="section-inner" style="text-align:center;">
+    <div class="fade-in">
+      <div class="badge" style="display:inline-block;margin-bottom:1.5rem;">Deep Dive</div>
+      <h1 class="section-title"><span class="gradient-text">Transformer Block</span> Internals</h1>
+      <p class="section-subtitle" style="margin:1rem auto;">
+        Every modern LLM is built from repeated transformer blocks. Understanding each sub-layer --
+        multi-head attention, residual connections, layer normalization, and feed-forward networks --
+        is essential for inference optimization.
+      </p>
+      <div class="stats-grid" style="max-width:600px;margin:2rem auto;">
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--primary);">4</div>
+          <div class="stat-label">Sub-layers per block</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--secondary);">96</div>
+          <div class="stat-label">Blocks in GPT-4 class</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--tertiary);">~67%</div>
+          <div class="stat-label">Params in FFN layers</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 1: Block Overview -->
+<section id="sec1">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:20%;right:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Block Architecture</span></h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">Click any component to explore its internals. Watch data flow through the block.</p>
+
+      <div class="two-col">
+        <div style="display:flex;justify-content:center;">
+          <div class="block-diagram" id="blockDiagram">
+            <div class="block-component input-block" data-comp="input">Input Embeddings</div>
+            <div class="connector"></div>
+            <div class="block-component attention" data-comp="attention" onclick="showDetail('attention')">Multi-Head Attention</div>
+            <div class="connector"></div>
+            <div class="block-component addnorm" data-comp="addnorm1" onclick="showDetail('addnorm1')">Add & Layer Norm</div>
+            <div class="connector"></div>
+            <div class="block-component ffn" data-comp="ffn" onclick="showDetail('ffn')">Feed-Forward Network</div>
+            <div class="connector"></div>
+            <div class="block-component addnorm" data-comp="addnorm2" onclick="showDetail('addnorm2')">Add & Layer Norm</div>
+            <div class="connector"></div>
+            <div class="block-component output-block" data-comp="output">Output to Next Block</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="detail-panel show" id="detailPanel">
+            <h3 id="detailTitle" class="gradient-text">Click a component</h3>
+            <p id="detailText" style="color:var(--text-muted);line-height:1.7;">
+              Click on any of the colored components in the diagram to explore how data flows through
+              that sub-layer. Each component performs a critical transformation on the token representations.
+            </p>
+            <div id="detailFormula" class="formula" style="display:none;"></div>
+            <div id="detailExtra"></div>
+          </div>
+
+          <div class="controls" style="margin-top:1rem;">
+            <button class="btn" onclick="animateFlow()">Animate Flow</button>
+            <button class="btn secondary" onclick="showResiduals()">Show Residuals</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 2: Multi-Head Attention -->
+<section id="sec2">
+  <div class="grid-bg"></div>
+  <div class="glow-cyan" style="top:10%;left:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Multi-Head Attention</span></h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">
+        Attention allows each token to gather information from all other tokens. Multiple heads
+        let the model attend to different aspects simultaneously.
+      </p>
+
+      <div class="two-col">
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--primary);">Attention Score Matrix</h3>
+            <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:1rem;">
+              Hover over cells to see attention weights between token pairs.
+              Brighter cells indicate stronger attention.
+            </p>
+            <div class="attn-matrix-wrapper">
+              <div style="display:flex;gap:1px;margin-left:50px;margin-bottom:4px;" id="attnColLabels"></div>
+              <div style="display:flex;align-items:start;">
+                <div style="display:flex;flex-direction:column;gap:1px;margin-right:4px;" id="attnRowLabels"></div>
+                <div class="attn-matrix" id="attnMatrix"></div>
+              </div>
+            </div>
+            <p id="attnInfo" style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:var(--text-dim);margin-top:0.5rem;text-align:center;min-height:1.2em;"></p>
+          </div>
+
+          <div class="controls">
+            <button class="btn active" onclick="switchHead(0, this)">Head 1</button>
+            <button class="btn" onclick="switchHead(1, this)">Head 2</button>
+            <button class="btn" onclick="switchHead(2, this)">Head 3</button>
+            <button class="btn" onclick="switchHead(3, this)">Head 4</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--secondary);">Q, K, V Projections</h3>
+            <div class="formula">
+              Q = X * W_Q &nbsp;&nbsp; K = X * W_K &nbsp;&nbsp; V = X * W_V
+            </div>
+            <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+              Each input token is projected into three vectors: <b style="color:var(--primary)">Query</b>,
+              <b style="color:var(--secondary)">Key</b>, and <b style="color:var(--tertiary)">Value</b>.
+              The Query asks "what am I looking for?", the Key says "what do I contain?",
+              and the Value holds the actual information to be gathered.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--tertiary);">Scaled Dot-Product</h3>
+            <div class="formula">
+              Attention(Q,K,V) = softmax(Q*K^T / sqrt(d_k)) * V
+            </div>
+            <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+              The scaling factor <code style="color:var(--primary)">sqrt(d_k)</code> prevents dot products
+              from growing too large, which would push softmax into regions with tiny gradients.
+              For d_k=128, the scale factor is ~11.3.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 3: Residual Connections & Layer Norm -->
+<section id="sec3">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="bottom:10%;right:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Residual Connections</span> & Layer Norm</h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">
+        These two mechanisms are critical for training stability. Residual connections allow gradients
+        to flow directly, while layer normalization keeps activations well-behaved.
+      </p>
+
+      <div class="two-col">
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--danger);">Residual Connection</h3>
+            <div class="formula">output = x + SubLayer(x)</div>
+            <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;margin-bottom:1rem;">
+              The input is added back to the sublayer output. This creates a "highway" for gradients
+              and allows the sublayer to learn just the <em>delta</em> -- what to change.
+            </p>
+            <div id="residualViz" style="display:flex;align-items:center;gap:1rem;justify-content:center;flex-wrap:wrap;">
+              <div style="text-align:center;">
+                <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:0.25rem;">Input x</div>
+                <div class="norm-bar-container" style="height:100px;width:180px;" id="residInput"></div>
+              </div>
+              <div style="font-size:1.5rem;color:var(--primary);">+</div>
+              <div style="text-align:center;">
+                <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:0.25rem;">SubLayer(x)</div>
+                <div class="norm-bar-container" style="height:100px;width:180px;" id="residSublayer"></div>
+              </div>
+              <div style="font-size:1.5rem;color:var(--secondary);">=</div>
+              <div style="text-align:center;">
+                <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:0.25rem;">Output</div>
+                <div class="norm-bar-container" style="height:100px;width:180px;" id="residOutput"></div>
+              </div>
+            </div>
+            <div class="controls" style="justify-content:center;">
+              <button class="btn" onclick="animateResidual()">Animate Residual</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--secondary);">Layer Normalization</h3>
+            <div class="formula">
+              LayerNorm(x) = gamma * (x - mean) / sqrt(var + eps) + beta
+            </div>
+            <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;margin-bottom:1rem;">
+              Normalizes each token's feature vector to have zero mean and unit variance.
+              Learnable parameters gamma and beta allow the model to undo normalization if needed.
+            </p>
+
+            <div style="display:flex;gap:1rem;">
+              <div style="flex:1;text-align:center;">
+                <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:0.25rem;">Before Norm</div>
+                <div class="norm-bar-container" style="height:120px;" id="beforeNorm"></div>
+              </div>
+              <div style="flex:1;text-align:center;">
+                <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:0.25rem;">After Norm</div>
+                <div class="norm-bar-container" style="height:120px;" id="afterNorm"></div>
+              </div>
+            </div>
+            <div class="controls" style="justify-content:center;">
+              <button class="btn secondary" onclick="animateNorm()">Normalize</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.5rem;">Pre-Norm vs Post-Norm</h3>
+            <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+              <b style="color:var(--primary);">Post-Norm</b> (original): LayerNorm(x + SubLayer(x))<br>
+              <b style="color:var(--secondary);">Pre-Norm</b> (modern): x + SubLayer(LayerNorm(x))<br><br>
+              Most modern LLMs use Pre-Norm or <b style="color:var(--tertiary);">RMSNorm</b>,
+              which skips the mean subtraction for speed.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 4: Feed-Forward Network -->
+<section id="sec4">
+  <div class="grid-bg"></div>
+  <div class="glow-cyan" style="top:20%;left:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Feed-Forward Network</span></h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">
+        The FFN applies a non-linear transformation to each token independently. It typically
+        expands to 4x the model dimension, applies an activation, then projects back down.
+      </p>
+
+      <div class="two-col">
+        <div>
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--tertiary);">Network Architecture</h3>
+            <div class="formula">FFN(x) = W2 * activation(W1 * x + b1) + b2</div>
+
+            <div id="ffnViz" style="padding:1.5rem 0;">
+              <div style="text-align:center;margin-bottom:0.5rem;">
+                <div style="font-size:0.75rem;color:var(--text-dim);">Input (d_model = 8)</div>
+                <div class="ffn-layer" id="ffnInput"></div>
+              </div>
+              <div style="text-align:center;color:var(--text-dim);font-size:0.7rem;margin:0.5rem 0;">W1 projection (expand 4x)</div>
+              <div style="text-align:center;margin-bottom:0.5rem;">
+                <div style="font-size:0.75rem;color:var(--text-dim);">Hidden (d_ff = 32)</div>
+                <div class="ffn-layer" id="ffnHidden"></div>
+              </div>
+              <div style="text-align:center;color:var(--text-dim);font-size:0.7rem;margin:0.5rem 0;">activation + W2 (contract)</div>
+              <div style="text-align:center;">
+                <div style="font-size:0.75rem;color:var(--text-dim);">Output (d_model = 8)</div>
+                <div class="ffn-layer" id="ffnOutput"></div>
+              </div>
+            </div>
+
+            <div class="controls" style="justify-content:center;">
+              <button class="btn" onclick="animateFFN()">Animate Forward Pass</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--primary);">Activation Functions</h3>
+            <div class="controls">
+              <button class="btn active" onclick="showActivation('relu', this)">ReLU</button>
+              <button class="btn" onclick="showActivation('gelu', this)">GELU</button>
+              <button class="btn" onclick="showActivation('swiglu', this)">SwiGLU</button>
+            </div>
+            <canvas id="activationCanvas" width="400" height="200" style="width:100%;border-radius:8px;margin:1rem 0;background:rgba(0,0,0,0.3);"></canvas>
+            <p id="activationDesc" style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+              <b style="color:var(--primary);">ReLU</b>: max(0, x). Simple but causes dead neurons.
+              Used in original Transformer.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.5rem;">Parameter Count</h3>
+            <div style="margin:1rem 0;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:0.25rem;">
+                <span style="font-size:0.85rem;">Attention (~33%)</span>
+                <span class="mono" style="font-size:0.8rem;color:var(--primary);">4 * d^2</span>
+              </div>
+              <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;">
+                <div style="height:100%;width:33%;background:var(--primary);border-radius:4px;"></div>
+              </div>
+            </div>
+            <div style="margin:1rem 0;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:0.25rem;">
+                <span style="font-size:0.85rem;">FFN (~67%)</span>
+                <span class="mono" style="font-size:0.8rem;color:var(--tertiary);">8 * d^2</span>
+              </div>
+              <div style="height:8px;background:var(--border);border-radius:4px;overflow:hidden;">
+                <div style="height:100%;width:67%;background:var(--tertiary);border-radius:4px;"></div>
+              </div>
+            </div>
+            <p style="color:var(--text-dim);font-size:0.8rem;margin-top:0.75rem;">
+              For d_model=4096: Attention params = 67M, FFN params = 134M per block.
+              The FFN holds most of the "knowledge" in the model.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 5: Data Flow -->
+<section id="sec5">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:30%;left:50%;transform:translateX(-50%);"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Complete Data Flow</span></h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">
+        Watch how token representations transform as they flow through an entire transformer block.
+        Each stage refines the representation with new information.
+      </p>
+
+      <div class="card" style="overflow-x:auto;">
+        <div class="token-path highlight-flow" id="tokenPath">
+          <!-- Generated by JS -->
+        </div>
+        <div class="controls" style="justify-content:center;">
+          <button class="btn" onclick="playTokenFlow()">Play Flow Animation</button>
+          <button class="btn secondary" onclick="resetTokenFlow()">Reset</button>
+        </div>
+      </div>
+
+      <div class="stats-grid" style="margin-top:2rem;">
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--primary);" id="flowStage">--</div>
+          <div class="stat-label">Current Stage</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--secondary);" id="flowDim">4096</div>
+          <div class="stat-label">Vector Dimension</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--tertiary);" id="flowOps">--</div>
+          <div class="stat-label">FLOPs at stage</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--danger);" id="flowMemory">--</div>
+          <div class="stat-label">Memory access</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:2rem;">
+        <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:1rem;">Inference Optimization Targets</h3>
+        <div class="two-col" style="gap:1rem;">
+          <div>
+            <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.8;">
+              <b style="color:var(--primary);">KV Cache</b>: Store K,V projections to avoid recomputation. Trades memory for compute.<br><br>
+              <b style="color:var(--secondary);">Flash Attention</b>: Fuse attention operations to minimize memory reads/writes. Up to 3x speedup.<br><br>
+              <b style="color:var(--tertiary);">Quantization</b>: Reduce FFN weight precision from FP16 to INT4/INT8. 2-4x memory savings.
+            </p>
+          </div>
+          <div>
+            <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.8;">
+              <b style="color:var(--danger);">Sparse Attention</b>: Only attend to a subset of tokens. Reduces O(n^2) to O(n*sqrt(n)).<br><br>
+              <b style="color:var(--primary);">MoE FFN</b>: Replace dense FFN with sparse mixture-of-experts. Only activate top-K experts per token.<br><br>
+              <b style="color:var(--secondary);">Tensor Parallelism</b>: Split attention heads and FFN across GPUs for larger batch sizes.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+// Sections and navigation
+const sections = document.querySelectorAll('section');
+const dotNav = document.getElementById('dotNav');
+const progressBar = document.getElementById('progressBar');
+
+sections.forEach((_, i) => {
+  const dot = document.createElement('div');
+  dot.className = 'dot';
+  dot.onclick = () => sections[i].scrollIntoView({ behavior: 'smooth' });
+  dotNav.appendChild(dot);
+});
+
+// Scroll handling
+function updateScroll() {
+  const scrollTop = window.scrollY;
+  const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+  const progress = (scrollTop / scrollHeight) * 100;
+  progressBar.style.width = progress + '%';
+
+  const dots = dotNav.querySelectorAll('.dot');
+  sections.forEach((sec, i) => {
+    const rect = sec.getBoundingClientRect();
+    if (rect.top < window.innerHeight / 2 && rect.bottom > window.innerHeight / 2) {
+      dots.forEach(d => d.classList.remove('active'));
+      dots[i].classList.add('active');
+    }
+
+    // Fade in
+    const fadeEls = sec.querySelectorAll('.fade-in');
+    fadeEls.forEach(el => {
+      if (rect.top < window.innerHeight * 0.85) {
+        el.classList.add('visible');
+      }
+    });
+  });
+}
+window.addEventListener('scroll', updateScroll);
+updateScroll();
+
+// Detail panel for block diagram
+const details = {
+  attention: {
+    title: 'Multi-Head Attention',
+    text: 'Computes attention scores between all pairs of tokens, allowing each position to attend to all other positions. The multi-head mechanism runs several attention operations in parallel, each learning different relationship patterns.',
+    formula: 'MultiHead(Q,K,V) = Concat(head_1,...,head_h) * W_O\nwhere head_i = Attention(X*W_Qi, X*W_Ki, X*W_Vi)',
+    color: 'var(--primary)'
+  },
+  addnorm1: {
+    title: 'Add & Norm (Post-Attention)',
+    text: 'The residual connection adds the original input back to the attention output. Layer normalization then stabilizes the distribution. This is the first of two add-and-norm steps in each block.',
+    formula: 'output = LayerNorm(x + MultiHead(x))',
+    color: 'var(--secondary)'
+  },
+  ffn: {
+    title: 'Feed-Forward Network',
+    text: 'A two-layer MLP applied to each token independently. The hidden dimension is typically 4x the model dimension. This is where the model stores and retrieves factual knowledge.',
+    formula: 'FFN(x) = GELU(x * W1 + b1) * W2 + b2\nd_ff = 4 * d_model (typically)',
+    color: 'var(--tertiary)'
+  },
+  addnorm2: {
+    title: 'Add & Norm (Post-FFN)',
+    text: 'The second residual connection adds the pre-FFN representation back to the FFN output. Layer normalization ensures the block output has a consistent scale for the next transformer block.',
+    formula: 'output = LayerNorm(x + FFN(x))',
+    color: 'var(--secondary)'
+  }
+};
+
+function showDetail(comp) {
+  const d = details[comp];
+  if (!d) return;
+  const panel = document.getElementById('detailPanel');
+  document.getElementById('detailTitle').textContent = d.title;
+  document.getElementById('detailTitle').style.color = d.color;
+  document.getElementById('detailText').textContent = d.text;
+  const formulaEl = document.getElementById('detailFormula');
+  formulaEl.style.display = 'block';
+  formulaEl.textContent = d.formula;
+  panel.classList.add('show');
+
+  document.querySelectorAll('.block-component').forEach(c => c.classList.remove('active'));
+  document.querySelector(`[data-comp="${comp}"]`).classList.add('active');
+}
+
+// Animate flow through block
+function animateFlow() {
+  const components = document.querySelectorAll('.block-component');
+  components.forEach(c => c.classList.remove('active'));
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i > 0) components[i - 1].classList.remove('active');
+    if (i < components.length) {
+      components[i].classList.add('active');
+      const comp = components[i].dataset.comp;
+      if (details[comp]) showDetail(comp);
+      i++;
+    } else {
+      clearInterval(interval);
+      setTimeout(() => components[components.length - 1].classList.remove('active'), 500);
+    }
+  }, 800);
+}
+
+let residualsShown = false;
+function showResiduals() {
+  residualsShown = !residualsShown;
+  const existing = document.querySelectorAll('.residual-line');
+  existing.forEach(e => e.remove());
+  if (!residualsShown) return;
+
+  const diagram = document.getElementById('blockDiagram');
+  const attn = diagram.querySelector('[data-comp="attention"]');
+  const an1 = diagram.querySelector('[data-comp="addnorm1"]');
+  const ffn = diagram.querySelector('[data-comp="ffn"]');
+  const an2 = diagram.querySelector('[data-comp="addnorm2"]');
+
+  function addResidualLine(from, to) {
+    const line = document.createElement('div');
+    line.className = 'residual-line';
+    const fromRect = from.getBoundingClientRect();
+    const toRect = to.getBoundingClientRect();
+    const diagRect = diagram.getBoundingClientRect();
+    const top = fromRect.top - diagRect.top;
+    const height = toRect.top - fromRect.top + toRect.height / 2 - fromRect.height / 2;
+    line.style.top = (top + fromRect.height / 2) + 'px';
+    line.style.right = '-30px';
+    line.style.width = '30px';
+    line.style.height = height + 'px';
+    line.style.borderLeft = 'none';
+    diagram.appendChild(line);
+  }
+  addResidualLine(attn, an1);
+  addResidualLine(ffn, an2);
+}
+
+// Attention matrix
+const tokens = ['The', 'cat', 'sat', 'on', 'the', 'mat'];
+const headWeights = [];
+for (let h = 0; h < 4; h++) {
+  const mat = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const row = [];
+    let sum = 0;
+    for (let j = 0; j < tokens.length; j++) {
+      let v;
+      if (h === 0) v = j <= i ? Math.random() * 0.5 + (j === i ? 0.5 : 0) : 0;
+      else if (h === 1) v = Math.abs(i - j) <= 1 ? Math.random() * 0.4 + 0.3 : Math.random() * 0.1;
+      else if (h === 2) v = (tokens[j] === 'The' || tokens[j] === 'the') ? 0.4 + Math.random() * 0.3 : Math.random() * 0.15;
+      else v = Math.random();
+      row.push(v);
+      sum += v;
+    }
+    mat.push(row.map(v => v / sum));
+  }
+  headWeights.push(mat);
+}
+
+function renderAttentionMatrix(headIdx) {
+  const matrix = headWeights[headIdx];
+  const container = document.getElementById('attnMatrix');
+  const colLabels = document.getElementById('attnColLabels');
+  const rowLabels = document.getElementById('attnRowLabels');
+  container.innerHTML = '';
+  colLabels.innerHTML = '';
+  rowLabels.innerHTML = '';
+
+  const size = tokens.length;
+  container.style.gridTemplateColumns = `repeat(${size}, 40px)`;
+  container.style.gridTemplateRows = `repeat(${size}, 40px)`;
+
+  tokens.forEach(t => {
+    const l = document.createElement('div');
+    l.className = 'attn-label';
+    l.style.width = '40px';
+    l.textContent = t;
+    colLabels.appendChild(l);
+  });
+
+  tokens.forEach(t => {
+    const l = document.createElement('div');
+    l.className = 'attn-label';
+    l.style.height = '40px';
+    l.style.display = 'flex';
+    l.style.alignItems = 'center';
+    l.style.justifyContent = 'flex-end';
+    l.style.paddingRight = '4px';
+    l.textContent = t;
+    rowLabels.appendChild(l);
+  });
+
+  for (let i = 0; i < size; i++) {
+    for (let j = 0; j < size; j++) {
+      const cell = document.createElement('div');
+      cell.className = 'attn-cell';
+      const val = matrix[i][j];
+      const g = Math.round(val * 200 + 20);
+      cell.style.background = `rgba(0, ${g}, ${Math.round(val * 100 + 50)}, ${val * 0.9 + 0.1})`;
+      cell.onmouseover = () => {
+        document.getElementById('attnInfo').textContent =
+          `"${tokens[i]}" attending to "${tokens[j]}": ${(val * 100).toFixed(1)}%`;
+      };
+      cell.onmouseout = () => {
+        document.getElementById('attnInfo').textContent = '';
+      };
+      container.appendChild(cell);
+    }
+  }
+}
+
+function switchHead(idx, btn) {
+  document.querySelectorAll('#sec2 .controls .btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderAttentionMatrix(idx);
+}
+
+renderAttentionMatrix(0);
+
+// Layer norm visualization
+function createBars(containerId, values, color) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  const max = Math.max(...values.map(Math.abs));
+  values.forEach(v => {
+    const bar = document.createElement('div');
+    bar.className = 'norm-bar';
+    const h = Math.abs(v) / max * 100;
+    bar.style.height = h + '%';
+    bar.style.background = v >= 0 ? color : 'var(--danger)';
+    bar.style.opacity = 0.7 + Math.abs(v) / max * 0.3;
+    container.appendChild(bar);
+  });
+}
+
+const rawVals = [3.2, -1.5, 7.8, 0.3, -4.2, 5.1, -0.8, 2.9];
+const mean = rawVals.reduce((a, b) => a + b) / rawVals.length;
+const variance = rawVals.reduce((a, b) => a + (b - mean) ** 2, 0) / rawVals.length;
+const normVals = rawVals.map(v => (v - mean) / Math.sqrt(variance + 1e-5));
+
+createBars('beforeNorm', rawVals, 'var(--secondary)');
+createBars('afterNorm', normVals, 'var(--primary)');
+
+function animateNorm() {
+  const before = document.getElementById('beforeNorm');
+  const after = document.getElementById('afterNorm');
+  // Flash effect
+  after.style.transition = 'opacity 0.3s';
+  after.style.opacity = '0.3';
+  setTimeout(() => { after.style.opacity = '1'; }, 300);
+  createBars('afterNorm', normVals, 'var(--primary)');
+}
+
+// Residual visualization
+const residInputVals = [2.1, 1.8, 3.0, 0.5, -1.2, 2.4, 1.1, -0.3];
+const residSublayerVals = [0.3, -0.5, 0.8, 0.2, 0.6, -0.3, 0.4, 0.1];
+const residOutputVals = residInputVals.map((v, i) => v + residSublayerVals[i]);
+
+createBars('residInput', residInputVals, 'var(--text-muted)');
+createBars('residSublayer', residSublayerVals, 'var(--tertiary)');
+createBars('residOutput', residOutputVals, 'var(--primary)');
+
+function animateResidual() {
+  createBars('residOutput', residInputVals, 'var(--text-muted)');
+  setTimeout(() => {
+    createBars('residOutput', residOutputVals, 'var(--primary)');
+  }, 600);
+}
+
+// FFN visualization
+function createNeurons(containerId, count, startActive) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const n = document.createElement('div');
+    n.className = 'neuron' + (startActive ? ' active' : '');
+    container.appendChild(n);
+  }
+}
+
+createNeurons('ffnInput', 8, false);
+createNeurons('ffnHidden', 32, false);
+createNeurons('ffnOutput', 8, false);
+
+function animateFFN() {
+  const layers = ['ffnInput', 'ffnHidden', 'ffnOutput'];
+  layers.forEach(l => {
+    document.querySelectorAll(`#${l} .neuron`).forEach(n => n.classList.remove('active'));
+  });
+
+  setTimeout(() => {
+    document.querySelectorAll('#ffnInput .neuron').forEach(n => n.classList.add('active'));
+  }, 200);
+  setTimeout(() => {
+    document.querySelectorAll('#ffnHidden .neuron').forEach((n, i) => {
+      if (Math.random() > 0.3) n.classList.add('active');
+    });
+  }, 700);
+  setTimeout(() => {
+    document.querySelectorAll('#ffnOutput .neuron').forEach(n => n.classList.add('active'));
+  }, 1200);
+}
+
+// Activation function canvas
+function drawActivation(type) {
+  const canvas = document.getElementById('activationCanvas');
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  // Axes
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2);
+  ctx.moveTo(w / 2, 0); ctx.lineTo(w / 2, h);
+  ctx.stroke();
+
+  ctx.strokeStyle = 'var(--primary)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+
+  for (let px = 0; px < w; px++) {
+    const x = (px / w) * 8 - 4;
+    let y;
+    if (type === 'relu') y = Math.max(0, x);
+    else if (type === 'gelu') y = x * 0.5 * (1 + Math.tanh(Math.sqrt(2 / Math.PI) * (x + 0.044715 * x * x * x)));
+    else y = x * (1 / (1 + Math.exp(-x)));
+
+    const py = h / 2 - (y / 4) * h / 2;
+    if (px === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.strokeStyle = '#00d46a';
+  ctx.stroke();
+
+  // Labels
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.font = '11px JetBrains Mono';
+  ctx.fillText('-4', 5, h / 2 + 15);
+  ctx.fillText('4', w - 15, h / 2 + 15);
+  ctx.fillText('0', w / 2 + 5, h / 2 + 15);
+}
+
+function showActivation(type, btn) {
+  if (btn) {
+    btn.parentElement.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  drawActivation(type);
+  const desc = document.getElementById('activationDesc');
+  if (type === 'relu') desc.innerHTML = '<b style="color:var(--primary)">ReLU</b>: max(0, x). Simple but causes dead neurons. Used in original Transformer.';
+  else if (type === 'gelu') desc.innerHTML = '<b style="color:var(--primary)">GELU</b>: x * Phi(x). Smooth approximation of ReLU used in GPT-2/3 and BERT. Allows small negative gradients.';
+  else desc.innerHTML = '<b style="color:var(--primary)">SwiGLU</b>: x * sigmoid(x). Used in LLaMA, PaLM. Combines Swish activation with gated linear unit for better performance.';
+}
+drawActivation('relu');
+
+// Token flow
+const stages = [
+  { name: 'Input', color: 'var(--text-muted)', dim: '4096', flops: '--', mem: '--' },
+  { name: 'Q,K,V Proj', color: 'var(--primary)', dim: '4096', flops: '3*4096^2', mem: '96MB' },
+  { name: 'Attention', color: 'var(--primary)', dim: '4096', flops: 'n^2*d', mem: '32MB' },
+  { name: 'Out Proj', color: 'var(--primary)', dim: '4096', flops: '4096^2', mem: '32MB' },
+  { name: 'Add&Norm', color: 'var(--secondary)', dim: '4096', flops: '~0', mem: '~0' },
+  { name: 'FFN Up', color: 'var(--tertiary)', dim: '16384', flops: '4096*16384', mem: '128MB' },
+  { name: 'Activation', color: 'var(--tertiary)', dim: '16384', flops: '16384', mem: '~0' },
+  { name: 'FFN Down', color: 'var(--tertiary)', dim: '4096', flops: '16384*4096', mem: '128MB' },
+  { name: 'Add&Norm', color: 'var(--secondary)', dim: '4096', flops: '~0', mem: '~0' },
+  { name: 'Output', color: 'var(--text-muted)', dim: '4096', flops: '--', mem: '--' },
+];
+
+function buildTokenPath() {
+  const container = document.getElementById('tokenPath');
+  container.innerHTML = '';
+  stages.forEach((s, i) => {
+    const stage = document.createElement('div');
+    stage.className = 'token-stage';
+    stage.innerHTML = `
+      <div class="stage-box" style="border-color:${s.color};color:${s.color};" data-idx="${i}">${s.name}</div>
+      <div class="stage-values">${s.dim}d</div>
+    `;
+    container.appendChild(stage);
+    if (i < stages.length - 1) {
+      const arrow = document.createElement('div');
+      arrow.className = 'token-arrow';
+      container.appendChild(arrow);
+    }
+  });
+}
+buildTokenPath();
+
+let flowAnimation = null;
+function playTokenFlow() {
+  if (flowAnimation) clearInterval(flowAnimation);
+  const boxes = document.querySelectorAll('#tokenPath .stage-box');
+  boxes.forEach(b => b.classList.remove('flow-active'));
+  let idx = 0;
+  flowAnimation = setInterval(() => {
+    boxes.forEach(b => b.classList.remove('flow-active'));
+    if (idx < boxes.length) {
+      boxes[idx].classList.add('flow-active');
+      const s = stages[idx];
+      document.getElementById('flowStage').textContent = s.name;
+      document.getElementById('flowDim').textContent = s.dim;
+      document.getElementById('flowOps').textContent = s.flops;
+      document.getElementById('flowMemory').textContent = s.mem;
+      idx++;
+    } else {
+      clearInterval(flowAnimation);
+      flowAnimation = null;
+    }
+  }, 600);
+}
+
+function resetTokenFlow() {
+  if (flowAnimation) clearInterval(flowAnimation);
+  flowAnimation = null;
+  document.querySelectorAll('#tokenPath .stage-box').forEach(b => b.classList.remove('flow-active'));
+  document.getElementById('flowStage').textContent = '--';
+  document.getElementById('flowOps').textContent = '--';
+  document.getElementById('flowMemory').textContent = '--';
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cold Starts: The Replica Boot Timeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#0a0a0a;color:#f2f2f2;overflow-x:hidden;scroll-behavior:smooth}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#0a0a0a}
+::-webkit-scrollbar-thumb{background:#00d46a;border-radius:3px}
+.section{min-height:100vh;padding:60px 40px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
+.section-counter{position:absolute;top:20px;left:40px;font-size:12px;color:#00d46a;font-weight:600;letter-spacing:2px;text-transform:uppercase}
+h1{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:clamp(2rem,5vw,3.5rem);text-align:center;margin-bottom:10px;background:linear-gradient(135deg,#00d46a,#00c8e6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+h2{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:clamp(1.5rem,3vw,2.2rem);text-align:center;margin-bottom:20px}
+.subtitle{font-size:1.1rem;color:#a3a3a3;text-align:center;max-width:700px;margin:0 auto 40px;line-height:1.7}
+.nav-dots{position:fixed;right:20px;top:50%;transform:translateY(-50%);z-index:100;display:flex;flex-direction:column;gap:12px}
+.nav-dot{width:10px;height:10px;border-radius:50%;background:#334155;cursor:pointer;transition:all .3s}
+.nav-dot.active{background:#00d46a;box-shadow:0 0 10px #00d46a}
+.progress-bar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#00d46a,#00c8e6);z-index:200;transition:width .3s}
+.timeline-container{width:100%;max-width:1100px;position:relative;margin:0 auto}
+.timeline-stage{display:flex;align-items:center;gap:20px;padding:20px;margin:10px 0;background:#121212;border:1px solid #262626;border-radius:12px;transition:all .5s;cursor:pointer;position:relative;overflow:hidden}
+.timeline-stage:hover{border-color:#00d46a;transform:translateX(5px)}
+.timeline-stage.active{border-color:#00c8e6;box-shadow:0 0 20px rgba(0,200,230,0.1)}
+.timeline-stage.done{border-color:#10b981}
+.timeline-stage.optimized{opacity:0.4;transform:scale(0.95)}
+.timeline-stage .stage-num{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;flex-shrink:0}
+.timeline-stage .stage-info{flex:1}
+.timeline-stage .stage-info h3{font-size:15px;font-weight:700;margin-bottom:4px}
+.timeline-stage .stage-info p{font-size:12px;color:#a3a3a3}
+.timeline-stage .stage-bar{flex:1;max-width:300px}
+.stage-progress{height:24px;background:#262626;border-radius:12px;overflow:hidden;position:relative}
+.stage-fill{height:100%;border-radius:12px;transition:width 1.5s ease,background .5s;display:flex;align-items:center;padding:0 10px;font-size:11px;font-weight:700}
+.stage-time{font-size:18px;font-weight:800;min-width:80px;text-align:right;flex-shrink:0}
+.toggle-panel{background:#121212;border:1px solid #262626;border-radius:16px;padding:30px;max-width:1100px;width:100%;margin-top:30px}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #262626}
+.toggle-row:last-child{border:none}
+.toggle-row .toggle-label{font-size:14px;font-weight:500}
+.toggle-row .toggle-desc{font-size:12px;color:#a3a3a3}
+.toggle-switch{position:relative;width:48px;height:26px;cursor:pointer}
+.toggle-switch input{display:none}
+.toggle-slider{position:absolute;inset:0;background:#334155;border-radius:13px;transition:all .3s}
+.toggle-slider::before{content:'';position:absolute;width:20px;height:20px;border-radius:50%;background:#fff;top:3px;left:3px;transition:all .3s}
+.toggle-switch input:checked+.toggle-slider{background:#10b981}
+.toggle-switch input:checked+.toggle-slider::before{transform:translateX(22px)}
+.total-bar{margin-top:20px;padding:20px;background:#0a0a0a;border-radius:12px;text-align:center}
+.total-time{font-size:3rem;font-weight:800;transition:all .5s}
+.savings{font-size:1.2rem;color:#10b981;font-weight:600;margin-top:5px;transition:all .5s}
+.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:30px;max-width:1000px;width:100%;margin-top:30px}
+@media(max-width:768px){.compare-grid{grid-template-columns:1fr}}
+.compare-card{background:#121212;border:1px solid #262626;border-radius:16px;padding:25px}
+.compare-card h3{font-size:1.1rem;font-weight:700;margin-bottom:15px}
+.compare-bar{display:flex;align-items:center;gap:10px;margin:8px 0}
+.compare-bar .bar{height:20px;border-radius:4px;transition:width 1s ease}
+.compare-bar .label{font-size:12px;min-width:120px;color:#a3a3a3}
+.compare-bar .time{font-size:12px;font-weight:700;min-width:50px}
+.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;max-width:1100px;width:100%;margin-top:30px}
+.info-card{background:#121212;border:1px solid #262626;border-radius:12px;padding:25px}
+.info-card h3{font-size:1rem;font-weight:700;margin-bottom:10px}
+.info-card p{font-size:13px;color:#a3a3a3;line-height:1.6}
+.btn{padding:12px 28px;border-radius:10px;border:none;font-family:'Inter',sans-serif;font-weight:700;cursor:pointer;transition:all .3s;font-size:14px}
+.btn-primary{background:#00d46a;color:#fff}
+.btn-primary:hover{background:#00e676;transform:translateY(-2px)}
+.anim-bar{position:absolute;bottom:0;left:0;height:3px;background:#00c8e6;border-radius:3px;width:0;transition:width 2s ease}
+.timeline-stage.running .anim-bar{width:100%}
+canvas{border-radius:12px;display:block;margin:0 auto}
+</style>
+</head>
+<body>
+<div class="progress-bar" id="progressBar"></div>
+<nav class="nav-dots" id="navDots"></nav>
+
+<!-- S1: Hero -->
+<div class="section" id="s1">
+<div class="section-counter">01 / 07 - Cold Starts</div>
+<h1>Cold Starts:<br>The Replica Boot Timeline</h1>
+<p class="subtitle">When a new inference replica starts from scratch, what happens? Walk through each stage of the cold start pipeline and learn how to cut minutes down to seconds.</p>
+<button class="btn btn-primary" onclick="document.getElementById('s2').scrollIntoView({behavior:'smooth'})">See the Timeline</button>
+</div>
+
+<!-- S2: Animated Timeline -->
+<div class="section" id="s2">
+<div class="section-counter">02 / 07 - Boot Timeline</div>
+<h2>The Cold Start Timeline</h2>
+<p class="subtitle">Click "Boot Replica" to watch each stage animate sequentially</p>
+<div class="timeline-container" id="timelineContainer">
+<div class="timeline-stage" id="ts1" onclick="expandStage(1)">
+<div class="stage-num" style="background:rgba(239,68,68,0.2);color:#ef4444">1</div>
+<div class="stage-info">
+<h3>GPU Procurement</h3>
+<p>Cloud provider allocates GPU hardware, schedules pod</p>
+</div>
+<div class="stage-bar">
+<div class="stage-progress"><div class="stage-fill" id="sf1" style="width:0;background:#ef4444"></div></div>
+</div>
+<div class="stage-time" id="st1" style="color:#ef4444">30s</div>
+<div class="anim-bar"></div>
+</div>
+<div class="timeline-stage" id="ts2" onclick="expandStage(2)">
+<div class="stage-num" style="background:rgba(245,158,11,0.2);color:#f59e0b">2</div>
+<div class="stage-info">
+<h3>Container Image Pull</h3>
+<p>Pull Docker image from registry (5-15GB for inference images)</p>
+</div>
+<div class="stage-bar">
+<div class="stage-progress"><div class="stage-fill" id="sf2" style="width:0;background:#f59e0b"></div></div>
+</div>
+<div class="stage-time" id="st2" style="color:#f59e0b">45s</div>
+<div class="anim-bar"></div>
+</div>
+<div class="timeline-stage" id="ts3" onclick="expandStage(3)">
+<div class="stage-num" style="background:rgba(0,212,106,0.2);color:#00d46a">3</div>
+<div class="stage-info">
+<h3>Model Weight Loading</h3>
+<p>Load safetensors from storage into GPU VRAM (7-140GB)</p>
+</div>
+<div class="stage-bar">
+<div class="stage-progress"><div class="stage-fill" id="sf3" style="width:0;background:#00d46a"></div></div>
+</div>
+<div class="stage-time" id="st3" style="color:#00d46a">60s</div>
+<div class="anim-bar"></div>
+</div>
+<div class="timeline-stage" id="ts4" onclick="expandStage(4)">
+<div class="stage-num" style="background:rgba(0,200,230,0.2);color:#00c8e6">4</div>
+<div class="stage-info">
+<h3>Engine Startup & Compilation</h3>
+<p>TensorRT compilation, CUDA graph capture, warmup inference</p>
+</div>
+<div class="stage-bar">
+<div class="stage-progress"><div class="stage-fill" id="sf4" style="width:0;background:#00c8e6"></div></div>
+</div>
+<div class="stage-time" id="st4" style="color:#00c8e6">120s</div>
+<div class="anim-bar"></div>
+</div>
+<div class="timeline-stage" id="ts5" onclick="expandStage(5)">
+<div class="stage-num" style="background:rgba(16,185,129,0.2);color:#10b981">5</div>
+<div class="stage-info">
+<h3>Ready to Serve!</h3>
+<p>Health check passes, traffic begins routing to this replica</p>
+</div>
+<div class="stage-bar">
+<div class="stage-progress"><div class="stage-fill" id="sf5" style="width:0;background:#10b981"></div></div>
+</div>
+<div class="stage-time" id="st5" style="color:#10b981">0s</div>
+<div class="anim-bar"></div>
+</div>
+</div>
+<div class="total-bar">
+<div>Total Cold Start Time:</div>
+<div class="total-time" id="totalTime" style="color:#ef4444">~4 min 15 sec</div>
+</div>
+<button class="btn btn-primary" style="margin-top:20px" id="bootBtn" onclick="runBoot()">Boot Replica</button>
+</div>
+
+<!-- S3: Interactive Optimizations -->
+<div class="section" id="s3">
+<div class="section-counter">03 / 07 - Optimizations</div>
+<h2>Toggle Optimizations</h2>
+<p class="subtitle">Turn on optimizations and watch the cold start time shrink</p>
+<div class="toggle-panel">
+<div class="toggle-row">
+<div>
+<div class="toggle-label" style="color:#10b981">Warm Node Pool</div>
+<div class="toggle-desc">Pre-allocated GPU nodes kept warm, skip procurement entirely</div>
+</div>
+<label class="toggle-switch"><input type="checkbox" id="opt1" onchange="updateOptimizations()"><span class="toggle-slider"></span></label>
+</div>
+<div class="toggle-row">
+<div>
+<div class="toggle-label" style="color:#f59e0b">Cached Container Image</div>
+<div class="toggle-desc">Pre-pull image on node pool, skip image download</div>
+</div>
+<label class="toggle-switch"><input type="checkbox" id="opt2" onchange="updateOptimizations()"><span class="toggle-slider"></span></label>
+</div>
+<div class="toggle-row">
+<div>
+<div class="toggle-label" style="color:#00d46a">Quantized Weights (INT4)</div>
+<div class="toggle-desc">4x smaller model files, dramatically faster loading</div>
+</div>
+<label class="toggle-switch"><input type="checkbox" id="opt3" onchange="updateOptimizations()"><span class="toggle-slider"></span></label>
+</div>
+<div class="toggle-row">
+<div>
+<div class="toggle-label" style="color:#00d46a">Nearby Weight Storage</div>
+<div class="toggle-desc">Store weights on local NVMe instead of remote S3</div>
+</div>
+<label class="toggle-switch"><input type="checkbox" id="opt4" onchange="updateOptimizations()"><span class="toggle-slider"></span></label>
+</div>
+<div class="toggle-row">
+<div>
+<div class="toggle-label" style="color:#00c8e6">Cached Engine / Skip Compilation</div>
+<div class="toggle-desc">Pre-compiled TensorRT engine, skip compilation step</div>
+</div>
+<label class="toggle-switch"><input type="checkbox" id="opt5" onchange="updateOptimizations()"><span class="toggle-slider"></span></label>
+</div>
+</div>
+<div style="max-width:1100px;width:100%;margin-top:20px">
+<div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+<div style="flex:1">
+<div style="font-size:13px;color:#a3a3a3;margin-bottom:5px">GPU Procurement</div>
+<div class="stage-progress"><div class="stage-fill" id="optBar1" style="width:12%;background:#ef4444;font-size:10px;color:#fff">30s</div></div>
+</div>
+<div style="flex:1">
+<div style="font-size:13px;color:#a3a3a3;margin-bottom:5px">Image Pull</div>
+<div class="stage-progress"><div class="stage-fill" id="optBar2" style="width:18%;background:#f59e0b;font-size:10px;color:#fff">45s</div></div>
+</div>
+<div style="flex:1">
+<div style="font-size:13px;color:#a3a3a3;margin-bottom:5px">Weight Loading</div>
+<div class="stage-progress"><div class="stage-fill" id="optBar3" style="width:24%;background:#00d46a;font-size:10px;color:#fff">60s</div></div>
+</div>
+<div style="flex:1">
+<div style="font-size:13px;color:#a3a3a3;margin-bottom:5px">Engine Startup</div>
+<div class="stage-progress"><div class="stage-fill" id="optBar4" style="width:48%;background:#00c8e6;font-size:10px;color:#fff">120s</div></div>
+</div>
+</div>
+</div>
+<div class="total-bar" style="max-width:1100px;width:100%;margin-top:15px">
+<div>Optimized Cold Start Time:</div>
+<div class="total-time" id="optTotalTime" style="color:#ef4444">~4 min 15 sec</div>
+<div class="savings" id="optSavings">0% reduction</div>
+</div>
+</div>
+
+<!-- S4: Stage Deep Dives -->
+<div class="section" id="s4">
+<div class="section-counter">04 / 07 - Stage Details</div>
+<h2>Understanding Each Stage</h2>
+<p class="subtitle">Click each stage card to learn why it takes so long and how to optimize it</p>
+<div class="info-grid">
+<div class="info-card" onclick="this.querySelector('.detail').classList.toggle('visible')" style="cursor:pointer">
+<h3 style="color:#ef4444">1. GPU Procurement</h3>
+<p>The cloud provider must find available GPU capacity, allocate the hardware, start the VM, and schedule your container. In peak demand, this can take minutes.</p>
+<div class="detail" style="margin-top:15px;padding-top:15px;border-top:1px solid #262626;max-height:0;overflow:hidden;transition:max-height .5s">
+<p style="font-size:12px"><strong style="color:#10b981">Optimization:</strong> Maintain a warm pool of pre-provisioned nodes. Pay for idle capacity in exchange for instant availability.</p>
+<p style="font-size:12px;margin-top:8px"><strong style="color:#f59e0b">Tradeoff:</strong> Warm pools cost money even when idle. Size them to handle expected burst capacity.</p>
+</div>
+</div>
+<div class="info-card" onclick="this.querySelector('.detail').classList.toggle('visible')" style="cursor:pointer">
+<h3 style="color:#f59e0b">2. Container Image Pull</h3>
+<p>Inference container images are 5-15GB (CUDA, PyTorch, engine code). Pulling from a registry takes time proportional to image size and network bandwidth.</p>
+<div class="detail" style="margin-top:15px;padding-top:15px;border-top:1px solid #262626;max-height:0;overflow:hidden;transition:max-height .5s">
+<p style="font-size:12px"><strong style="color:#10b981">Optimization:</strong> Pre-pull images on warm nodes. Use image streaming (SOCI). Keep images lean -- separate model weights from container.</p>
+</div>
+</div>
+<div class="info-card" onclick="this.querySelector('.detail').classList.toggle('visible')" style="cursor:pointer">
+<h3 style="color:#00d46a">3. Model Weight Loading</h3>
+<p>Loading a 70B model (140GB in FP16) from storage to GPU VRAM. Bottleneck is storage I/O: S3 at 1GB/s = 140 seconds. Local NVMe at 7GB/s = 20 seconds.</p>
+<div class="detail" style="margin-top:15px;padding-top:15px;border-top:1px solid #262626;max-height:0;overflow:hidden;transition:max-height .5s">
+<p style="font-size:12px"><strong style="color:#10b981">Optimizations:</strong> Quantize to INT4 (35GB instead of 140GB). Store on local NVMe. Use safetensors format for zero-copy mapping. Tensor parallelism loads in parallel across GPUs.</p>
+</div>
+</div>
+<div class="info-card" onclick="this.querySelector('.detail').classList.toggle('visible')" style="cursor:pointer">
+<h3 style="color:#00c8e6">4. Engine Compilation</h3>
+<p>TensorRT-LLM needs to compile optimized CUDA kernels. This involves graph optimization, kernel auto-tuning, and CUDA graph capture. Can take 2+ minutes.</p>
+<div class="detail" style="margin-top:15px;padding-top:15px;border-top:1px solid #262626;max-height:0;overflow:hidden;transition:max-height .5s">
+<p style="font-size:12px"><strong style="color:#10b981">Optimization:</strong> Cache compiled engines. Use vLLM/SGLang which skip compilation entirely (JIT approach). Pre-build engines for known configurations.</p>
+</div>
+</div>
+</div>
+<style>.detail.visible{max-height:200px!important}</style>
+</div>
+
+<!-- S5: vLLM vs TRT-LLM -->
+<div class="section" id="s5">
+<div class="section-counter">05 / 07 - Engine Comparison</div>
+<h2>vLLM vs TensorRT-LLM: Cold Start</h2>
+<p class="subtitle">Different engines trade startup time for runtime performance</p>
+<div class="compare-grid">
+<div class="compare-card" style="border-color:#00d46a">
+<h3 style="color:#00d46a">vLLM / SGLang</h3>
+<p style="font-size:13px;color:#a3a3a3;margin-bottom:15px">JIT compilation, eager-mode execution. Fast startup, slightly lower throughput.</p>
+<div class="compare-bar">
+<div class="label">GPU Procurement</div>
+<div class="bar" style="width:50px;background:#ef4444"></div>
+<div class="time" style="color:#ef4444">30s</div>
+</div>
+<div class="compare-bar">
+<div class="label">Image Pull</div>
+<div class="bar" style="width:40px;background:#f59e0b"></div>
+<div class="time" style="color:#f59e0b">25s</div>
+</div>
+<div class="compare-bar">
+<div class="label">Weight Loading</div>
+<div class="bar" style="width:100px;background:#00d46a"></div>
+<div class="time" style="color:#00d46a">60s</div>
+</div>
+<div class="compare-bar">
+<div class="label">Engine Startup</div>
+<div class="bar" style="width:20px;background:#00c8e6"></div>
+<div class="time" style="color:#00c8e6">10s</div>
+</div>
+<div style="margin-top:15px;padding:10px;background:rgba(0,212,106,0.1);border-radius:8px">
+<span style="font-size:20px;font-weight:800;color:#00d46a">~2 min 5 sec</span>
+<p style="font-size:11px;color:#a3a3a3">No compilation needed. Just load and go.</p>
+</div>
+</div>
+<div class="compare-card" style="border-color:#00c8e6">
+<h3 style="color:#00c8e6">TensorRT-LLM</h3>
+<p style="font-size:13px;color:#a3a3a3;margin-bottom:15px">AOT compilation, optimized kernels. Slower startup, higher throughput.</p>
+<div class="compare-bar">
+<div class="label">GPU Procurement</div>
+<div class="bar" style="width:50px;background:#ef4444"></div>
+<div class="time" style="color:#ef4444">30s</div>
+</div>
+<div class="compare-bar">
+<div class="label">Image Pull</div>
+<div class="bar" style="width:70px;background:#f59e0b"></div>
+<div class="time" style="color:#f59e0b">45s</div>
+</div>
+<div class="compare-bar">
+<div class="label">Weight Loading</div>
+<div class="bar" style="width:100px;background:#00d46a"></div>
+<div class="time" style="color:#00d46a">60s</div>
+</div>
+<div class="compare-bar">
+<div class="label">Engine Compile</div>
+<div class="bar" style="width:200px;background:#00c8e6"></div>
+<div class="time" style="color:#00c8e6">120s</div>
+</div>
+<div style="margin-top:15px;padding:10px;background:rgba(0,200,230,0.1);border-radius:8px">
+<span style="font-size:20px;font-weight:800;color:#00c8e6">~4 min 15 sec</span>
+<p style="font-size:11px;color:#a3a3a3">Compilation adds 2+ minutes but yields faster inference.</p>
+</div>
+</div>
+</div>
+</div>
+
+<!-- S6: Optimization Stacking Visualization -->
+<div class="section" id="s6">
+<div class="section-counter">06 / 07 - Stacking Optimizations</div>
+<h2>Optimization Stacking Effect</h2>
+<p class="subtitle">Watch how each optimization reduces cold start time</p>
+<canvas id="stackCanvas" width="1000" height="450"></canvas>
+<button class="btn btn-primary" style="margin-top:20px" onclick="animateStack()">Animate Stacking</button>
+</div>
+
+<!-- S7: Summary -->
+<div class="section" id="s7">
+<div class="section-counter">07 / 07 - Summary</div>
+<h2>Cold Start: Key Takeaways</h2>
+<div class="info-grid" style="max-width:900px">
+<div class="info-card">
+<h3 style="color:#ef4444">Minutes, Not Seconds</h3>
+<p>A full cold start for a large LLM can take 4+ minutes. During autoscale events, this means users wait or get errors.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#f59e0b">Warm Pools Are Essential</h3>
+<p>Pre-provisioned GPU nodes eliminate the 30s+ procurement step. The cost of idle GPUs is cheaper than the cost of cold starts.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#00d46a">Quantization Helps Twice</h3>
+<p>INT4 quantization not only reduces inference VRAM but cuts weight loading time by 4x. A 70B model goes from 140GB to 35GB.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#00c8e6">Engine Choice Matters</h3>
+<p>vLLM starts in 2 min (no compilation). TensorRT-LLM takes 4+ min but runs faster. Cache compiled engines to get best of both.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#10b981">Cache Everything</h3>
+<p>Cache images on nodes, cache compiled engines, cache model weights on local NVMe. Every cache hit saves tens of seconds.</p>
+</div>
+<div class="info-card">
+<h3 style="color:#a855f7">Target: sub-30 seconds</h3>
+<p>With all optimizations stacked: warm pool + cached image + quantized local weights + cached engine = ~15 second cold start.</p>
+</div>
+</div>
+</div>
+
+<script>
+const sections = document.querySelectorAll('.section');
+const navDots = document.getElementById('navDots');
+const progressBar = document.getElementById('progressBar');
+sections.forEach((s,i)=>{const d=document.createElement('div');d.className='nav-dot';d.onclick=()=>s.scrollIntoView({behavior:'smooth'});navDots.appendChild(d);});
+window.addEventListener('scroll',()=>{
+  const st=window.scrollY,dh=document.documentElement.scrollHeight-window.innerHeight;
+  progressBar.style.width=(st/dh*100)+'%';
+  sections.forEach((s,i)=>{const r=s.getBoundingClientRect();if(r.top<window.innerHeight/2&&r.bottom>window.innerHeight/2){Array.from(navDots.children).forEach(d=>d.classList.remove('active'));navDots.children[i].classList.add('active');}});
+});
+
+// Boot animation
+const baseTimes = [30, 45, 60, 120, 0];
+const maxTime = 255;
+let bootRunning = false;
+function runBoot() {
+  if(bootRunning) return;
+  bootRunning = true;
+  const btn = document.getElementById('bootBtn');
+  btn.textContent = 'Booting...';
+  // Reset
+  for(let i=1;i<=5;i++){
+    document.getElementById('sf'+i).style.width = '0%';
+    document.getElementById('ts'+i).classList.remove('active','done','running');
+  }
+  let stage = 0;
+  function animateStage() {
+    if(stage >= 5) { bootRunning = false; btn.textContent = 'Boot Replica'; return; }
+    const s = stage + 1;
+    document.getElementById('ts'+s).classList.add('active','running');
+    const pct = Math.max((baseTimes[stage]/maxTime)*100, 5);
+    setTimeout(() => {
+      document.getElementById('sf'+s).style.width = pct + '%';
+    }, 100);
+    setTimeout(() => {
+      document.getElementById('ts'+s).classList.remove('active','running');
+      document.getElementById('ts'+s).classList.add('done');
+      stage++;
+      animateStage();
+    }, 1200);
+  }
+  animateStage();
+}
+
+// Optimizations
+function updateOptimizations() {
+  const warmPool = document.getElementById('opt1').checked;
+  const cachedImage = document.getElementById('opt2').checked;
+  const quantized = document.getElementById('opt3').checked;
+  const nearbyStorage = document.getElementById('opt4').checked;
+  const cachedEngine = document.getElementById('opt5').checked;
+
+  let t1 = warmPool ? 0 : 30;
+  let t2 = cachedImage ? 2 : 45;
+  let t3 = 60;
+  if(quantized) t3 = t3 / 4;
+  if(nearbyStorage) t3 = t3 / 3;
+  let t4 = cachedEngine ? 5 : 120;
+
+  const total = t1 + t2 + t3 + t4;
+  const originalTotal = 255;
+  const maxBar = 120;
+
+  document.getElementById('optBar1').style.width = (t1/maxBar*100)+'%';
+  document.getElementById('optBar1').textContent = t1 > 0 ? t1+'s' : 'Skipped';
+  document.getElementById('optBar1').style.background = t1 === 0 ? '#10b981' : '#ef4444';
+
+  document.getElementById('optBar2').style.width = Math.max((t2/maxBar*100), 3)+'%';
+  document.getElementById('optBar2').textContent = t2 > 2 ? t2+'s' : '2s';
+  document.getElementById('optBar2').style.background = t2 <= 2 ? '#10b981' : '#f59e0b';
+
+  document.getElementById('optBar3').style.width = Math.max((t3/maxBar*100), 3)+'%';
+  document.getElementById('optBar3').textContent = Math.round(t3)+'s';
+  document.getElementById('optBar3').style.background = t3 < 30 ? '#10b981' : '#00d46a';
+
+  document.getElementById('optBar4').style.width = Math.max((t4/maxBar*100), 3)+'%';
+  document.getElementById('optBar4').textContent = t4 <= 5 ? '5s' : t4+'s';
+  document.getElementById('optBar4').style.background = t4 <= 5 ? '#10b981' : '#00c8e6';
+
+  const min = Math.floor(total/60);
+  const sec = Math.round(total%60);
+  const timeStr = min > 0 ? `~${min} min ${sec} sec` : `~${sec} sec`;
+  document.getElementById('optTotalTime').textContent = timeStr;
+  document.getElementById('optTotalTime').style.color = total < 30 ? '#10b981' : (total < 120 ? '#f59e0b' : '#ef4444');
+
+  const reduction = Math.round((1 - total/originalTotal) * 100);
+  document.getElementById('optSavings').textContent = reduction > 0 ? `${reduction}% reduction (saved ${Math.round(originalTotal - total)}s)` : '0% reduction';
+}
+
+function expandStage(n) {
+  // visual feedback on click
+  const el = document.getElementById('ts'+n);
+  el.style.boxShadow = '0 0 20px rgba(0,212,106,0.3)';
+  setTimeout(() => el.style.boxShadow = '', 500);
+}
+
+// Stacking canvas
+function drawStack(step) {
+  const c = document.getElementById('stackCanvas');
+  if(!c) return;
+  const ctx = c.getContext('2d');
+  const w = c.width, h = c.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle = '#0a0a0a';ctx.fillRect(0,0,w,h);
+
+  const configs = [
+    {label:'No Optimizations', times:[30,45,60,120], total:255},
+    {label:'+ Warm Pool', times:[0,45,60,120], total:225},
+    {label:'+ Cached Image', times:[0,2,60,120], total:182},
+    {label:'+ Quantized Weights', times:[0,2,15,120], total:137},
+    {label:'+ Nearby Storage', times:[0,2,5,120], total:127},
+    {label:'+ Cached Engine', times:[0,2,5,5], total:12},
+  ];
+
+  const maxTotal = 255;
+  const barH = 45;
+  const gap = 18;
+  const startY = 40;
+  const barMaxW = 550;
+  const labelX = 20;
+  const barX = 250;
+  const colors = ['#ef4444','#f59e0b','#00d46a','#00c8e6'];
+  const stageNames = ['GPU','Image','Weights','Engine'];
+
+  const showCount = Math.min(step + 1, configs.length);
+
+  for(let i=0;i<showCount;i++){
+    const cfg = configs[i];
+    const y = startY + i * (barH + gap);
+    // Label
+    ctx.fillStyle = i === showCount-1 ? '#f2f2f2' : '#64748b';
+    ctx.font = (i === showCount-1 ? 'bold ' : '') + '13px Inter';
+    ctx.fillText(cfg.label, labelX, y + barH/2 + 4);
+    // Stacked bar
+    let bx = barX;
+    cfg.times.forEach((t,j) => {
+      const bw = (t/maxTotal) * barMaxW;
+      if(bw > 0) {
+        ctx.fillStyle = colors[j];
+        ctx.globalAlpha = i === showCount-1 ? 0.8 : 0.3;
+        ctx.beginPath();ctx.roundRect(bx, y, Math.max(bw,2), barH, j===0?[6,0,0,6]:j===3?[0,6,6,0]:[0,0,0,0]);ctx.fill();
+        ctx.globalAlpha = 1;
+        if(bw > 30) {
+          ctx.fillStyle = '#fff';ctx.font = '10px Inter';
+          ctx.fillText(t > 0 ? stageNames[j]+' '+t+'s' : '', bx+5, y+barH/2+3);
+        }
+        bx += bw;
+      }
+    });
+    // Total
+    ctx.fillStyle = cfg.total < 30 ? '#10b981' : (cfg.total < 120 ? '#f59e0b' : '#ef4444');
+    ctx.font = 'bold 14px Inter';
+    ctx.fillText(cfg.total+'s', bx + 15, y + barH/2 + 5);
+    // Reduction percentage
+    if(i > 0) {
+      const pct = Math.round((1-cfg.total/255)*100);
+      ctx.fillStyle = '#10b981';ctx.font = '11px Inter';
+      ctx.fillText('-'+pct+'%', bx + 60, y + barH/2 + 5);
+    }
+  }
+  // Legend
+  const legY = h - 30;
+  stageNames.forEach((name,i) => {
+    const lx = barX + i * 120;
+    ctx.fillStyle = colors[i];ctx.fillRect(lx, legY, 12, 12);
+    ctx.fillStyle = '#a3a3a3';ctx.font = '11px Inter';ctx.fillText(name, lx+16, legY+10);
+  });
+}
+
+let stackStep = 0;
+function animateStack() {
+  stackStep = 0;
+  drawStack(0);
+  const interval = setInterval(() => {
+    stackStep++;
+    drawStack(stackStep);
+    if(stackStep >= 5) clearInterval(interval);
+  }, 800);
+}
+
+// Init
+drawStack(5);
+updateOptimizations();
+</script>
+</body>
+</html>

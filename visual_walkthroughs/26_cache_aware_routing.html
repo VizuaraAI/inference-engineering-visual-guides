@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cache-Aware Routing - Inference Engineering</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a;
+  --bg-card: #121212;
+  --bg-card-hover: #1a1a1a;
+  --border: #262626;
+  --primary: #00d46a;
+  --secondary: #00c8e6;
+  --tertiary: #a855f7;
+  --success: #10b981;
+  --text: #f2f2f2;
+  --text-muted: #a3a3a3;
+  --text-dim: #737373;
+  --danger: #ef4444;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); overflow-x:hidden; }
+h1,h2 { font-family:'Instrument Serif',serif; font-style:italic; }
+code,.mono { font-family:'JetBrains Mono',monospace; }
+.gradient-text { background:linear-gradient(135deg,#00d46a,#00c8e6); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
+nav { position:fixed; top:0; left:0; right:0; z-index:1000; background:rgba(10,10,10,0.85); backdrop-filter:blur(20px); border-bottom:1px solid var(--border); padding:0.75rem 2rem; display:flex; align-items:center; justify-content:space-between; }
+nav .logo { font-family:'Instrument Serif',serif; font-style:italic; font-size:1.25rem; }
+nav .badge { border:1px solid rgba(0,212,106,0.3); background:rgba(0,212,106,0.1); color:var(--primary); padding:0.25rem 0.75rem; border-radius:9999px; font-size:0.75rem; font-weight:500; }
+.progress-bar { position:fixed; top:0; left:0; height:3px; z-index:1001; background:linear-gradient(90deg,var(--primary),var(--secondary)); transition:width 0.3s ease; }
+.dot-nav { position:fixed; right:2rem; top:50%; transform:translateY(-50%); z-index:999; display:flex; flex-direction:column; gap:12px; }
+.dot-nav .dot { width:10px; height:10px; border-radius:50%; background:var(--border); cursor:pointer; transition:all 0.3s; border:2px solid transparent; }
+.dot-nav .dot.active { background:var(--primary); border-color:var(--primary); box-shadow:0 0 10px rgba(0,212,106,0.5); }
+.dot-nav .dot:hover { background:var(--text-muted); }
+section { min-height:100vh; padding:6rem 2rem 4rem; position:relative; display:flex; align-items:center; justify-content:center; }
+.section-inner { max-width:1200px; width:100%; margin:0 auto; }
+.grid-bg { position:absolute; inset:0; z-index:0; background-image:linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px); background-size:60px 60px; }
+.glow-green { position:absolute; width:400px; height:400px; border-radius:50%; background:radial-gradient(circle,rgba(0,212,106,0.1),transparent 70%); pointer-events:none; }
+.glow-cyan { position:absolute; width:400px; height:400px; border-radius:50%; background:radial-gradient(circle,rgba(0,200,230,0.08),transparent 70%); pointer-events:none; }
+.card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:1.5rem; transition:all 0.3s; }
+.card:hover { background:var(--bg-card-hover); border-color:rgba(0,212,106,0.3); }
+.fade-in { opacity:0; transform:translateY(30px); transition:all 0.8s cubic-bezier(0.16,1,0.3,1); }
+.fade-in.visible { opacity:1; transform:translateY(0); }
+.btn { padding:0.6rem 1.5rem; border:1px solid var(--primary); background:rgba(0,212,106,0.1); color:var(--primary); border-radius:8px; cursor:pointer; font-family:'Inter',sans-serif; font-weight:500; transition:all 0.3s; font-size:0.9rem; }
+.btn:hover { background:rgba(0,212,106,0.2); }
+.btn.active { background:var(--primary); color:var(--bg); }
+.btn.secondary { border-color:var(--secondary); background:rgba(0,200,230,0.1); color:var(--secondary); }
+.btn.secondary:hover { background:rgba(0,200,230,0.2); }
+.btn.danger { border-color:var(--danger); background:rgba(239,68,68,0.1); color:var(--danger); }
+.btn.danger:hover { background:rgba(239,68,68,0.2); }
+.controls { display:flex; gap:1rem; flex-wrap:wrap; margin:1.5rem 0; }
+.section-title { font-size:3rem; margin-bottom:1rem; line-height:1.2; }
+.section-subtitle { font-size:1.1rem; color:var(--text-muted); max-width:600px; line-height:1.6; }
+.two-col { display:grid; grid-template-columns:1fr 1fr; gap:2rem; align-items:start; }
+.stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1rem; margin:1.5rem 0; }
+.stat-card { background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:8px; padding:1rem; text-align:center; }
+.stat-card .stat-value { font-size:1.5rem; font-weight:700; font-family:'JetBrains Mono',monospace; }
+.stat-card .stat-label { font-size:0.75rem; color:var(--text-muted); margin-top:0.25rem; }
+
+/* Routing visualization */
+.routing-canvas { position:relative; width:100%; height:500px; background:rgba(0,0,0,0.2); border-radius:12px; border:1px solid var(--border); overflow:hidden; }
+
+.router-node {
+  position:absolute; width:100px; height:50px; border-radius:10px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:0.8rem; font-weight:600; transition:all 0.3s;
+  border:2px solid; text-align:center; z-index:5;
+}
+
+.replica-node {
+  position:absolute; width:140px; border-radius:10px;
+  padding:0.75rem; font-size:0.75rem; border:2px solid var(--border);
+  background:var(--bg-card); transition:all 0.3s; z-index:5;
+}
+.replica-node.hit { border-color:var(--primary); box-shadow:0 0 20px rgba(0,212,106,0.3); }
+.replica-node.miss { border-color:var(--danger); box-shadow:0 0 20px rgba(239,68,68,0.2); }
+
+.cache-bar { height:8px; background:var(--border); border-radius:4px; margin-top:0.5rem; overflow:hidden; }
+.cache-fill { height:100%; border-radius:4px; transition:width 0.5s ease; }
+
+.request-packet {
+  position:absolute; width:12px; height:12px; border-radius:50%;
+  z-index:10; pointer-events:none; transition:none;
+}
+
+/* Log area */
+.log-area { height:200px; overflow-y:auto; background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:8px; padding:0.75rem; font-family:'JetBrains Mono',monospace; font-size:0.75rem; }
+.log-entry { padding:0.2rem 0; border-bottom:1px solid rgba(255,255,255,0.03); }
+.log-entry .hit { color:var(--primary); }
+.log-entry .miss { color:var(--danger); }
+.log-entry .time { color:var(--text-dim); }
+
+/* Comparison chart */
+.bar-chart { display:flex; gap:2rem; align-items:flex-end; height:200px; padding:1rem; background:rgba(0,0,0,0.2); border-radius:8px; justify-content:center; }
+.bar-group { display:flex; flex-direction:column; align-items:center; gap:0.5rem; }
+.bar-pair { display:flex; gap:4px; align-items:flex-end; height:160px; }
+.bar { width:40px; border-radius:4px 4px 0 0; transition:height 0.8s ease; position:relative; }
+.bar .bar-val { position:absolute; top:-20px; width:100%; text-align:center; font-size:0.7rem; font-family:'JetBrains Mono',monospace; }
+.bar-label { font-size:0.75rem; color:var(--text-muted); }
+
+/* Prefix tree */
+.prefix-tree { background:rgba(0,0,0,0.2); border-radius:8px; padding:1.5rem; }
+.tree-node { display:inline-flex; align-items:center; padding:0.3rem 0.8rem; border-radius:6px; font-family:'JetBrains Mono',monospace; font-size:0.75rem; margin:0.2rem; border:1px solid var(--border); transition:all 0.3s; cursor:pointer; }
+.tree-node.cached { border-color:var(--primary); background:rgba(0,212,106,0.1); color:var(--primary); }
+.tree-node.uncached { border-color:var(--border); color:var(--text-dim); }
+.tree-connector { display:inline-block; width:20px; height:2px; background:var(--border); vertical-align:middle; }
+
+/* Metrics dashboard */
+.metric-row { display:flex; align-items:center; gap:1rem; margin:0.5rem 0; }
+.metric-label { width:100px; font-size:0.8rem; color:var(--text-muted); }
+.metric-bar { flex:1; height:24px; background:var(--border); border-radius:4px; overflow:hidden; position:relative; }
+.metric-fill { height:100%; border-radius:4px; transition:width 0.5s ease; display:flex; align-items:center; padding:0 0.5rem; font-size:0.7rem; font-family:'JetBrains Mono',monospace; }
+
+@media (max-width:768px) {
+  nav { padding:0.75rem 1rem; }
+  section { padding:5rem 1rem 3rem; }
+  .dot-nav { right:1rem; }
+  h1 { font-size:2rem !important; }
+  h2 { font-size:1.5rem !important; }
+  .two-col { grid-template-columns:1fr; }
+  .routing-canvas { height:400px; }
+}
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+<nav>
+  <div class="logo"><span class="gradient-text">VizuaraAI</span></div>
+  <div style="display:flex;align-items:center;gap:1rem;">
+    <span class="badge">Lesson 26</span>
+    <span style="color:var(--text-muted);font-size:0.85rem;">Cache-Aware Routing</span>
+  </div>
+</nav>
+<div class="dot-nav" id="dotNav"></div>
+
+<!-- Section 0: Hero -->
+<section id="sec0">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:-100px;left:-100px;"></div>
+  <div class="glow-cyan" style="bottom:-100px;right:-100px;"></div>
+  <div class="section-inner" style="text-align:center;">
+    <div class="fade-in">
+      <div class="badge" style="display:inline-block;margin-bottom:1.5rem;">Infrastructure</div>
+      <h1 class="section-title"><span class="gradient-text">Cache-Aware</span> Routing</h1>
+      <p class="section-subtitle" style="margin:1rem auto;">
+        When serving LLMs at scale across multiple replicas, intelligent routing based on KV cache state
+        can dramatically reduce time-to-first-token and improve throughput. Instead of round-robin,
+        route requests to replicas that already have the prefix cached.
+      </p>
+      <div class="stats-grid" style="max-width:700px;margin:2rem auto;">
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--primary);">~3x</div>
+          <div class="stat-label">TTFT improvement</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--secondary);">85%+</div>
+          <div class="stat-label">Cache hit rate achievable</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--tertiary);">40%</div>
+          <div class="stat-label">Compute savings</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--danger);">0</div>
+          <div class="stat-label">Quality tradeoff</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 1: How it works -->
+<section id="sec1">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:20%;right:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">How Cache-Aware Routing Works</span></h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">The router maintains a mapping of which prefixes are cached on which replicas.</p>
+
+      <div class="two-col">
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--primary);">Prefix Cache Registry</h3>
+            <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:1rem;">
+              Each replica reports its cached prefixes to the router. When a new request arrives,
+              the router hashes the prompt prefix and checks which replicas have matching entries.
+            </p>
+            <div class="prefix-tree" id="prefixTree">
+              <!-- Generated by JS -->
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--secondary);">Routing Algorithm</h3>
+            <div style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:1rem;font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:var(--text-muted);line-height:1.8;">
+              <span style="color:var(--tertiary);">def</span> <span style="color:var(--primary);">route_request</span>(req, replicas):<br>
+              &nbsp;&nbsp;prefix_hash = hash(req.prompt[:prefix_len])<br>
+              &nbsp;&nbsp;candidates = registry.lookup(prefix_hash)<br>
+              &nbsp;&nbsp;<span style="color:var(--tertiary);">if</span> candidates:<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--text-dim);"># Pick least loaded replica with cache hit</span><br>
+              &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--tertiary);">return</span> min(candidates, key=load)<br>
+              &nbsp;&nbsp;<span style="color:var(--tertiary);">else</span>:<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--text-dim);"># Consistent hash for new prefixes</span><br>
+              &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--tertiary);">return</span> consistent_hash(prefix_hash)
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--tertiary);">Why KV Cache Matters</h3>
+            <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+              During the <b style="color:var(--primary)">prefill phase</b>, the model processes all input tokens
+              to build the KV cache. For a 4K-token prompt on a 70B model, this takes ~2 seconds.<br><br>
+              With <b style="color:var(--secondary)">prefix caching</b>, if the system prompt (often 1-2K tokens)
+              is already cached, only the new user message needs prefill, saving 50-80% of compute.<br><br>
+              <b style="color:var(--tertiary)">Cache-aware routing</b> ensures requests go to replicas that
+              already have relevant prefixes, maximizing cache hit rates across the fleet.
+            </p>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">Key Design Decisions</h3>
+            <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.8;">
+              <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;">
+                <span style="color:var(--primary);font-weight:600;">1.</span>
+                <span><b>Prefix granularity</b>: Hash at block boundaries (e.g., 256 tokens) for practical cache matching.</span>
+              </div>
+              <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;">
+                <span style="color:var(--primary);font-weight:600;">2.</span>
+                <span><b>Stale entries</b>: Use TTL or heartbeat to evict stale registry entries when replicas evict cache.</span>
+              </div>
+              <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;">
+                <span style="color:var(--primary);font-weight:600;">3.</span>
+                <span><b>Load balancing</b>: Don't overload a replica just for cache hits. Factor in queue depth.</span>
+              </div>
+              <div style="display:flex;gap:0.5rem;">
+                <span style="color:var(--primary);font-weight:600;">4.</span>
+                <span><b>Consistent hashing</b>: For cold starts, use consistent hashing to build affinity for future hits.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 2: Interactive Routing -->
+<section id="sec2">
+  <div class="grid-bg"></div>
+  <div class="glow-cyan" style="top:10%;left:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Interactive Routing</span> Simulator</h2>
+      <p style="color:var(--text-muted);margin-bottom:1rem;">Send requests and watch how the cache-aware router directs them to the right replica.</p>
+
+      <div class="routing-canvas" id="routingCanvas">
+        <div id="routerNode" class="router-node" style="left:50%;top:40px;transform:translateX(-50%);border-color:var(--primary);background:rgba(0,212,106,0.1);color:var(--primary);">
+          Router
+        </div>
+        <!-- Replicas generated by JS -->
+      </div>
+
+      <div class="controls" style="justify-content:center;">
+        <button class="btn" onclick="sendRequest('system_prompt_A')">Send Request A</button>
+        <button class="btn" onclick="sendRequest('system_prompt_B')">Send Request B</button>
+        <button class="btn secondary" onclick="sendRequest('system_prompt_C')">Send Request C</button>
+        <button class="btn secondary" onclick="sendRequest('new_prefix_' + Math.random().toString(36).slice(2,6))">Send Random</button>
+        <button class="btn danger" onclick="clearAllCaches()">Clear All Caches</button>
+      </div>
+
+      <div class="two-col" style="margin-top:1.5rem;">
+        <div>
+          <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;margin-bottom:0.75rem;">Routing Log</h3>
+          <div class="log-area" id="routingLog"></div>
+        </div>
+        <div>
+          <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;margin-bottom:0.75rem;">Live Metrics</h3>
+          <div class="stats-grid" style="grid-template-columns:1fr 1fr;margin:0;">
+            <div class="stat-card">
+              <div class="stat-value" style="color:var(--primary);" id="hitRate">0%</div>
+              <div class="stat-label">Cache Hit Rate</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" style="color:var(--secondary);" id="avgLatency">0ms</div>
+              <div class="stat-label">Avg TTFT</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" style="color:var(--tertiary);" id="totalReqs">0</div>
+              <div class="stat-label">Total Requests</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" style="color:var(--success);" id="savedCompute">0%</div>
+              <div class="stat-label">Compute Saved</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 3: Cache Hit Rates Per Replica -->
+<section id="sec3">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="bottom:10%;right:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Cache Hit Rates</span> Per Replica</h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">Each replica maintains its own KV cache. Cache-aware routing creates natural affinity between prefixes and replicas.</p>
+
+      <div class="two-col">
+        <div>
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:1rem;">Replica Cache Status</h3>
+            <div id="replicaMetrics">
+              <!-- Generated by JS -->
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:1rem;color:var(--primary);">Cache Distribution</h3>
+            <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;margin-bottom:1rem;">
+              With cache-aware routing, each replica specializes in certain prefixes. This creates
+              higher cache utilization compared to random distribution.
+            </p>
+            <canvas id="cacheChart" width="400" height="200" style="width:100%;border-radius:8px;background:rgba(0,0,0,0.2);"></canvas>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">Cache Eviction Strategy</h3>
+            <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+              When a replica's KV cache is full, it must evict entries. Common strategies:
+            </p>
+            <div style="margin-top:0.75rem;font-size:0.85rem;">
+              <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;">
+                <span style="color:var(--primary);font-weight:600;">LRU</span>
+                <span style="color:var(--text-muted);">: Evict least recently used prefix. Simple and effective.</span>
+              </div>
+              <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem;">
+                <span style="color:var(--secondary);font-weight:600;">LFU</span>
+                <span style="color:var(--text-muted);">: Evict least frequently used. Better for skewed workloads.</span>
+              </div>
+              <div style="display:flex;gap:0.5rem;">
+                <span style="color:var(--tertiary);font-weight:600;">Size-aware</span>
+                <span style="color:var(--text-muted);">: Evict largest entries first to free more memory.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 4: Comparison -->
+<section id="sec4">
+  <div class="grid-bg"></div>
+  <div class="glow-cyan" style="top:20%;left:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Cache-Aware</span> vs Round-Robin</h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">
+        Run a simulated workload with both strategies and compare results.
+      </p>
+
+      <div class="controls" style="justify-content:center;">
+        <button class="btn active" id="simBtn" onclick="runComparison()">Run 100-Request Simulation</button>
+      </div>
+
+      <div class="two-col" style="margin-top:1.5rem;">
+        <div class="card">
+          <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:1rem;text-align:center;color:var(--primary);">Cache-Aware Routing</h3>
+          <div class="bar-chart">
+            <div class="bar-group">
+              <div class="bar-pair">
+                <div class="bar" id="caCacheHit" style="background:var(--primary);height:0;"><div class="bar-val" style="color:var(--primary);">0%</div></div>
+              </div>
+              <div class="bar-label">Hit Rate</div>
+            </div>
+            <div class="bar-group">
+              <div class="bar-pair">
+                <div class="bar" id="caLatency" style="background:var(--secondary);height:0;"><div class="bar-val" style="color:var(--secondary);">0ms</div></div>
+              </div>
+              <div class="bar-label">Avg TTFT</div>
+            </div>
+            <div class="bar-group">
+              <div class="bar-pair">
+                <div class="bar" id="caThroughput" style="background:var(--tertiary);height:0;"><div class="bar-val" style="color:var(--tertiary);">0</div></div>
+              </div>
+              <div class="bar-label">Throughput</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:1rem;text-align:center;color:var(--danger);">Round-Robin Routing</h3>
+          <div class="bar-chart">
+            <div class="bar-group">
+              <div class="bar-pair">
+                <div class="bar" id="rrCacheHit" style="background:var(--danger);height:0;"><div class="bar-val" style="color:var(--danger);">0%</div></div>
+              </div>
+              <div class="bar-label">Hit Rate</div>
+            </div>
+            <div class="bar-group">
+              <div class="bar-pair">
+                <div class="bar" id="rrLatency" style="background:var(--text-muted);height:0;"><div class="bar-val" style="color:var(--text-muted);">0ms</div></div>
+              </div>
+              <div class="bar-label">Avg TTFT</div>
+            </div>
+            <div class="bar-group">
+              <div class="bar-pair">
+                <div class="bar" id="rrThroughput" style="background:var(--text-dim);height:0;"><div class="bar-val" style="color:var(--text-dim);">0</div></div>
+              </div>
+              <div class="bar-label">Throughput</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:2rem;">
+        <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:1rem;">Simulation Results</h3>
+        <div id="simResults" style="color:var(--text-muted);font-size:0.9rem;line-height:1.8;">
+          Click "Run Simulation" to compare both routing strategies with identical workloads.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 5: Production Considerations -->
+<section id="sec5">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:30%;left:50%;transform:translateX(-50%);"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Production</span> Considerations</h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">Real-world cache-aware routing requires careful engineering of several trade-offs.</p>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1.5rem;">
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(0,212,106,0.15);display:flex;align-items:center;justify-content:center;color:var(--primary);font-weight:700;">1</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Hot Replica Problem</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Popular prefixes (system prompts) can cause hot replicas. Solution: replicate popular
+            prefixes across 2-3 replicas and load-balance among them. Monitor queue depth thresholds.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(0,200,230,0.15);display:flex;align-items:center;justify-content:center;color:var(--secondary);font-weight:700;">2</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Registry Consistency</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            The prefix registry can be eventually consistent. A stale hit that misses is no worse
+            than round-robin. Use lightweight gossip protocols or a central Redis with short TTLs.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(168,85,247,0.15);display:flex;align-items:center;justify-content:center;color:var(--tertiary);font-weight:700;">3</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Scaling Replicas</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            When adding new replicas, consistent hashing minimizes cache disruption. Only 1/N of
+            prefixes need to be remapped. Warm up new replicas by pre-loading common system prompts.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;color:var(--danger);font-weight:700;">4</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Multi-Turn Conversations</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Multi-turn chats benefit most from session affinity. Route all turns of a conversation
+            to the same replica, keeping the full KV cache warm. Use session IDs in routing decisions.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(16,185,129,0.15);display:flex;align-items:center;justify-content:center;color:var(--success);font-weight:700;">5</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Disaggregated Serving</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Advanced architectures separate prefill and decode workers. Cache-aware routing
+            extends naturally: route prefill to workers with cached prefixes, then transfer
+            KV cache to decode workers. See systems like Mooncake and DistServe.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-weight:700;">6</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Cost Implications</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Higher cache hit rates directly reduce GPU compute costs. At 85% hit rate with 2K-token
+            system prompts, you save ~$0.001 per request. At 1M requests/day, that's $1,000/day
+            in compute savings. The router overhead is negligible (~0.1ms per decision).
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+// Sections and navigation
+const sections = document.querySelectorAll('section');
+const dotNav = document.getElementById('dotNav');
+const progressBar = document.getElementById('progressBar');
+
+sections.forEach((_,i) => {
+  const dot = document.createElement('div');
+  dot.className = 'dot';
+  dot.onclick = () => sections[i].scrollIntoView({behavior:'smooth'});
+  dotNav.appendChild(dot);
+});
+
+function updateScroll() {
+  const scrollTop = window.scrollY;
+  const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+  progressBar.style.width = (scrollTop/scrollHeight*100)+'%';
+  const dots = dotNav.querySelectorAll('.dot');
+  sections.forEach((sec,i) => {
+    const rect = sec.getBoundingClientRect();
+    if (rect.top < window.innerHeight/2 && rect.bottom > window.innerHeight/2) {
+      dots.forEach(d => d.classList.remove('active'));
+      dots[i].classList.add('active');
+    }
+    sec.querySelectorAll('.fade-in').forEach(el => {
+      if (rect.top < window.innerHeight*0.85) el.classList.add('visible');
+    });
+  });
+}
+window.addEventListener('scroll', updateScroll);
+updateScroll();
+
+// Prefix tree visualization
+const prefixes = [
+  { text: 'System: "You are a helpful..."', replica: 0 },
+  { text: 'System: "You are a code..."', replica: 1 },
+  { text: 'System: "Translate to..."', replica: 2 },
+  { text: 'System: "Analyze this..."', replica: 3 },
+];
+
+function buildPrefixTree() {
+  const container = document.getElementById('prefixTree');
+  container.innerHTML = '<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:0.75rem;">Prefix Registry:</div>';
+  prefixes.forEach(p => {
+    const row = document.createElement('div');
+    row.style.marginBottom = '0.5rem';
+    row.innerHTML = `
+      <span class="tree-node cached">${p.text}</span>
+      <span class="tree-connector"></span>
+      <span class="tree-node" style="border-color:var(--secondary);color:var(--secondary);">Replica ${p.replica}</span>
+    `;
+    container.appendChild(row);
+  });
+}
+buildPrefixTree();
+
+// Routing simulation state
+const NUM_REPLICAS = 4;
+const replicas = [];
+let totalRequests = 0;
+let totalHits = 0;
+let totalLatency = 0;
+
+for (let i = 0; i < NUM_REPLICAS; i++) {
+  replicas.push({
+    id: i,
+    cache: new Set(),
+    hits: 0,
+    misses: 0,
+    load: 0,
+    cacheUsage: 0,
+    maxCache: 8
+  });
+}
+
+// Draw replica nodes
+const canvas = document.getElementById('routingCanvas');
+const replicaPositions = [];
+for (let i = 0; i < NUM_REPLICAS; i++) {
+  const x = (i + 0.5) / NUM_REPLICAS * 100;
+  replicaPositions.push({ x, y: 75 });
+  const node = document.createElement('div');
+  node.className = 'replica-node';
+  node.id = `replica${i}`;
+  node.style.left = `calc(${x}% - 70px)`;
+  node.style.top = '300px';
+  node.innerHTML = `
+    <div style="font-weight:600;margin-bottom:0.25rem;">Replica ${i}</div>
+    <div style="color:var(--text-dim);font-size:0.7rem;">Cache: <span id="rep${i}CacheCount">0</span>/${replicas[i].maxCache}</div>
+    <div class="cache-bar"><div class="cache-fill" id="rep${i}CacheFill" style="width:0%;background:var(--primary);"></div></div>
+    <div style="color:var(--text-dim);font-size:0.65rem;margin-top:0.25rem;">Hits: <span id="rep${i}Hits" style="color:var(--primary);">0</span> | Miss: <span id="rep${i}Misses" style="color:var(--danger);">0</span></div>
+  `;
+  canvas.appendChild(node);
+}
+
+function sendRequest(prefix) {
+  totalRequests++;
+  // Find replica with prefix in cache
+  let targetReplica = -1;
+  let isHit = false;
+  for (let i = 0; i < NUM_REPLICAS; i++) {
+    if (replicas[i].cache.has(prefix)) {
+      targetReplica = i;
+      isHit = true;
+      break;
+    }
+  }
+  if (targetReplica === -1) {
+    // Consistent hash: pick based on prefix hash
+    let hash = 0;
+    for (let c of prefix) hash = ((hash << 5) - hash + c.charCodeAt(0)) | 0;
+    targetReplica = Math.abs(hash) % NUM_REPLICAS;
+  }
+
+  const replica = replicas[targetReplica];
+  const latency = isHit ? 150 + Math.random() * 100 : 800 + Math.random() * 400;
+  totalLatency += latency;
+
+  if (isHit) {
+    totalHits++;
+    replica.hits++;
+  } else {
+    replica.misses++;
+    if (replica.cache.size >= replica.maxCache) {
+      const first = replica.cache.values().next().value;
+      replica.cache.delete(first);
+    }
+    replica.cache.add(prefix);
+  }
+
+  // Animate packet
+  animatePacket(targetReplica, isHit, prefix, latency);
+  updateMetrics();
+  addLogEntry(prefix, targetReplica, isHit, latency);
+  updateReplicaDisplay(targetReplica);
+  updateReplicaMetrics();
+}
+
+function animatePacket(replicaIdx, isHit, prefix, latency) {
+  const packet = document.createElement('div');
+  packet.className = 'request-packet';
+  packet.style.background = isHit ? 'var(--primary)' : 'var(--danger)';
+  packet.style.boxShadow = isHit ? '0 0 15px rgba(0,212,106,0.6)' : '0 0 15px rgba(239,68,68,0.6)';
+  packet.style.left = '50%';
+  packet.style.top = '60px';
+  canvas.appendChild(packet);
+
+  const replicaNode = document.getElementById(`replica${replicaIdx}`);
+  const targetLeft = replicaNode.offsetLeft + 70;
+  const targetTop = 300;
+
+  requestAnimationFrame(() => {
+    packet.style.transition = 'all 0.6s cubic-bezier(0.16,1,0.3,1)';
+    packet.style.left = targetLeft + 'px';
+    packet.style.top = targetTop + 'px';
+  });
+
+  // Flash replica
+  setTimeout(() => {
+    replicaNode.classList.add(isHit ? 'hit' : 'miss');
+    setTimeout(() => {
+      replicaNode.classList.remove('hit', 'miss');
+      packet.remove();
+    }, 500);
+  }, 600);
+}
+
+function updateMetrics() {
+  document.getElementById('hitRate').textContent = totalRequests > 0 ? Math.round(totalHits/totalRequests*100) + '%' : '0%';
+  document.getElementById('avgLatency').textContent = totalRequests > 0 ? Math.round(totalLatency/totalRequests) + 'ms' : '0ms';
+  document.getElementById('totalReqs').textContent = totalRequests;
+  document.getElementById('savedCompute').textContent = totalRequests > 0 ? Math.round(totalHits/totalRequests*60) + '%' : '0%';
+}
+
+function addLogEntry(prefix, replica, isHit, latency) {
+  const log = document.getElementById('routingLog');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  const shortPrefix = prefix.length > 20 ? prefix.slice(0,20) + '...' : prefix;
+  entry.innerHTML = `<span class="time">[${new Date().toLocaleTimeString()}]</span> "${shortPrefix}" -> Replica ${replica} <span class="${isHit?'hit':'miss'}">${isHit?'HIT':'MISS'}</span> <span class="time">${Math.round(latency)}ms</span>`;
+  log.insertBefore(entry, log.firstChild);
+  if (log.children.length > 50) log.lastChild.remove();
+}
+
+function updateReplicaDisplay(idx) {
+  const r = replicas[idx];
+  document.getElementById(`rep${idx}CacheCount`).textContent = r.cache.size;
+  document.getElementById(`rep${idx}CacheFill`).style.width = (r.cache.size / r.maxCache * 100) + '%';
+  document.getElementById(`rep${idx}Hits`).textContent = r.hits;
+  document.getElementById(`rep${idx}Misses`).textContent = r.misses;
+}
+
+function clearAllCaches() {
+  replicas.forEach((r, i) => {
+    r.cache.clear();
+    r.hits = 0; r.misses = 0;
+    updateReplicaDisplay(i);
+  });
+  totalRequests = 0; totalHits = 0; totalLatency = 0;
+  updateMetrics();
+  document.getElementById('routingLog').innerHTML = '';
+  updateReplicaMetrics();
+}
+
+// Replica metrics section
+function updateReplicaMetrics() {
+  const container = document.getElementById('replicaMetrics');
+  container.innerHTML = '';
+  replicas.forEach((r, i) => {
+    const total = r.hits + r.misses;
+    const hitRate = total > 0 ? (r.hits / total * 100) : 0;
+    const cacheUsage = r.cache.size / r.maxCache * 100;
+    const div = document.createElement('div');
+    div.style.marginBottom = '1rem';
+    div.innerHTML = `
+      <div class="metric-row">
+        <div class="metric-label" style="color:var(--text);">Replica ${i}</div>
+        <div class="metric-bar">
+          <div class="metric-fill" style="width:${hitRate}%;background:linear-gradient(90deg,var(--primary),var(--secondary));">${Math.round(hitRate)}% hits</div>
+        </div>
+      </div>
+      <div class="metric-row">
+        <div class="metric-label">Cache</div>
+        <div class="metric-bar">
+          <div class="metric-fill" style="width:${cacheUsage}%;background:var(--tertiary);">${r.cache.size}/${r.maxCache}</div>
+        </div>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+}
+updateReplicaMetrics();
+
+// Comparison simulation
+function runComparison() {
+  const btn = document.getElementById('simBtn');
+  btn.textContent = 'Running...';
+  btn.disabled = true;
+
+  const workload = [];
+  const prefixPool = ['sys_A', 'sys_B', 'sys_C', 'sys_D', 'sys_E'];
+  for (let i = 0; i < 100; i++) {
+    if (Math.random() < 0.7) workload.push(prefixPool[Math.floor(Math.random() * 3)]);
+    else workload.push(prefixPool[Math.floor(Math.random() * 5)]);
+  }
+
+  // Cache-aware simulation
+  const caReplicas = Array.from({length:4}, () => ({ cache: new Set(), hits:0, misses:0, maxCache:6 }));
+  let caLatency = 0;
+  workload.forEach(prefix => {
+    let target = -1;
+    for (let i = 0; i < 4; i++) {
+      if (caReplicas[i].cache.has(prefix)) { target = i; break; }
+    }
+    if (target === -1) {
+      let h = 0; for (let c of prefix) h = ((h<<5)-h+c.charCodeAt(0))|0;
+      target = Math.abs(h) % 4;
+    }
+    const r = caReplicas[target];
+    if (r.cache.has(prefix)) { r.hits++; caLatency += 150; }
+    else { r.misses++; caLatency += 900; if (r.cache.size >= r.maxCache) { r.cache.delete(r.cache.values().next().value); } r.cache.add(prefix); }
+  });
+
+  // Round-robin simulation
+  const rrReplicas = Array.from({length:4}, () => ({ cache: new Set(), hits:0, misses:0, maxCache:6 }));
+  let rrLatency = 0;
+  let rrIdx = 0;
+  workload.forEach(prefix => {
+    const target = rrIdx % 4; rrIdx++;
+    const r = rrReplicas[target];
+    if (r.cache.has(prefix)) { r.hits++; rrLatency += 150; }
+    else { r.misses++; rrLatency += 900; if (r.cache.size >= r.maxCache) { r.cache.delete(r.cache.values().next().value); } r.cache.add(prefix); }
+  });
+
+  const caHitRate = caReplicas.reduce((a,r) => a + r.hits, 0);
+  const rrHitRate = rrReplicas.reduce((a,r) => a + r.hits, 0);
+
+  // Animate bars
+  setTimeout(() => {
+    const caHR = caHitRate; const rrHR = rrHitRate;
+    document.getElementById('caCacheHit').style.height = (caHR/100*160) + 'px';
+    document.getElementById('caCacheHit').querySelector('.bar-val').textContent = caHR + '%';
+    document.getElementById('caLatency').style.height = ((1 - caLatency/100/900)*160) + 'px';
+    document.getElementById('caLatency').querySelector('.bar-val').textContent = Math.round(caLatency/100) + 'ms';
+    document.getElementById('caThroughput').style.height = (caHR/100*160) + 'px';
+    document.getElementById('caThroughput').querySelector('.bar-val').textContent = Math.round(100000/(caLatency/100)) + '/s';
+
+    document.getElementById('rrCacheHit').style.height = (rrHR/100*160) + 'px';
+    document.getElementById('rrCacheHit').querySelector('.bar-val').textContent = rrHR + '%';
+    document.getElementById('rrLatency').style.height = ((1 - rrLatency/100/900)*160) + 'px';
+    document.getElementById('rrLatency').querySelector('.bar-val').textContent = Math.round(rrLatency/100) + 'ms';
+    document.getElementById('rrThroughput').style.height = (rrHR/100*160) + 'px';
+    document.getElementById('rrThroughput').querySelector('.bar-val').textContent = Math.round(100000/(rrLatency/100)) + '/s';
+
+    const improvement = Math.round((1 - caLatency/rrLatency)*100);
+    document.getElementById('simResults').innerHTML = `
+      <b style="color:var(--primary)">Cache-Aware</b>: ${caHR}% hit rate, ${Math.round(caLatency/100)}ms avg TTFT<br>
+      <b style="color:var(--danger)">Round-Robin</b>: ${rrHR}% hit rate, ${Math.round(rrLatency/100)}ms avg TTFT<br><br>
+      Cache-aware routing achieved <b style="color:var(--primary)">${improvement}% lower latency</b> and
+      <b style="color:var(--primary)">${caHR - rrHR} percentage points higher</b> cache hit rate.
+      With 5 distinct prefixes across 4 replicas, cache-aware routing creates natural affinity
+      that dramatically reduces redundant prefill computation.
+    `;
+
+    btn.textContent = 'Run 100-Request Simulation';
+    btn.disabled = false;
+  }, 500);
+}
+
+// Cache distribution chart
+function drawCacheChart() {
+  const canvas = document.getElementById('cacheChart');
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  for (let i = 0; i < 4; i++) {
+    ctx.fillRect(i * w/4 + 10, 10, w/4 - 20, h - 30);
+  }
+
+  const colors = ['#00d46a', '#00c8e6', '#a855f7', '#ef4444', '#10b981'];
+  replicas.forEach((r, ri) => {
+    let y = 10;
+    const barW = w/4 - 20;
+    const x = ri * w/4 + 10;
+    const entryH = (h - 40) / r.maxCache;
+    let ci = 0;
+    r.cache.forEach(prefix => {
+      ctx.fillStyle = colors[ci % colors.length] + '80';
+      ctx.fillRect(x, y, barW, entryH - 2);
+      ctx.fillStyle = '#fff';
+      ctx.font = '9px JetBrains Mono';
+      const shortP = prefix.length > 10 ? prefix.slice(0,10)+'..' : prefix;
+      ctx.fillText(shortP, x + 4, y + entryH/2 + 3);
+      y += entryH;
+      ci++;
+    });
+
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font = '11px Inter';
+    ctx.textAlign = 'center';
+    ctx.fillText(`R${ri}`, x + barW/2, h - 5);
+    ctx.textAlign = 'start';
+  });
+}
+
+setInterval(drawCacheChart, 1000);
+</script>
+</body>
+</html>

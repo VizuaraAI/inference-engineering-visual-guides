@@ -1,387 +1,1998 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inference Engineering - Interactive Visual Guides</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Inter', sans-serif;
-            background: #0a0a0f;
-            color: #e2e8f0;
-            min-height: 100vh;
-        }
-        .hero {
-            text-align: center;
-            padding: 80px 20px 60px;
-            background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #0a0a0f 100%);
-            position: relative;
-            overflow: hidden;
-        }
-        .hero::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
-        }
-        .hero h1 {
-            font-size: 3.5rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #6366f1, #22d3ee);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 16px;
-            position: relative;
-        }
-        .hero .subtitle {
-            font-size: 1.3rem;
-            color: #94a3b8;
-            max-width: 700px;
-            margin: 0 auto 12px;
-            position: relative;
-        }
-        .hero .credit {
-            font-size: 0.95rem;
-            color: #64748b;
-            position: relative;
-        }
-        .hero .credit a { color: #6366f1; text-decoration: none; }
-        .hero .credit a:hover { text-decoration: underline; }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 40px 20px 80px;
-        }
-        .section-title {
-            font-size: 1.6rem;
-            font-weight: 700;
-            margin: 48px 0 24px;
-            padding-left: 16px;
-            border-left: 4px solid #6366f1;
-        }
-        .section-title.visual { border-left-color: #22d3ee; }
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-            gap: 20px;
-        }
-        .card {
-            background: #12121a;
-            border: 1px solid #1e1e2e;
-            border-radius: 16px;
-            padding: 28px;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            color: inherit;
-            display: block;
-            position: relative;
-            overflow: hidden;
-        }
-        .card:hover {
-            border-color: #6366f1;
-            transform: translateY(-4px);
-            box-shadow: 0 12px 40px rgba(99, 102, 241, 0.15);
-        }
-        .card .number {
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: #6366f1;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-bottom: 10px;
-        }
-        .card h3 {
-            font-size: 1.15rem;
-            font-weight: 600;
-            margin-bottom: 10px;
-            line-height: 1.4;
-        }
-        .card p {
-            font-size: 0.88rem;
-            color: #94a3b8;
-            line-height: 1.6;
-        }
-        .card .tag {
-            display: inline-block;
-            margin-top: 14px;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.72rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        .tag.ch0 { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
-        .tag.ch2 { background: rgba(34, 211, 238, 0.15); color: #22d3ee; }
-        .tag.ch3 { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
-        .tag.ch4 { background: rgba(16, 185, 129, 0.15); color: #10b981; }
-        .tag.ch5 { background: rgba(244, 63, 94, 0.15); color: #f43f5e; }
-        .tag.ch6 { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
-        .tag.ch7 { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
-        .stats {
-            display: flex;
-            gap: 40px;
-            justify-content: center;
-            margin-top: 32px;
-            position: relative;
-        }
-        .stat { text-align: center; }
-        .stat .num {
-            font-size: 2.5rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #6366f1, #22d3ee);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .stat .label { font-size: 0.85rem; color: #64748b; margin-top: 4px; }
-        .badge {
-            display: inline-block;
-            margin-top: 20px;
-            padding: 8px 20px;
-            border-radius: 24px;
-            font-size: 0.82rem;
-            font-weight: 500;
-            background: rgba(99,102,241,0.1);
-            border: 1px solid rgba(99,102,241,0.3);
-            color: #a5b4fc;
-            position: relative;
-        }
-        footer {
-            text-align: center;
-            padding: 40px 20px;
-            color: #475569;
-            font-size: 0.85rem;
-            border-top: 1px solid #1e1e2e;
-        }
-        footer a { color: #6366f1; text-decoration: none; }
-        @media (max-width: 768px) {
-            .hero h1 { font-size: 2rem; }
-            .grid { grid-template-columns: 1fr; }
-            .stats { gap: 24px; }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inference Engineering — Vizuara AI Labs</title>
+<meta name="description" content="Master the art of Inference Engineering with 30 visual walkthroughs and 30 hands-on code labs. A comprehensive visual + hands-on curriculum by Vizuara AI Labs.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================
+   CSS RESET & ROOT VARIABLES
+   ============================================ */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #f2f2f2;
+  --card: #121212;
+  --card-hover: #1a1a1a;
+  --border: #262626;
+  --muted: #1f1f1f;
+  --muted-foreground: #a3a3a3;
+  --primary: #f43f7a;
+  --primary-light: #ff6b9d;
+  --secondary: #c084fc;
+  --accent: #f97316;
+  --text-dim: #737373;
+}
+
+html {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: #333 #0a0a0a;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+  line-height: 1.6;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code, .mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+h1, h2 {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-weight: 400;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+.gradient-text {
+  background: linear-gradient(135deg, #f43f7a, #c084fc);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-secondary {
+  background: linear-gradient(135deg, #c084fc, #818cf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(244,63,122,0.3);
+  background: rgba(244,63,122,0.1);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 16px;
+  border-radius: 100px;
+  letter-spacing: 0.02em;
+}
+
+.badge-purple {
+  border-color: rgba(192,132,252,0.3);
+  background: rgba(192,132,252,0.1);
+  color: var(--secondary);
+}
+
+.section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--primary);
+  margin-bottom: 16px;
+}
+
+.section-label::before {
+  content: '';
+  width: 24px;
+  height: 1px;
+  background: var(--primary);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 0 20px rgba(244,63,122,0.25);
+}
+.btn-primary:hover {
+  background: var(--primary-light);
+  box-shadow: 0 0 30px rgba(244,63,122,0.4);
+  transform: translateY(-2px);
+}
+
+.btn-secondary {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--foreground);
+}
+.btn-secondary:hover {
+  border-color: var(--primary);
+  background: rgba(244,63,122,0.05);
+  transform: translateY(-2px);
+}
+
+/* Fade-in animation classes */
+.fade-in {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1), transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.fade-in.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.fade-in-delay-1 { transition-delay: 0.1s; }
+.fade-in-delay-2 { transition-delay: 0.2s; }
+.fade-in-delay-3 { transition-delay: 0.3s; }
+
+/* ============================================
+   NAVBAR
+   ============================================ */
+.navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  padding: 0 24px;
+  transition: all 0.3s ease;
+}
+.navbar.scrolled {
+  background: rgba(10,10,10,0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.navbar-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 72px;
+}
+
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+.navbar-brand .dot {
+  width: 6px;
+  height: 6px;
+  background: var(--primary);
+  border-radius: 50%;
+  margin: 0 6px;
+}
+
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+.navbar-links a {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--muted-foreground);
+  transition: color 0.2s ease;
+  letter-spacing: 0.01em;
+}
+.navbar-links a:hover {
+  color: var(--foreground);
+}
+
+.navbar-github {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--muted-foreground);
+  transition: color 0.2s ease;
+}
+.navbar-github:hover {
+  color: var(--foreground);
+}
+.navbar-github svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Mobile nav toggle */
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  cursor: pointer;
+  padding: 4px;
+  background: none;
+  border: none;
+}
+.nav-toggle span {
+  width: 22px;
+  height: 2px;
+  background: var(--foreground);
+  border-radius: 2px;
+  transition: all 0.3s ease;
+}
+
+@media (max-width: 768px) {
+  .nav-toggle { display: flex; }
+  .navbar-links {
+    position: fixed;
+    top: 72px;
+    left: 0;
+    right: 0;
+    flex-direction: column;
+    background: rgba(10,10,10,0.95);
+    backdrop-filter: blur(20px);
+    padding: 24px;
+    gap: 20px;
+    border-bottom: 1px solid var(--border);
+    transform: translateY(-120%);
+    transition: transform 0.3s ease;
+  }
+  .navbar-links.open {
+    transform: translateY(0);
+  }
+  .navbar-links a {
+    font-size: 16px;
+  }
+}
+
+/* ============================================
+   HERO SECTION
+   ============================================ */
+.hero {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  padding: 120px 0 80px;
+}
+
+/* Grid background */
+.hero-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 80%);
+}
+
+/* Glow orbs */
+.hero-glow-1 {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  top: -100px;
+  left: -100px;
+  background: radial-gradient(circle, rgba(244,63,122,0.08) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: float-slow 12s ease-in-out infinite;
+}
+.hero-glow-2 {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  bottom: -100px;
+  right: -50px;
+  background: radial-gradient(circle, rgba(192,132,252,0.06) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: float-slow 15s ease-in-out infinite reverse;
+}
+.hero-glow-3 {
+  position: absolute;
+  width: 400px;
+  height: 400px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(244,63,122,0.04) 0%, transparent 70%);
+  border-radius: 50%;
+  animation: float-slow 10s ease-in-out infinite 3s;
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.05); }
+  66% { transform: translate(-20px, 15px) scale(0.95); }
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  align-items: center;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.hero-text {
+  max-width: 640px;
+}
+
+.hero-badge {
+  margin-bottom: 28px;
+}
+
+.hero-title {
+  font-size: clamp(42px, 5.5vw, 72px);
+  line-height: 1.1;
+  margin-bottom: 24px;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+
+.hero-subtitle {
+  font-size: 17px;
+  line-height: 1.7;
+  color: var(--muted-foreground);
+  margin-bottom: 36px;
+  max-width: 540px;
+}
+
+.hero-buttons {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 48px;
+}
+
+.hero-stats {
+  display: flex;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.hero-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hero-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+.hero-stat-label {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+/* Hero Visualization - Animated Inference Pipeline */
+.hero-viz {
+  position: relative;
+  width: 100%;
+  height: 420px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pipeline-container {
+  position: relative;
+  width: 340px;
+  height: 400px;
+}
+
+/* Token input area */
+.token-stream {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+}
+
+.token {
+  width: 32px;
+  height: 24px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.8);
+  animation: token-pulse 3s ease-in-out infinite;
+}
+.token:nth-child(1) { background: rgba(244,63,122,0.4); border: 1px solid rgba(244,63,122,0.5); animation-delay: 0s; }
+.token:nth-child(2) { background: rgba(244,63,122,0.3); border: 1px solid rgba(244,63,122,0.4); animation-delay: 0.3s; }
+.token:nth-child(3) { background: rgba(192,132,252,0.3); border: 1px solid rgba(192,132,252,0.4); animation-delay: 0.6s; }
+.token:nth-child(4) { background: rgba(192,132,252,0.25); border: 1px solid rgba(192,132,252,0.35); animation-delay: 0.9s; }
+.token:nth-child(5) { background: rgba(244,63,122,0.25); border: 1px solid rgba(244,63,122,0.35); animation-delay: 1.2s; }
+
+@keyframes token-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+/* Transformer blocks */
+.transformer-block {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 220px;
+  border-radius: 10px;
+  border: 1px solid;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all 0.5s ease;
+}
+
+.transformer-block .block-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+}
+.transformer-block .block-sub {
+  font-size: 9px;
+  opacity: 0.5;
+}
+
+.tb-1 {
+  top: 55px;
+  height: 64px;
+  background: rgba(244,63,122,0.08);
+  border-color: rgba(244,63,122,0.25);
+  animation: block-glow-pink 4s ease-in-out infinite;
+}
+.tb-2 {
+  top: 137px;
+  height: 64px;
+  background: rgba(192,132,252,0.08);
+  border-color: rgba(192,132,252,0.25);
+  animation: block-glow-purple 4s ease-in-out infinite 0.8s;
+}
+.tb-3 {
+  top: 219px;
+  height: 64px;
+  background: rgba(244,63,122,0.06);
+  border-color: rgba(244,63,122,0.2);
+  animation: block-glow-pink 4s ease-in-out infinite 1.6s;
+}
+.tb-4 {
+  top: 301px;
+  height: 64px;
+  background: rgba(192,132,252,0.06);
+  border-color: rgba(192,132,252,0.2);
+  animation: block-glow-purple 4s ease-in-out infinite 2.4s;
+}
+
+@keyframes block-glow-pink {
+  0%, 100% { box-shadow: 0 0 0 rgba(244,63,122,0); border-color: rgba(244,63,122,0.15); }
+  50% { box-shadow: 0 0 25px rgba(244,63,122,0.15), inset 0 0 15px rgba(244,63,122,0.05); border-color: rgba(244,63,122,0.4); }
+}
+@keyframes block-glow-purple {
+  0%, 100% { box-shadow: 0 0 0 rgba(192,132,252,0); border-color: rgba(192,132,252,0.15); }
+  50% { box-shadow: 0 0 25px rgba(192,132,252,0.15), inset 0 0 15px rgba(192,132,252,0.05); border-color: rgba(192,132,252,0.4); }
+}
+
+/* Data flow particles */
+.flow-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.fp-1 { background: var(--primary); animation: flow-down-1 3s linear infinite; top: 42px; }
+.fp-2 { background: var(--secondary); animation: flow-down-2 3s linear infinite 0.8s; top: 124px; }
+.fp-3 { background: var(--primary-light); animation: flow-down-3 3s linear infinite 1.6s; top: 206px; }
+.fp-4 { background: var(--secondary); animation: flow-down-4 3s linear infinite 2.4s; top: 288px; }
+
+@keyframes flow-down-1 {
+  0% { top: 42px; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 55px; opacity: 0; }
+}
+@keyframes flow-down-2 {
+  0% { top: 124px; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 137px; opacity: 0; }
+}
+@keyframes flow-down-3 {
+  0% { top: 206px; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 219px; opacity: 0; }
+}
+@keyframes flow-down-4 {
+  0% { top: 288px; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 301px; opacity: 0; }
+}
+
+/* Output tokens */
+.output-stream {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+}
+
+.output-token {
+  width: 32px;
+  height: 24px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.9);
+  animation: output-appear 4s ease-in-out infinite;
+}
+.output-token:nth-child(1) { background: rgba(244,63,122,0.5); border: 1px solid rgba(244,63,122,0.6); animation-delay: 0.5s; }
+.output-token:nth-child(2) { background: rgba(192,132,252,0.4); border: 1px solid rgba(192,132,252,0.5); animation-delay: 1.0s; }
+.output-token:nth-child(3) { background: rgba(244,63,122,0.45); border: 1px solid rgba(244,63,122,0.55); animation-delay: 1.5s; }
+
+@keyframes output-appear {
+  0%, 20% { opacity: 0; transform: scale(0.8); }
+  40%, 80% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.8); }
+}
+
+/* Connection lines (SVG) */
+.pipeline-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Side labels */
+.viz-label {
+  position: absolute;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.viz-label-input {
+  top: 0px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-2px);
+}
+.viz-label-output {
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%) translateY(2px);
+}
+
+@media (max-width: 960px) {
+  .hero-content {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+  .hero-text {
+    max-width: 100%;
+  }
+  .hero-subtitle {
+    max-width: 100%;
+  }
+  .hero-buttons {
+    justify-content: center;
+  }
+  .hero-stats {
+    justify-content: center;
+  }
+  .hero-viz {
+    height: 360px;
+    margin-top: -20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-stats {
+    gap: 20px;
+  }
+  .hero-stat-value {
+    font-size: 22px;
+  }
+}
+
+/* ============================================
+   SECTIONS COMMON
+   ============================================ */
+section {
+  padding: 100px 0;
+  position: relative;
+}
+
+.section-header {
+  text-align: center;
+  margin-bottom: 64px;
+}
+
+.section-header h2 {
+  font-size: clamp(36px, 4vw, 56px);
+  line-height: 1.15;
+  margin-bottom: 16px;
+  color: var(--foreground);
+}
+
+.section-header p {
+  font-size: 17px;
+  color: var(--muted-foreground);
+  max-width: 600px;
+  margin: 0 auto;
+  line-height: 1.7;
+}
+
+.part-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary);
+  margin-bottom: 8px;
+  letter-spacing: 0.04em;
+}
+
+.part-title {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 28px;
+  color: var(--foreground);
+  margin-bottom: 24px;
+}
+
+/* ============================================
+   WHAT YOU'LL LEARN SECTION
+   ============================================ */
+.learn-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+@media (max-width: 960px) {
+  .learn-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.learn-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 32px;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+.learn-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.learn-card:hover {
+  background: var(--card-hover);
+  border-color: rgba(244,63,122,0.3);
+  transform: translateY(-4px);
+  box-shadow: 0 0 20px rgba(244,63,122,0.15), 0 0 60px rgba(244,63,122,0.05);
+}
+.learn-card:hover::before {
+  opacity: 1;
+}
+
+.learn-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  margin-bottom: 20px;
+}
+.learn-card:nth-child(1) .learn-card-icon {
+  background: rgba(244,63,122,0.1);
+  border: 1px solid rgba(244,63,122,0.2);
+}
+.learn-card:nth-child(2) .learn-card-icon {
+  background: rgba(192,132,252,0.1);
+  border: 1px solid rgba(192,132,252,0.2);
+}
+.learn-card:nth-child(3) .learn-card-icon {
+  background: rgba(249,115,22,0.1);
+  border: 1px solid rgba(249,115,22,0.2);
+}
+
+.learn-card h3 {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--foreground);
+}
+
+.learn-card-topics {
+  list-style: none;
+  margin-bottom: 20px;
+}
+.learn-card-topics li {
+  font-size: 14px;
+  color: var(--muted-foreground);
+  padding: 4px 0;
+  padding-left: 16px;
+  position: relative;
+}
+.learn-card-topics li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+
+.learn-card-count {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-weight: 500;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* ============================================
+   CONTENT CARDS (Visual Guides & Code Labs)
+   ============================================ */
+.content-section {
+  border-top: 1px solid var(--border);
+}
+
+.part-section {
+  margin-bottom: 64px;
+}
+
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 960px) {
+  .cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.content-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+.content-card:hover {
+  background: var(--card-hover);
+  border-color: rgba(244,63,122,0.3);
+  transform: translateY(-4px);
+  box-shadow: 0 0 20px rgba(244,63,122,0.15), 0 0 60px rgba(244,63,122,0.05);
+}
+
+.content-card.purple-hover:hover {
+  border-color: rgba(192,132,252,0.3);
+  box-shadow: 0 0 20px rgba(192,132,252,0.15), 0 0 60px rgba(192,132,252,0.05);
+}
+
+.card-number {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--primary);
+  background: rgba(244,63,122,0.1);
+  border: 1px solid rgba(244,63,122,0.2);
+  padding: 3px 10px;
+  border-radius: 6px;
+  display: inline-block;
+  width: fit-content;
+  margin-bottom: 14px;
+}
+
+.purple-hover .card-number {
+  color: var(--secondary);
+  background: rgba(192,132,252,0.1);
+  border-color: rgba(192,132,252,0.2);
+}
+
+.card-title {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--foreground);
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.card-desc {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin-bottom: 16px;
+  flex-grow: 1;
+}
+
+.card-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: gap 0.2s ease, color 0.2s ease;
+}
+.card-link:hover {
+  gap: 10px;
+}
+
+.purple-hover .card-link {
+  color: var(--secondary);
+}
+
+.card-link .arrow {
+  transition: transform 0.2s ease;
+}
+.card-link:hover .arrow {
+  transform: translateX(2px);
+}
+
+/* ============================================
+   ABOUT SECTION
+   ============================================ */
+.about-section {
+  border-top: 1px solid var(--border);
+}
+
+.about-content {
+  max-width: 720px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.about-content p {
+  font-size: 17px;
+  line-height: 1.8;
+  color: var(--muted-foreground);
+  margin-bottom: 16px;
+}
+
+.about-content .highlight {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.about-book {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px 32px;
+  margin-top: 24px;
+  transition: all 0.3s ease;
+}
+.about-book:hover {
+  border-color: rgba(244,63,122,0.3);
+  box-shadow: 0 0 20px rgba(244,63,122,0.1);
+}
+.about-book-icon {
+  font-size: 28px;
+}
+.about-book-text {
+  text-align: left;
+}
+.about-book-text .title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+.about-book-text .author {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* ============================================
+   FOOTER
+   ============================================ */
+.footer {
+  border-top: 1px solid var(--border);
+  padding: 48px 0;
+}
+
+.footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+.footer-brand .dot {
+  width: 5px;
+  height: 5px;
+  background: var(--primary);
+  border-radius: 50%;
+  margin: 0 6px;
+}
+
+.footer-text {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.footer-right {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.footer-right a {
+  font-size: 13px;
+  color: var(--text-dim);
+  transition: color 0.2s ease;
+}
+.footer-right a:hover {
+  color: var(--foreground);
+}
+
+@media (max-width: 600px) {
+  .footer-inner {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
+/* ============================================
+   DECORATIVE DIVIDER
+   ============================================ */
+.section-divider {
+  width: 60px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  margin: 0 auto 32px;
+  border-radius: 2px;
+}
+
+/* ============================================
+   PART HEADER STYLING
+   ============================================ */
+.part-header {
+  margin-bottom: 32px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.part-number {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 4px;
+}
+
+/* ============================================
+   COUNTER ANIMATIONS
+   ============================================ */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+</style>
 </head>
 <body>
-    <div class="hero">
-        <h1>Inference Engineering</h1>
-        <p class="subtitle">Interactive Visual Guides for every key concept in modern AI inference</p>
-        <p class="credit">Based on <a href="#">"Inference Engineering"</a> by Philip Kiely &middot; Built by <a href="https://github.com/VizuaraAI">VizuaraAI</a></p>
-        <div class="stats">
-            <div class="stat"><div class="num">30</div><div class="label">Visual Guides</div></div>
-            <div class="stat"><div class="num">30</div><div class="label">Colab Notebooks</div></div>
-            <div class="stat"><div class="num">7</div><div class="label">Chapters</div></div>
+
+<!-- ==========================================
+     NAVBAR
+     ========================================== -->
+<nav class="navbar" id="navbar">
+  <div class="navbar-inner">
+    <a href="#" class="navbar-brand">
+      Vizuara <span class="dot"></span> <span style="font-weight:300; color: var(--muted-foreground);">Inference Engineering</span>
+    </a>
+    <div class="navbar-links" id="navLinks">
+      <a href="#visual-guides">Visual Guides</a>
+      <a href="#code-labs">Code Labs</a>
+      <a href="#about">About</a>
+      <a href="https://github.com/VizuaraAI" target="_blank" class="navbar-github">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+    </div>
+    <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<!-- ==========================================
+     HERO SECTION
+     ========================================== -->
+<section class="hero" id="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-glow-1"></div>
+  <div class="hero-glow-2"></div>
+  <div class="hero-glow-3"></div>
+
+  <div class="hero-content">
+    <div class="hero-text">
+      <div class="hero-badge">
+        <span class="badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          30 Visual Guides &middot; 30 Code Labs
+        </span>
+      </div>
+
+      <h1 class="hero-title">
+        Master the Art of<br>
+        <span class="gradient-text">Inference Engineering</span>
+      </h1>
+
+      <p class="hero-subtitle">
+        A comprehensive visual + hands-on curriculum covering the full inference stack &mdash; from transformer internals to production deployment. Based on Philip Kiely's <em>Inference Engineering</em>.
+      </p>
+
+      <div class="hero-buttons">
+        <a href="#visual-guides" class="btn btn-primary">
+          Explore Visual Guides
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 13l5 5 5-5M7 6l5 5 5-5"/></svg>
+        </a>
+        <a href="#code-labs" class="btn btn-secondary">
+          Browse Code Labs
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 13l5 5 5-5M7 6l5 5 5-5"/></svg>
+        </a>
+      </div>
+
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <div class="hero-stat-value">30</div>
+          <div class="hero-stat-label">Visual Guides</div>
         </div>
-        <div class="badge">Scroll down to explore all guides</div>
+        <div class="hero-stat">
+          <div class="hero-stat-value">30</div>
+          <div class="hero-stat-label">Code Labs</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-value">7</div>
+          <div class="hero-stat-label">Chapters</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-value">60</div>
+          <div class="hero-stat-label">Topics</div>
+        </div>
+      </div>
     </div>
 
-    <div class="container">
-        <h2 class="section-title">Chapter 0 &ndash; Inference Overview</h2>
-        <div class="grid">
-            <a class="card" href="01_inference_stack.html">
-                <div class="number">Visual Guide 01</div>
-                <h3>The Full Inference Stack</h3>
-                <p>Interactive 3-layer diagram: Runtime, Infrastructure, and Tooling. See how CUDA, PyTorch, inference engines, and Kubernetes all fit together.</p>
-                <span class="tag ch0">Chapter 0</span>
-            </a>
+    <!-- Animated Inference Pipeline Visualization -->
+    <div class="hero-viz">
+      <div class="pipeline-container">
+        <div class="viz-label viz-label-input">Input Tokens</div>
+
+        <div class="token-stream">
+          <div class="token">The</div>
+          <div class="token">cat</div>
+          <div class="token">sat</div>
+          <div class="token">on</div>
+          <div class="token">the</div>
         </div>
 
-        <h2 class="section-title">Chapter 2 &ndash; Models</h2>
-        <div class="grid">
-            <a class="card" href="02_llm_architecture.html">
-                <div class="number">Visual Guide 02</div>
-                <h3>LLM Architecture Deep Dive</h3>
-                <p>Animated forward pass through an LLM: tokenization, embedding, transformer blocks, and output layer.</p>
-                <span class="tag ch2">Chapter 2</span>
-            </a>
-            <a class="card" href="03_prefill_vs_decode.html">
-                <div class="number">Visual Guide 03</div>
-                <h3>Prefill vs Decode</h3>
-                <p>Split-screen animation of the two phases of LLM inference. See compute-bound prefill and memory-bound decode in action.</p>
-                <span class="tag ch2">Chapter 2</span>
-            </a>
-            <a class="card" href="04_attention_visualization.html">
-                <div class="number">Visual Guide 04</div>
-                <h3>How Attention Works</h3>
-                <p>Interactive attention heatmap. Click any word to see its attention pattern across Q, K, V matrices.</p>
-                <span class="tag ch2">Chapter 2</span>
-            </a>
-            <a class="card" href="05_mixture_of_experts.html">
-                <div class="number">Visual Guide 05</div>
-                <h3>Mixture of Experts</h3>
-                <p>Visualize expert routing: watch tokens flow to selected experts with interactive activation patterns.</p>
-                <span class="tag ch2">Chapter 2</span>
-            </a>
-            <a class="card" href="22_video_generation.html">
-                <div class="number">Visual Guide 22</div>
-                <h3>Video Generation: 3D Latent Space</h3>
-                <p>Animated 3D cube representing latent space (X, Y, T) with denoising over ~50 steps and Context Parallelism.</p>
-                <span class="tag ch2">Chapter 2</span>
-            </a>
+        <!-- Flow particles -->
+        <div class="flow-particle fp-1"></div>
+        <div class="flow-particle fp-2"></div>
+        <div class="flow-particle fp-3"></div>
+        <div class="flow-particle fp-4"></div>
+
+        <!-- Transformer Blocks -->
+        <div class="transformer-block tb-1">
+          <div class="block-label" style="color: var(--primary);">Attention</div>
+          <div class="block-sub" style="color: var(--muted-foreground);">Multi-Head Self-Attention</div>
         </div>
 
-        <h2 class="section-title">Chapter 3 &ndash; Hardware</h2>
-        <div class="grid">
-            <a class="card" href="06_gpu_architecture.html">
-                <div class="number">Visual Guide 06</div>
-                <h3>GPU Architecture for Inference</h3>
-                <p>Interactive GPU chip diagram. Zoom into SMs, Tensor Cores, and the memory hierarchy.</p>
-                <span class="tag ch3">Chapter 3</span>
-            </a>
-            <a class="card" href="11_multi_gpu_communication.html">
-                <div class="number">Visual Guide 11</div>
-                <h3>Multi-GPU Communication</h3>
-                <p>Animated NVLink, NVSwitch, and InfiniBand topology. See bandwidth bottlenecks between and within nodes.</p>
-                <span class="tag ch3">Chapter 3</span>
-            </a>
-            <a class="card" href="28_gpu_generations.html">
-                <div class="number">Visual Guide 28</div>
-                <h3>GPU Generations: Hopper → Blackwell → Rubin</h3>
-                <p>Interactive timeline and comparison of NVIDIA GPU architectures with specs and features.</p>
-                <span class="tag ch3">Chapter 3</span>
-            </a>
+        <div class="transformer-block tb-2">
+          <div class="block-label" style="color: var(--secondary);">FFN</div>
+          <div class="block-sub" style="color: var(--muted-foreground);">Feed-Forward Network</div>
         </div>
 
-        <h2 class="section-title">Chapter 4 &ndash; Software</h2>
-        <div class="grid">
-            <a class="card" href="12_kernel_fusion.html">
-                <div class="number">Visual Guide 12</div>
-                <h3>Kernel Fusion</h3>
-                <p>Before/after animation showing eliminated memory round-trips when kernels are fused together.</p>
-                <span class="tag ch4">Chapter 4</span>
-            </a>
-            <a class="card" href="13_inference_engines.html">
-                <div class="number">Visual Guide 13</div>
-                <h3>vLLM vs SGLang vs TensorRT-LLM</h3>
-                <p>Interactive comparison and decision tree for choosing the right inference engine.</p>
-                <span class="tag ch4">Chapter 4</span>
-            </a>
+        <div class="transformer-block tb-3">
+          <div class="block-label" style="color: var(--primary-light);">Attention</div>
+          <div class="block-sub" style="color: var(--muted-foreground);">KV Cache + Decode</div>
         </div>
 
-        <h2 class="section-title">Chapter 5 &ndash; Techniques</h2>
-        <div class="grid">
-            <a class="card" href="07_quantization_visual.html">
-                <div class="number">Visual Guide 07</div>
-                <h3>Quantization: Precision vs Performance</h3>
-                <p>Interactive bit-level visualization of FP32 → FP16 → FP8 → FP4 with dynamic range exploration.</p>
-                <span class="tag ch5">Chapter 5</span>
-            </a>
-            <a class="card" href="29_number_formats_bits.html">
-                <div class="number">Visual Guide 29</div>
-                <h3>Number Formats: Bits & Dynamic Range</h3>
-                <p>Type any number and see its binary representation across all formats. Watch precision degrade.</p>
-                <span class="tag ch5">Chapter 5</span>
-            </a>
-            <a class="card" href="08_speculative_decoding.html">
-                <div class="number">Visual Guide 08</div>
-                <h3>Speculative Decoding Explained</h3>
-                <p>Animated draft → verify → accept/reject flow with toggle between EAGLE, Medusa, and Draft-Target.</p>
-                <span class="tag ch5">Chapter 5</span>
-            </a>
-            <a class="card" href="16_speculative_methods.html">
-                <div class="number">Visual Guide 16</div>
-                <h3>EAGLE vs Medusa vs Draft-Target</h3>
-                <p>Three-panel animated comparison of all speculation methods with acceptance rate charts.</p>
-                <span class="tag ch5">Chapter 5</span>
-            </a>
-            <a class="card" href="17_prefix_caching.html">
-                <div class="number">Visual Guide 17</div>
-                <h3>Prefix Caching & KV Cache Reuse</h3>
-                <p>Animated requests showing cache hits/misses and how prefix matching saves TTFT.</p>
-                <span class="tag ch5">Chapter 5</span>
-            </a>
-            <a class="card" href="14_kv_cache_hierarchy.html">
-                <div class="number">Visual Guide 14</div>
-                <h3>KV Cache Storage Hierarchy</h3>
-                <p>Interactive G1-G4 memory pyramid with cache blocks moving between VRAM, RAM, SSD, and network.</p>
-                <span class="tag ch5">Chapter 5</span>
-            </a>
-            <a class="card" href="15_flashattention.html">
-                <div class="number">Visual Guide 15</div>
-                <h3>FlashAttention vs Standard Attention</h3>
-                <p>Side-by-side animation of memory access patterns: tiled SRAM computation vs full HBM round-trips.</p>
-                <span class="tag ch5">Chapter 5</span>
-            </a>
-            <a class="card" href="09_model_parallelism.html">
-                <div class="number">Visual Guide 09</div>
-                <h3>Model Parallelism: TP vs EP vs PP</h3>
-                <p>Interactive GPU grid: toggle between Tensor, Expert, and Pipeline Parallelism views.</p>
-                <span class="tag ch5">Chapter 5</span>
-            </a>
-            <a class="card" href="10_disaggregation.html">
-                <div class="number">Visual Guide 10</div>
-                <h3>Disaggregated Serving</h3>
-                <p>Animated prefill/decode engine separation with KV transfer and xPyD configuration slider.</p>
-                <span class="tag ch5">Chapter 5</span>
-            </a>
-            <a class="card" href="25_cache_aware_routing.html">
-                <div class="number">Visual Guide 25</div>
-                <h3>Cache-Aware Routing</h3>
-                <p>Watch requests route to replicas based on KV cache state vs naive round-robin.</p>
-                <span class="tag ch5">Chapter 5</span>
-            </a>
+        <div class="transformer-block tb-4">
+          <div class="block-label" style="color: var(--secondary);">Softmax</div>
+          <div class="block-sub" style="color: var(--muted-foreground);">Logits &rarr; Probabilities</div>
         </div>
 
-        <h2 class="section-title">Chapter 6 &ndash; Modalities</h2>
-        <div class="grid">
-            <a class="card" href="23_voice_pipeline.html">
-                <div class="number">Visual Guide 23</div>
-                <h3>Voice AI Pipeline: ASR → LLM → TTS</h3>
-                <p>Animated end-to-end voice agent pipeline with streaming WebSocket connections.</p>
-                <span class="tag ch6">Chapter 6</span>
-            </a>
+        <div class="output-stream">
+          <div class="output-token">mat</div>
+          <div class="output-token">&period;</div>
+          <div class="output-token">EOS</div>
         </div>
 
-        <h2 class="section-title">Chapter 7 &ndash; Production</h2>
-        <div class="grid">
-            <a class="card" href="21_batching_strategies.html">
-                <div class="number">Visual Guide 21</div>
-                <h3>Batching Strategies</h3>
-                <p>Three-panel animated timeline: Static vs Dynamic vs Continuous Batching with throughput metrics.</p>
-                <span class="tag ch7">Chapter 7</span>
-            </a>
-            <a class="card" href="19_autoscaling.html">
-                <div class="number">Visual Guide 19</div>
-                <h3>Autoscaling: GPUs to Traffic</h3>
-                <p>Animated traffic curve with replicas scaling up/down. Tune min/max replicas and concurrency.</p>
-                <span class="tag ch7">Chapter 7</span>
-            </a>
-            <a class="card" href="20_canary_deployment.html">
-                <div class="number">Visual Guide 20</div>
-                <h3>Canary Deployments</h3>
-                <p>Animated zero-downtime deployment: traffic gradually shifting from blue to green.</p>
-                <span class="tag ch7">Chapter 7</span>
-            </a>
-            <a class="card" href="24_cold_start_pipeline.html">
-                <div class="number">Visual Guide 24</div>
-                <h3>Cold Start Pipeline</h3>
-                <p>Timeline animation of replica boot: GPU procurement → image load → weights → engine startup.</p>
-                <span class="tag ch7">Chapter 7</span>
-            </a>
-            <a class="card" href="26_multi_cloud.html">
-                <div class="number">Visual Guide 26</div>
-                <h3>Multi-Cloud Architecture</h3>
-                <p>Interactive world map with control and workload planes, geo-aware routing, and failover.</p>
-                <span class="tag ch7">Chapter 7</span>
-            </a>
-            <a class="card" href="27_containerization.html">
-                <div class="number">Visual Guide 27</div>
-                <h3>Containerization for Inference</h3>
-                <p>Animated Docker layer diagram from base OS to inference engine with dependency pinning.</p>
-                <span class="tag ch7">Chapter 7</span>
-            </a>
-            <a class="card" href="30_reliability_failover.html">
-                <div class="number">Visual Guide 30</div>
-                <h3>Reliability & Failover</h3>
-                <p>GPU failure simulation with cascading effects, health monitoring, and multi-cloud failover.</p>
-                <span class="tag ch7">Chapter 7</span>
-            </a>
-        </div>
+        <div class="viz-label viz-label-output">Output Tokens</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==========================================
+     WHAT YOU'LL LEARN SECTION
+     ========================================== -->
+<section id="learn">
+  <div class="container">
+    <div class="section-header fade-in">
+      <div class="section-divider"></div>
+      <h2>What You'll <span class="gradient-text">Learn</span></h2>
+      <p>A structured journey through the complete inference stack, from foundational concepts to production systems</p>
     </div>
 
-    <footer>
-        <p>Built with care by <a href="https://github.com/VizuaraAI">VizuaraAI</a> &middot; Based on "Inference Engineering" by Philip Kiely &middot; 2026</p>
-    </footer>
+    <div class="learn-grid">
+      <div class="learn-card fade-in fade-in-delay-1">
+        <div class="learn-card-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f43f7a" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+        </div>
+        <h3>Part I: Foundations</h3>
+        <ul class="learn-card-topics">
+          <li>Neural networks & linear layers</li>
+          <li>Transformer architecture deep dive</li>
+          <li>Attention mechanisms (MHA, MQA, GQA)</li>
+          <li>Mixture of Experts routing</li>
+          <li>Image generation pipelines</li>
+          <li>GPU architecture & compute hierarchy</li>
+        </ul>
+        <div class="learn-card-count">10 Visual Guides &middot; 10 Code Labs</div>
+      </div>
+
+      <div class="learn-card fade-in fade-in-delay-2">
+        <div class="learn-card-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="1.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <h3>Part II: Optimization</h3>
+        <ul class="learn-card-topics">
+          <li>Quantization number formats</li>
+          <li>Speculative decoding (EAGLE, Medusa)</li>
+          <li>KV cache hierarchy & prefix caching</li>
+          <li>FlashAttention vs standard attention</li>
+          <li>Kernel fusion & inference engines</li>
+          <li>Multi-GPU communication & parallelism</li>
+        </ul>
+        <div class="learn-card-count">10 Visual Guides &middot; 10 Code Labs</div>
+      </div>
+
+      <div class="learn-card fade-in fade-in-delay-3">
+        <div class="learn-card-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="1.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        </div>
+        <h3>Part III: Production</h3>
+        <ul class="learn-card-topics">
+          <li>Batching strategies & autoscaling</li>
+          <li>Multi-cloud architecture design</li>
+          <li>Canary deployments & cold starts</li>
+          <li>Voice pipelines (ASR + LLM + TTS)</li>
+          <li>Video generation in latent space</li>
+          <li>Structured output & fine-tuning</li>
+        </ul>
+        <div class="learn-card-count">10 Visual Guides &middot; 10 Code Labs</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==========================================
+     VISUAL GUIDES SECTION
+     ========================================== -->
+<section class="content-section" id="visual-guides">
+  <div class="container">
+    <div class="section-header fade-in">
+      <div class="section-label">Visual Walkthroughs</div>
+      <h2>Interactive <span class="gradient-text">Visual Guides</span></h2>
+      <p>Deep-dive animated explorations of every concept in the inference stack</p>
+    </div>
+
+    <!-- Part I -->
+    <div class="part-section fade-in">
+      <div class="part-header">
+        <div class="part-number">Part I &mdash; Chapters 0&ndash;3</div>
+        <div class="part-title">Foundations</div>
+      </div>
+      <div class="cards-grid">
+        <a href="visual_walkthroughs/01_inference_stack.html" class="content-card">
+          <div class="card-number">01</div>
+          <div class="card-title">The Full Inference Stack</div>
+          <div class="card-desc">End-to-end overview of the inference pipeline from request to response</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/02_llm_architecture.html" class="content-card">
+          <div class="card-number">02</div>
+          <div class="card-title">LLM Architecture Deep Dive</div>
+          <div class="card-desc">Inside the layers, embeddings, and forward pass of a large language model</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/03_prefill_vs_decode.html" class="content-card">
+          <div class="card-number">03</div>
+          <div class="card-title">Prefill vs Decode Phases</div>
+          <div class="card-desc">How the prefill phase processes prompt tokens and decode generates autoregressively</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/04_attention_visualization.html" class="content-card">
+          <div class="card-number">04</div>
+          <div class="card-title">Attention Mechanism Visualization</div>
+          <div class="card-desc">Animated walkthrough of Q, K, V projections, scaled dot-product, and multi-head attention</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/05_mixture_of_experts.html" class="content-card">
+          <div class="card-number">05</div>
+          <div class="card-title">Mixture of Experts Architecture</div>
+          <div class="card-desc">Router gating, expert selection, and load balancing in MoE models</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/06_image_generation_pipeline.html" class="content-card">
+          <div class="card-number">06</div>
+          <div class="card-title">Image Generation Pipeline</div>
+          <div class="card-desc">From text prompt to pixels through diffusion steps and denoising</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/07_compute_vs_memory_bound.html" class="content-card">
+          <div class="card-number">07</div>
+          <div class="card-title">Compute vs Memory Bound (Roofline)</div>
+          <div class="card-desc">Roofline model analysis of arithmetic intensity and hardware bottlenecks</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/08_gpu_architecture.html" class="content-card">
+          <div class="card-number">08</div>
+          <div class="card-title">GPU Architecture (SMs, Tensor Cores)</div>
+          <div class="card-desc">Streaming multiprocessors, memory hierarchy, and tensor core operations</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/09_gpu_generations.html" class="content-card">
+          <div class="card-number">09</div>
+          <div class="card-title">GPU Generations Comparison</div>
+          <div class="card-desc">Performance evolution from Volta to Hopper to Blackwell architectures</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/10_model_parallelism.html" class="content-card">
+          <div class="card-number">10</div>
+          <div class="card-title">Model Parallelism (TP, EP, PP)</div>
+          <div class="card-desc">Tensor, expert, and pipeline parallelism strategies for distributed inference</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Part II -->
+    <div class="part-section fade-in">
+      <div class="part-header">
+        <div class="part-number">Part II &mdash; Chapters 4&ndash;6</div>
+        <div class="part-title">Optimization</div>
+      </div>
+      <div class="cards-grid">
+        <a href="visual_walkthroughs/11_multi_gpu_communication.html" class="content-card">
+          <div class="card-number">11</div>
+          <div class="card-title">Multi-GPU Communication</div>
+          <div class="card-desc">AllReduce, AllGather, and NVLink topologies for distributed workloads</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/12_kernel_fusion.html" class="content-card">
+          <div class="card-number">12</div>
+          <div class="card-title">Kernel Fusion</div>
+          <div class="card-desc">Combining GPU kernels to minimize memory bandwidth and launch overhead</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/13_inference_engines.html" class="content-card">
+          <div class="card-number">13</div>
+          <div class="card-title">Inference Engine Comparison</div>
+          <div class="card-desc">vLLM, TensorRT-LLM, SGLang, and other serving frameworks compared</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/14_kv_cache_hierarchy.html" class="content-card">
+          <div class="card-number">14</div>
+          <div class="card-title">KV Cache Storage Hierarchy</div>
+          <div class="card-desc">GPU HBM, CPU RAM, and disk tiers for managing KV cache at scale</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/15_flashattention.html" class="content-card">
+          <div class="card-number">15</div>
+          <div class="card-title">FlashAttention vs Standard</div>
+          <div class="card-desc">IO-aware tiling, online softmax, and memory-efficient attention computation</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/16_speculative_decoding_flow.html" class="content-card">
+          <div class="card-number">16</div>
+          <div class="card-title">Speculative Decoding Flow</div>
+          <div class="card-desc">Draft model speculation, verification, and acceptance criteria visualized</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/17_eagle_medusa_comparison.html" class="content-card">
+          <div class="card-number">17</div>
+          <div class="card-title">EAGLE vs Medusa vs Draft-Target</div>
+          <div class="card-desc">Tree-structured speculation approaches and their throughput trade-offs</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/18_prefix_caching_visual.html" class="content-card">
+          <div class="card-number">18</div>
+          <div class="card-title">Prefix Caching &amp; KV Cache Reuse</div>
+          <div class="card-desc">Sharing computed KV cache across requests with common prefixes</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/19_quantization_formats.html" class="content-card">
+          <div class="card-number">19</div>
+          <div class="card-title">Quantization Number Formats</div>
+          <div class="card-desc">FP16, BF16, INT8, INT4, and GPTQ/AWQ quantization schemes compared</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/20_disaggregated_serving.html" class="content-card">
+          <div class="card-number">20</div>
+          <div class="card-title">Disaggregated Serving</div>
+          <div class="card-desc">Separating prefill and decode into independent scalable pools</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Part III -->
+    <div class="part-section fade-in">
+      <div class="part-header">
+        <div class="part-number">Part III &mdash; Chapters 7&ndash;9</div>
+        <div class="part-title">Production</div>
+      </div>
+      <div class="cards-grid">
+        <a href="visual_walkthroughs/21_batching_strategies.html" class="content-card">
+          <div class="card-number">21</div>
+          <div class="card-title">Autoscaling Lifecycle</div>
+          <div class="card-desc">Request-based and metric-driven autoscaling from cold start to scale-down</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/22_video_generation.html" class="content-card">
+          <div class="card-number">22</div>
+          <div class="card-title">Video Generation in Latent Space</div>
+          <div class="card-desc">Temporal consistency and frame-by-frame diffusion in latent video models</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/23_voice_pipeline.html" class="content-card">
+          <div class="card-number">23</div>
+          <div class="card-title">Voice Pipeline: ASR &rarr; LLM &rarr; TTS</div>
+          <div class="card-desc">End-to-end voice assistant pipeline from speech recognition to synthesis</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/24_cold_start_pipeline.html" class="content-card">
+          <div class="card-number">24</div>
+          <div class="card-title">Cold Start Pipeline</div>
+          <div class="card-desc">Model loading, weight initialization, and warm-up strategies for fast startup</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/25_transformer_block.html" class="content-card">
+          <div class="card-number">25</div>
+          <div class="card-title">Transformer Block Internals</div>
+          <div class="card-desc">LayerNorm, residual connections, and the complete data flow through a block</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/26_cache_aware_routing.html" class="content-card">
+          <div class="card-number">26</div>
+          <div class="card-title">Cache-Aware Routing</div>
+          <div class="card-desc">Routing inference requests based on cached prefixes across instances</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/27_multi_cloud_architecture.html" class="content-card">
+          <div class="card-number">27</div>
+          <div class="card-title">Multi-Cloud Architecture</div>
+          <div class="card-desc">Cross-provider deployment, failover, and GPU capacity arbitrage strategies</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/28_canary_deployment.html" class="content-card">
+          <div class="card-number">28</div>
+          <div class="card-title">Canary Deployment Strategy</div>
+          <div class="card-desc">Gradual rollout, metric monitoring, and automated rollback workflows</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/29_structured_output.html" class="content-card">
+          <div class="card-number">29</div>
+          <div class="card-title">Structured Output &amp; Logit Biasing</div>
+          <div class="card-desc">Constraining LLM output to JSON schemas using guided decoding</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="visual_walkthroughs/30_fine_tuning_vs_distillation.html" class="content-card">
+          <div class="card-number">30</div>
+          <div class="card-title">Fine-Tuning vs Distillation</div>
+          <div class="card-desc">Transfer learning approaches: LoRA fine-tuning versus knowledge distillation</div>
+          <span class="card-link">Open Visual Guide <span class="arrow">&rarr;</span></span>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==========================================
+     CODE LABS SECTION
+     ========================================== -->
+<section class="content-section" id="code-labs">
+  <div class="container">
+    <div class="section-header fade-in">
+      <div class="section-label" style="color: var(--secondary);">
+        Code Laboratories
+      </div>
+      <h2>Hands-On <span class="gradient-text-secondary">Code Labs</span></h2>
+      <p>Runnable Google Colab notebooks &mdash; learn by building and experimenting</p>
+    </div>
+
+    <!-- Part I -->
+    <div class="part-section fade-in">
+      <div class="part-header">
+        <div class="part-number" style="color: var(--secondary);">Part I &mdash; Chapters 0&ndash;3</div>
+        <div class="part-title">Foundations</div>
+      </div>
+      <div class="cards-grid">
+        <a href="colab_notebooks/01_neural_networks_matmul.ipynb" class="content-card purple-hover">
+          <div class="card-number">01</div>
+          <div class="card-title">Neural Networks: Linear Layers &amp; Matmul</div>
+          <div class="card-desc">Build neural network layers from scratch using matrix multiplication</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/02_activation_functions.ipynb" class="content-card purple-hover">
+          <div class="card-number">02</div>
+          <div class="card-title">Activation Functions (ReLU, SiLU, SwiGLU)</div>
+          <div class="card-desc">Implement and visualize common activation functions and their gradients</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/03_tokenization.ipynb" class="content-card purple-hover">
+          <div class="card-number">03</div>
+          <div class="card-title">Tokenization &amp; Vocabulary</div>
+          <div class="card-desc">Explore BPE tokenization, vocabulary sizes, and encoding strategies</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/04_attention_from_scratch.ipynb" class="content-card purple-hover">
+          <div class="card-number">04</div>
+          <div class="card-title">Attention from Scratch</div>
+          <div class="card-desc">Implement scaled dot-product attention step by step in PyTorch</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/05_sampling_strategies.ipynb" class="content-card purple-hover">
+          <div class="card-number">05</div>
+          <div class="card-title">Temperature, Top-k, Top-p Sampling</div>
+          <div class="card-desc">Experiment with different sampling strategies and their effects on generation</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/06_kv_cache_mechanics.ipynb" class="content-card purple-hover">
+          <div class="card-number">06</div>
+          <div class="card-title">KV Cache Mechanics</div>
+          <div class="card-desc">Understand KV cache storage, retrieval, and memory requirements</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/07_attention_variants.ipynb" class="content-card purple-hover">
+          <div class="card-number">07</div>
+          <div class="card-title">Attention Variants (MHA, MQA, GQA)</div>
+          <div class="card-desc">Compare multi-head, multi-query, and grouped-query attention implementations</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/08_quantization_formats.ipynb" class="content-card purple-hover">
+          <div class="card-number">08</div>
+          <div class="card-title">Quantization: Number Formats</div>
+          <div class="card-desc">Hands-on exploration of FP16, BF16, INT8, and INT4 representations</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/09_post_training_quantization.ipynb" class="content-card purple-hover">
+          <div class="card-number">09</div>
+          <div class="card-title">Post-Training Quantization</div>
+          <div class="card-desc">Apply PTQ techniques (GPTQ, AWQ) and measure quality vs compression trade-offs</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/10_mixture_of_experts.ipynb" class="content-card purple-hover">
+          <div class="card-number">10</div>
+          <div class="card-title">Mixture of Experts Routing</div>
+          <div class="card-desc">Implement expert gating, top-k routing, and load balancing losses</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Part II -->
+    <div class="part-section fade-in">
+      <div class="part-header">
+        <div class="part-number" style="color: var(--secondary);">Part II &mdash; Chapters 4&ndash;6</div>
+        <div class="part-title">Optimization</div>
+      </div>
+      <div class="cards-grid">
+        <a href="colab_notebooks/11_continuous_batching.ipynb" class="content-card purple-hover">
+          <div class="card-number">11</div>
+          <div class="card-title">Continuous vs Static Batching</div>
+          <div class="card-desc">Compare batching strategies and measure throughput improvements</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/12_latency_percentiles.ipynb" class="content-card purple-hover">
+          <div class="card-number">12</div>
+          <div class="card-title">Latency Percentiles (P50/P90/P99)</div>
+          <div class="card-desc">Measure and analyze latency distributions for inference workloads</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/13_image_generation_diffusion.ipynb" class="content-card purple-hover">
+          <div class="card-number">13</div>
+          <div class="card-title">Image Generation: Diffusion from Scratch</div>
+          <div class="card-desc">Build a simple diffusion model and understand the forward/reverse process</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/14_ngram_speculation.ipynb" class="content-card purple-hover">
+          <div class="card-number">14</div>
+          <div class="card-title">N-gram Speculation &amp; Lookahead</div>
+          <div class="card-desc">Implement n-gram based speculative decoding without a draft model</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/15_speculative_decoding.ipynb" class="content-card purple-hover">
+          <div class="card-number">15</div>
+          <div class="card-title">Speculative Decoding (Draft-Target)</div>
+          <div class="card-desc">Full draft-target speculative decoding with acceptance sampling</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/16_embedding_models.ipynb" class="content-card purple-hover">
+          <div class="card-number">16</div>
+          <div class="card-title">Embedding Models &amp; Cosine Similarity</div>
+          <div class="card-desc">Generate embeddings and compute semantic similarity between texts</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/17_image_generation_guidance.ipynb" class="content-card purple-hover">
+          <div class="card-number">17</div>
+          <div class="card-title">Image Generation: Guidance &amp; Steps</div>
+          <div class="card-desc">Explore classifier-free guidance scale and step count trade-offs</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/18_vlm_inference.ipynb" class="content-card purple-hover">
+          <div class="card-number">18</div>
+          <div class="card-title">VLM Inference: Image + Text</div>
+          <div class="card-desc">Run vision-language model inference with multi-modal inputs</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/19_asr_whisper.ipynb" class="content-card purple-hover">
+          <div class="card-number">19</div>
+          <div class="card-title">ASR with Whisper</div>
+          <div class="card-desc">Automatic speech recognition using OpenAI Whisper models</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/20_tts_inference.ipynb" class="content-card purple-hover">
+          <div class="card-number">20</div>
+          <div class="card-title">Text-to-Speech Inference</div>
+          <div class="card-desc">Generate speech from text using modern TTS models and pipelines</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Part III -->
+    <div class="part-section fade-in">
+      <div class="part-header">
+        <div class="part-number" style="color: var(--secondary);">Part III &mdash; Chapters 7&ndash;9</div>
+        <div class="part-title">Production</div>
+      </div>
+      <div class="cards-grid">
+        <a href="colab_notebooks/21_multi_head_attention.ipynb" class="content-card purple-hover">
+          <div class="card-number">21</div>
+          <div class="card-title">Multi-Head Attention Deep Dive</div>
+          <div class="card-desc">Advanced MHA implementation with head splitting and concatenation</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/22_arithmetic_intensity_roofline.ipynb" class="content-card purple-hover">
+          <div class="card-number">22</div>
+          <div class="card-title">Arithmetic Intensity &amp; Roofline</div>
+          <div class="card-desc">Profile kernel arithmetic intensity and plot roofline analysis charts</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/23_prefix_caching_demo.ipynb" class="content-card purple-hover">
+          <div class="card-number">23</div>
+          <div class="card-title">Prefix Caching Demo</div>
+          <div class="card-desc">Demonstrate prefix caching speedups with shared system prompts</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/24_vllm_quickstart.ipynb" class="content-card purple-hover">
+          <div class="card-number">24</div>
+          <div class="card-title">vLLM / SGLang Quick Start</div>
+          <div class="card-desc">Set up and benchmark vLLM and SGLang inference engines</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/25_model_evaluation.ipynb" class="content-card purple-hover">
+          <div class="card-number">25</div>
+          <div class="card-title">Model Evaluation (Evals)</div>
+          <div class="card-desc">Design and run evaluation harnesses for model quality assessment</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/26_fine_tuning_basics.ipynb" class="content-card purple-hover">
+          <div class="card-number">26</div>
+          <div class="card-title">Fine-Tuning vs Distillation</div>
+          <div class="card-desc">Compare LoRA fine-tuning with knowledge distillation approaches</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/27_structured_output.ipynb" class="content-card purple-hover">
+          <div class="card-number">27</div>
+          <div class="card-title">Structured Output &amp; Logit Biasing</div>
+          <div class="card-desc">Force JSON schema compliance using guided decoding techniques</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/28_eagle_speculation.ipynb" class="content-card purple-hover">
+          <div class="card-number">28</div>
+          <div class="card-title">EAGLE Speculation Concept</div>
+          <div class="card-desc">Implement the EAGLE tree-based speculative decoding approach</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/29_few_step_image_gen.ipynb" class="content-card purple-hover">
+          <div class="card-number">29</div>
+          <div class="card-title">Few-Step Image Generation</div>
+          <div class="card-desc">Accelerate diffusion with consistency models and few-step generation</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+        <a href="colab_notebooks/30_latency_percentiles_advanced.ipynb" class="content-card purple-hover">
+          <div class="card-number">30</div>
+          <div class="card-title">Advanced Latency Analysis</div>
+          <div class="card-desc">Deep-dive into TTFT, TPOT, and end-to-end latency optimization</div>
+          <span class="card-link">Open in Colab <span class="arrow">&rarr;</span></span>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==========================================
+     ABOUT SECTION
+     ========================================== -->
+<section class="about-section" id="about">
+  <div class="container">
+    <div class="section-header fade-in">
+      <div class="section-divider"></div>
+      <h2>About This <span class="gradient-text">Course</span></h2>
+    </div>
+
+    <div class="about-content fade-in">
+      <p>
+        This course provides a <span class="highlight">complete visual and hands-on curriculum</span> for mastering the inference stack. From the fundamental building blocks of neural networks and transformer architectures to the cutting-edge optimization techniques used in production systems, every concept is brought to life through interactive visual walkthroughs and runnable code labs.
+      </p>
+      <p>
+        Based on <span class="highlight">"Inference Engineering"</span> by <span class="highlight">Philip Kiely</span>, this curriculum covers the entire journey from understanding how a single forward pass works to deploying and scaling inference workloads across multi-cloud environments. Whether you are an ML engineer looking to deepen your understanding or a systems engineer entering the AI inference space, this course meets you where you are.
+      </p>
+      <p>
+        Built with care by <span class="highlight">Vizuara AI Labs</span> &mdash; making complex AI systems understandable through visual education.
+      </p>
+
+      <div class="about-book">
+        <div class="about-book-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><path d="M8 7h8M8 11h6"/></svg>
+        </div>
+        <div class="about-book-text">
+          <div class="title">Inference Engineering</div>
+          <div class="author">by Philip Kiely</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==========================================
+     FOOTER
+     ========================================== -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-inner">
+      <div>
+        <div class="footer-brand">
+          Vizuara <span class="dot"></span>
+        </div>
+        <div class="footer-text" style="margin-top: 4px;">Inference Engineering Visual Course by Vizuara AI Labs</div>
+      </div>
+      <div class="footer-right">
+        <span class="footer-text">&copy; 2026 Vizuara AI Labs</span>
+        <a href="https://github.com/VizuaraAI" target="_blank">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- ==========================================
+     JAVASCRIPT
+     ========================================== -->
+<script>
+(function() {
+  'use strict';
+
+  // -----------------------------------------
+  // Navbar scroll effect
+  // -----------------------------------------
+  const navbar = document.getElementById('navbar');
+  let lastScroll = 0;
+
+  function handleScroll() {
+    const scrollY = window.scrollY;
+    if (scrollY > 50) {
+      navbar.classList.add('scrolled');
+    } else {
+      navbar.classList.remove('scrolled');
+    }
+    lastScroll = scrollY;
+  }
+
+  window.addEventListener('scroll', handleScroll, { passive: true });
+  handleScroll();
+
+  // -----------------------------------------
+  // Mobile nav toggle
+  // -----------------------------------------
+  const navToggle = document.getElementById('navToggle');
+  const navLinks = document.getElementById('navLinks');
+
+  navToggle.addEventListener('click', function() {
+    navLinks.classList.toggle('open');
+  });
+
+  // Close mobile nav on link click
+  navLinks.querySelectorAll('a').forEach(function(link) {
+    link.addEventListener('click', function() {
+      navLinks.classList.remove('open');
+    });
+  });
+
+  // -----------------------------------------
+  // Smooth scroll for anchor links
+  // -----------------------------------------
+  document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
+    anchor.addEventListener('click', function(e) {
+      e.preventDefault();
+      const target = document.querySelector(this.getAttribute('href'));
+      if (target) {
+        const offset = 80;
+        const bodyRect = document.body.getBoundingClientRect().top;
+        const elementRect = target.getBoundingClientRect().top;
+        const elementPosition = elementRect - bodyRect;
+        const offsetPosition = elementPosition - offset;
+
+        window.scrollTo({
+          top: offsetPosition,
+          behavior: 'smooth'
+        });
+      }
+    });
+  });
+
+  // -----------------------------------------
+  // Intersection Observer for fade-in animations
+  // -----------------------------------------
+  const fadeElements = document.querySelectorAll('.fade-in');
+
+  if ('IntersectionObserver' in window) {
+    const observer = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, {
+      threshold: 0.1,
+      rootMargin: '0px 0px -40px 0px'
+    });
+
+    fadeElements.forEach(function(el) {
+      observer.observe(el);
+    });
+  } else {
+    // Fallback: show everything
+    fadeElements.forEach(function(el) {
+      el.classList.add('visible');
+    });
+  }
+
+  // -----------------------------------------
+  // Animate stat counters on scroll
+  // -----------------------------------------
+  const statValues = document.querySelectorAll('.hero-stat-value');
+  let statsAnimated = false;
+
+  function animateCounters() {
+    if (statsAnimated) return;
+    statsAnimated = true;
+
+    statValues.forEach(function(el) {
+      const target = parseInt(el.textContent, 10);
+      if (isNaN(target)) return;
+
+      const duration = 1500;
+      const start = performance.now();
+      el.textContent = '0';
+
+      function updateCounter(now) {
+        const elapsed = now - start;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease out cubic
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const current = Math.round(target * eased);
+        el.textContent = current;
+
+        if (progress < 1) {
+          requestAnimationFrame(updateCounter);
+        } else {
+          el.textContent = target;
+        }
+      }
+
+      requestAnimationFrame(updateCounter);
+    });
+  }
+
+  // Trigger counter animation when hero is visible
+  if ('IntersectionObserver' in window) {
+    const heroObserver = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting) {
+          setTimeout(animateCounters, 400);
+          heroObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.3 });
+
+    const heroStats = document.querySelector('.hero-stats');
+    if (heroStats) {
+      heroObserver.observe(heroStats);
+    }
+  } else {
+    animateCounters();
+  }
+
+  // -----------------------------------------
+  // Staggered card reveal
+  // -----------------------------------------
+  const cardGrids = document.querySelectorAll('.cards-grid');
+
+  if ('IntersectionObserver' in window) {
+    const cardObserver = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting) {
+          const cards = entry.target.querySelectorAll('.content-card');
+          cards.forEach(function(card, i) {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(20px)';
+            card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+            card.style.transitionDelay = (i * 0.06) + 's';
+
+            setTimeout(function() {
+              card.style.opacity = '1';
+              card.style.transform = 'translateY(0)';
+            }, 50);
+          });
+          cardObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.05, rootMargin: '0px 0px -20px 0px' });
+
+    cardGrids.forEach(function(grid) {
+      cardObserver.observe(grid);
+    });
+  }
+
+})();
+</script>
+
 </body>
 </html>

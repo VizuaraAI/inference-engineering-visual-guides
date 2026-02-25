@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canary Deployment Strategy - Inference Engineering</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0a;--bg-card:#121212;--bg-card-hover:#1a1a1a;--border:#262626;--primary:#00d46a;--secondary:#00c8e6;--tertiary:#a855f7;--success:#10b981;--text:#f2f2f2;--text-muted:#a3a3a3;--text-dim:#737373;--danger:#ef4444}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
+h1,h2{font-family:'Instrument Serif',serif;font-style:italic}
+code,.mono{font-family:'JetBrains Mono',monospace}
+.gradient-text{background:linear-gradient(135deg,#00d46a,#00c8e6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+nav{position:fixed;top:0;left:0;right:0;z-index:1000;background:rgba(10,10,10,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0.75rem 2rem;display:flex;align-items:center;justify-content:space-between}
+nav .logo{font-family:'Instrument Serif',serif;font-style:italic;font-size:1.25rem}
+nav .badge{border:1px solid rgba(0,212,106,0.3);background:rgba(0,212,106,0.1);color:var(--primary);padding:0.25rem 0.75rem;border-radius:9999px;font-size:0.75rem;font-weight:500}
+.progress-bar{position:fixed;top:0;left:0;height:3px;z-index:1001;background:linear-gradient(90deg,var(--primary),var(--secondary));transition:width 0.3s ease}
+.dot-nav{position:fixed;right:2rem;top:50%;transform:translateY(-50%);z-index:999;display:flex;flex-direction:column;gap:12px}
+.dot-nav .dot{width:10px;height:10px;border-radius:50%;background:var(--border);cursor:pointer;transition:all 0.3s;border:2px solid transparent}
+.dot-nav .dot.active{background:var(--primary);border-color:var(--primary);box-shadow:0 0 10px rgba(0,212,106,0.5)}
+section{min-height:100vh;padding:6rem 2rem 4rem;position:relative;display:flex;align-items:center;justify-content:center}
+.section-inner{max-width:1200px;width:100%;margin:0 auto}
+.grid-bg{position:absolute;inset:0;z-index:0;background-image:linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px);background-size:60px 60px}
+.glow-green{position:absolute;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(0,212,106,0.1),transparent 70%);pointer-events:none}
+.glow-cyan{position:absolute;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(0,200,230,0.08),transparent 70%);pointer-events:none}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;transition:all 0.3s}
+.card:hover{background:var(--bg-card-hover);border-color:rgba(0,212,106,0.3)}
+.fade-in{opacity:0;transform:translateY(30px);transition:all 0.8s cubic-bezier(0.16,1,0.3,1)}
+.fade-in.visible{opacity:1;transform:translateY(0)}
+.btn{padding:0.6rem 1.5rem;border:1px solid var(--primary);background:rgba(0,212,106,0.1);color:var(--primary);border-radius:8px;cursor:pointer;font-family:'Inter',sans-serif;font-weight:500;transition:all 0.3s;font-size:0.85rem}
+.btn:hover{background:rgba(0,212,106,0.2)}
+.btn.active{background:var(--primary);color:var(--bg)}
+.btn.secondary{border-color:var(--secondary);background:rgba(0,200,230,0.1);color:var(--secondary)}
+.btn.danger{border-color:var(--danger);background:rgba(239,68,68,0.1);color:var(--danger)}
+.btn.danger:hover{background:rgba(239,68,68,0.2)}
+.controls{display:flex;gap:0.75rem;flex-wrap:wrap;margin:1.5rem 0}
+.section-title{font-size:3rem;margin-bottom:1rem;line-height:1.2}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:start}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin:1.5rem 0}
+.stat-card{background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:1rem;text-align:center}
+.stat-card .stat-value{font-size:1.4rem;font-weight:700;font-family:'JetBrains Mono',monospace}
+.stat-card .stat-label{font-size:0.7rem;color:var(--text-muted);margin-top:0.25rem}
+
+/* Traffic viz */
+.traffic-viz{position:relative;width:100%;height:200px;background:rgba(0,0,0,0.2);border-radius:12px;border:1px solid var(--border);overflow:hidden;margin:1rem 0}
+.traffic-old{position:absolute;top:0;left:0;height:100%;background:rgba(0,200,230,0.15);border-right:2px solid var(--secondary);transition:width 0.5s ease}
+.traffic-new{position:absolute;top:0;right:0;height:100%;background:rgba(0,212,106,0.15);border-left:2px solid var(--primary);transition:width 0.5s ease}
+.traffic-label{position:absolute;top:50%;transform:translateY(-50%);font-weight:600;font-size:1.2rem;text-align:center;width:100%}
+.traffic-old .traffic-label{color:var(--secondary)}
+.traffic-new .traffic-label{color:var(--primary)}
+
+/* Request dots */
+.req-dot{position:absolute;width:6px;height:6px;border-radius:50%;animation:fall 2s linear infinite}
+@keyframes fall{0%{top:-10px;opacity:1}100%{top:100%;opacity:0.3}}
+
+/* Slider */
+.slider-container{position:relative;margin:2rem 0}
+.slider{-webkit-appearance:none;width:100%;height:8px;background:linear-gradient(90deg,var(--secondary),var(--primary));border-radius:4px;outline:none;cursor:pointer}
+.slider::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:white;cursor:pointer;box-shadow:0 0 10px rgba(0,212,106,0.5)}
+.slider-labels{display:flex;justify-content:space-between;margin-top:0.5rem;font-size:0.8rem;color:var(--text-dim)}
+
+/* Metrics chart */
+.metrics-canvas{width:100%;height:200px;background:rgba(0,0,0,0.2);border-radius:8px;border:1px solid var(--border)}
+
+/* Timeline */
+.deploy-timeline{display:flex;gap:0;align-items:stretch;margin:1.5rem 0;overflow-x:auto}
+.deploy-phase{flex:1;min-width:120px;padding:1rem;border:1px solid var(--border);text-align:center;transition:all 0.5s;position:relative}
+.deploy-phase:first-child{border-radius:8px 0 0 8px}
+.deploy-phase:last-child{border-radius:0 8px 8px 0}
+.deploy-phase.active{border-color:var(--primary);background:rgba(0,212,106,0.1)}
+.deploy-phase.danger{border-color:var(--danger);background:rgba(239,68,68,0.1)}
+.deploy-phase .phase-name{font-weight:600;font-size:0.85rem;margin-bottom:0.25rem}
+.deploy-phase .phase-detail{font-size:0.7rem;color:var(--text-dim)}
+
+/* Comparison cards */
+.strategy-card{border:1px solid var(--border);border-radius:12px;padding:1.5rem;background:var(--bg-card);transition:all 0.3s}
+.strategy-card.selected{border-color:var(--primary);box-shadow:0 0 30px rgba(0,212,106,0.15)}
+.strategy-card h3{font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem}
+.strategy-card .pros{color:var(--primary);font-size:0.85rem;line-height:1.8}
+.strategy-card .cons{color:var(--danger);font-size:0.85rem;line-height:1.8}
+
+/* Rollback animation */
+.rollback-viz{position:relative;height:60px;background:rgba(0,0,0,0.2);border-radius:8px;overflow:hidden;margin:1rem 0}
+.rollback-bar{height:100%;transition:width 0.3s ease;display:flex;align-items:center;padding:0 1rem;font-weight:600;font-size:0.85rem}
+
+@media(max-width:768px){nav{padding:0.75rem 1rem}section{padding:5rem 1rem 3rem}.dot-nav{right:1rem}h1{font-size:2rem !important}.two-col{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+<nav>
+  <div class="logo"><span class="gradient-text">VizuaraAI</span></div>
+  <div style="display:flex;align-items:center;gap:1rem;">
+    <span class="badge">Lesson 28</span>
+    <span style="color:var(--text-muted);font-size:0.85rem;">Canary Deployment Strategy</span>
+  </div>
+</nav>
+<div class="dot-nav" id="dotNav"></div>
+
+<!-- Section 0: Hero -->
+<section id="sec0">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:-100px;left:-100px;"></div>
+  <div class="glow-cyan" style="bottom:-100px;right:-100px;"></div>
+  <div class="section-inner" style="text-align:center;">
+    <div class="fade-in">
+      <div class="badge" style="display:inline-block;margin-bottom:1.5rem;">DevOps</div>
+      <h1 class="section-title"><span class="gradient-text">Canary Deployment</span> Strategy</h1>
+      <p style="font-size:1.1rem;color:var(--text-muted);max-width:650px;margin:1rem auto;line-height:1.6;">
+        Deploying new model versions safely requires gradually shifting traffic while monitoring
+        key metrics. Canary deployments limit blast radius and enable fast rollback when issues arise.
+      </p>
+      <div class="stats-grid" style="max-width:700px;margin:2rem auto;">
+        <div class="stat-card"><div class="stat-value" style="color:var(--primary);">1-5%</div><div class="stat-label">Initial canary %</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--secondary);">~30min</div><div class="stat-label">Typical bake time</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--tertiary);"><30s</div><div class="stat-label">Rollback time</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--danger);">0</div><div class="stat-label">Downtime</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 1: Traffic Shifting -->
+<section id="sec1">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:20%;right:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Interactive Traffic</span> Shifting</h2>
+      <p style="color:var(--text-muted);margin-bottom:1.5rem;">Drag the slider to control what percentage of traffic goes to the new model version.</p>
+
+      <div class="traffic-viz" id="trafficViz">
+        <div class="traffic-old" id="trafficOld" style="width:100%;">
+          <div class="traffic-label" id="oldLabel">Old Model v1.0<br><span class="mono" style="font-size:2rem;">100%</span></div>
+        </div>
+        <div class="traffic-new" id="trafficNew" style="width:0%;">
+          <div class="traffic-label" id="newLabel">New Model v2.0<br><span class="mono" style="font-size:2rem;">0%</span></div>
+        </div>
+      </div>
+
+      <div class="slider-container">
+        <input type="range" class="slider" id="trafficSlider" min="0" max="100" value="0" oninput="updateTraffic(this.value)">
+        <div class="slider-labels">
+          <span>0% Canary</span>
+          <span>25%</span>
+          <span>50%</span>
+          <span>75%</span>
+          <span>100% Canary</span>
+        </div>
+      </div>
+
+      <div class="controls" style="justify-content:center;">
+        <button class="btn" onclick="autoCanary()">Auto Canary Rollout</button>
+        <button class="btn danger" onclick="autoRollback()">Simulate Rollback</button>
+        <button class="btn secondary" onclick="resetTraffic()">Reset</button>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--secondary);" id="oldLatency">45ms</div>
+          <div class="stat-label">Old Model P50 Latency</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--primary);" id="newLatency">42ms</div>
+          <div class="stat-label">New Model P50 Latency</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--secondary);" id="oldErrors">0.1%</div>
+          <div class="stat-label">Old Error Rate</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" style="color:var(--primary);" id="newErrors">0.1%</div>
+          <div class="stat-label">New Error Rate</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 2: Metrics Monitoring -->
+<section id="sec2">
+  <div class="grid-bg"></div>
+  <div class="glow-cyan" style="top:10%;left:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Metrics Monitoring</span></h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">Real-time monitoring during canary rollout. Bad metrics trigger automatic rollback.</p>
+
+      <div class="two-col">
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--primary);">Error Rate</h3>
+            <canvas id="errorChart" class="metrics-canvas" width="500" height="200"></canvas>
+            <div style="display:flex;gap:1rem;margin-top:0.5rem;font-size:0.75rem;">
+              <span style="color:var(--secondary);">--- Old model</span>
+              <span style="color:var(--primary);">--- New model</span>
+              <span style="color:var(--danger);">--- Threshold</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--secondary);">Latency (P50)</h3>
+            <canvas id="latencyChart" class="metrics-canvas" width="500" height="200"></canvas>
+            <div style="display:flex;gap:1rem;margin-top:0.5rem;font-size:0.75rem;">
+              <span style="color:var(--secondary);">--- Old model</span>
+              <span style="color:var(--primary);">--- New model</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">Monitoring Configuration</h3>
+            <div style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:1rem;font-family:'JetBrains Mono',monospace;font-size:0.73rem;color:var(--text-muted);line-height:1.9;">
+              canary_config:<br>
+              &nbsp;&nbsp;initial_weight: <span style="color:var(--primary);">5%</span><br>
+              &nbsp;&nbsp;step_weight: <span style="color:var(--primary);">10%</span><br>
+              &nbsp;&nbsp;step_interval: <span style="color:var(--secondary);">5m</span><br>
+              &nbsp;&nbsp;bake_time: <span style="color:var(--secondary);">10m</span><br>
+              &nbsp;&nbsp;rollback_rules:<br>
+              &nbsp;&nbsp;&nbsp;&nbsp;- metric: <span style="color:var(--tertiary);">error_rate</span><br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;threshold: <span style="color:var(--danger);">1.0%</span><br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;comparison: <span style="color:var(--danger);">greater_than</span><br>
+              &nbsp;&nbsp;&nbsp;&nbsp;- metric: <span style="color:var(--tertiary);">p99_latency</span><br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;threshold: <span style="color:var(--danger);">2x baseline</span><br>
+              &nbsp;&nbsp;&nbsp;&nbsp;- metric: <span style="color:var(--tertiary);">quality_score</span><br>
+              &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;threshold: <span style="color:var(--danger);">0.95x baseline</span>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">Key Metrics for LLM Canary</h3>
+            <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.8;">
+              <div style="margin-bottom:0.5rem;"><span style="color:var(--primary);font-weight:600;">Latency</span>: TTFT, inter-token latency, total generation time</div>
+              <div style="margin-bottom:0.5rem;"><span style="color:var(--secondary);font-weight:600;">Errors</span>: HTTP 5xx rate, timeout rate, OOM rate</div>
+              <div style="margin-bottom:0.5rem;"><span style="color:var(--tertiary);font-weight:600;">Quality</span>: Judge model scores, user feedback, refusal rate</div>
+              <div><span style="color:var(--danger);font-weight:600;">Resources</span>: GPU utilization, memory usage, throughput</div>
+            </div>
+          </div>
+
+          <div class="controls">
+            <button class="btn" onclick="startMetricsNormal()">Normal Metrics</button>
+            <button class="btn danger" onclick="startMetricsDegraded()">Degraded New Model</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 3: Rollback -->
+<section id="sec3">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="bottom:10%;right:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Automatic Rollback</span></h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">When metrics breach thresholds, the system automatically rolls back to the stable version.</p>
+
+      <div class="card" style="margin-bottom:1.5rem;">
+        <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:1rem;">Deployment Phases</h3>
+        <div class="deploy-timeline" id="deployTimeline">
+          <div class="deploy-phase active" data-phase="0">
+            <div class="phase-name" style="color:var(--primary);">Canary 5%</div>
+            <div class="phase-detail">Initial deployment</div>
+          </div>
+          <div class="deploy-phase" data-phase="1">
+            <div class="phase-name">Canary 25%</div>
+            <div class="phase-detail">Expand if healthy</div>
+          </div>
+          <div class="deploy-phase" data-phase="2">
+            <div class="phase-name">Canary 50%</div>
+            <div class="phase-detail">Half traffic</div>
+          </div>
+          <div class="deploy-phase" data-phase="3">
+            <div class="phase-name">Canary 75%</div>
+            <div class="phase-detail">Nearly full</div>
+          </div>
+          <div class="deploy-phase" data-phase="4">
+            <div class="phase-name">Full 100%</div>
+            <div class="phase-detail">Complete rollout</div>
+          </div>
+        </div>
+
+        <div class="controls" style="justify-content:center;">
+          <button class="btn" onclick="simulateSuccessfulRollout()">Simulate Successful Rollout</button>
+          <button class="btn danger" onclick="simulateFailedRollout()">Simulate Failed Rollout</button>
+        </div>
+
+        <div id="rolloutStatus" style="color:var(--text-muted);font-size:0.9rem;margin-top:1rem;text-align:center;">
+          Ready to simulate a deployment rollout.
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--danger);">Rollback Mechanism</h3>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;margin-bottom:1rem;">
+            Rollback simply shifts the load balancer weight back to 100% old model.
+            Since both versions are running simultaneously, rollback is instantaneous --
+            no need to redeploy or restart containers.
+          </p>
+          <div class="rollback-viz" id="rollbackViz">
+            <div class="rollback-bar" id="rollbackBar" style="width:100%;background:linear-gradient(90deg,var(--secondary),var(--primary));">
+              <span>100% Old Model - Stable</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">Rollback Triggers</h3>
+          <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.8;">
+            <div style="margin-bottom:0.5rem;display:flex;gap:0.5rem;">
+              <span style="color:var(--danger);">1.</span>
+              <span><b>Error rate spike</b>: New model error rate > 2x old model baseline</span>
+            </div>
+            <div style="margin-bottom:0.5rem;display:flex;gap:0.5rem;">
+              <span style="color:var(--danger);">2.</span>
+              <span><b>Latency regression</b>: P99 latency exceeds SLA threshold</span>
+            </div>
+            <div style="margin-bottom:0.5rem;display:flex;gap:0.5rem;">
+              <span style="color:var(--danger);">3.</span>
+              <span><b>Quality degradation</b>: Judge model scores drop below threshold</span>
+            </div>
+            <div style="display:flex;gap:0.5rem;">
+              <span style="color:var(--danger);">4.</span>
+              <span><b>Manual trigger</b>: On-call engineer initiates rollback</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 4: Comparison -->
+<section id="sec4">
+  <div class="grid-bg"></div>
+  <div class="glow-cyan" style="top:20%;left:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Deployment Strategies</span> Compared</h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">Click a strategy to see details. Each has tradeoffs in complexity, risk, and resource usage.</p>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.5rem;">
+        <div class="strategy-card selected" id="strat-canary" onclick="selectStrategy('canary')">
+          <h3 style="color:var(--primary);">Canary Deployment</h3>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;margin-bottom:1rem;">
+            Gradually shift traffic from old to new. Both versions run simultaneously.
+            Monitor metrics at each stage before increasing traffic.
+          </p>
+          <div class="pros">+ Minimal blast radius<br>+ Fast rollback<br>+ Real user validation</div>
+          <div class="cons" style="margin-top:0.5rem;">- Requires 2x resources during rollout<br>- Complex routing logic<br>- Slower full deployment</div>
+        </div>
+
+        <div class="strategy-card" id="strat-bluegreen" onclick="selectStrategy('bluegreen')">
+          <h3 style="color:var(--secondary);">Blue-Green Deployment</h3>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;margin-bottom:1rem;">
+            Maintain two identical environments. Deploy new version to green while blue serves traffic.
+            Switch all traffic at once after validation.
+          </p>
+          <div class="pros">+ Simple switch<br>+ Easy rollback (switch back)<br>+ Full pre-production testing</div>
+          <div class="cons" style="margin-top:0.5rem;">- 2x infrastructure cost always<br>- All-or-nothing switch risk<br>- No gradual validation</div>
+        </div>
+
+        <div class="strategy-card" id="strat-rolling" onclick="selectStrategy('rolling')">
+          <h3 style="color:var(--tertiary);">Rolling Update</h3>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;margin-bottom:1rem;">
+            Replace instances one by one. Each new instance starts with new version.
+            Kubernetes default strategy.
+          </p>
+          <div class="pros">+ No extra resources needed<br>+ Simple to implement<br>+ Kubernetes native</div>
+          <div class="cons" style="margin-top:0.5rem;">- Slow rollback (re-roll)<br>- Mixed versions during update<br>- Can't control traffic split</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:2rem;">
+        <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:1rem;">Strategy Comparison Matrix</h3>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+            <thead>
+              <tr style="border-bottom:1px solid var(--border);">
+                <th style="text-align:left;padding:0.75rem;color:var(--text-muted);">Dimension</th>
+                <th style="padding:0.75rem;color:var(--primary);">Canary</th>
+                <th style="padding:0.75rem;color:var(--secondary);">Blue-Green</th>
+                <th style="padding:0.75rem;color:var(--tertiary);">Rolling</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.03);"><td style="padding:0.75rem;color:var(--text-muted);">Rollback Speed</td><td style="padding:0.75rem;text-align:center;color:var(--primary);">Instant</td><td style="padding:0.75rem;text-align:center;color:var(--secondary);">Instant</td><td style="padding:0.75rem;text-align:center;color:var(--danger);">Minutes</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.03);"><td style="padding:0.75rem;color:var(--text-muted);">Resource Overhead</td><td style="padding:0.75rem;text-align:center;">Partial 2x</td><td style="padding:0.75rem;text-align:center;color:var(--danger);">Full 2x</td><td style="padding:0.75rem;text-align:center;color:var(--primary);">None</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.03);"><td style="padding:0.75rem;color:var(--text-muted);">Blast Radius</td><td style="padding:0.75rem;text-align:center;color:var(--primary);">1-5%</td><td style="padding:0.75rem;text-align:center;color:var(--danger);">100%</td><td style="padding:0.75rem;text-align:center;">~1/N</td></tr>
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.03);"><td style="padding:0.75rem;color:var(--text-muted);">Complexity</td><td style="padding:0.75rem;text-align:center;color:var(--danger);">High</td><td style="padding:0.75rem;text-align:center;">Medium</td><td style="padding:0.75rem;text-align:center;color:var(--primary);">Low</td></tr>
+              <tr><td style="padding:0.75rem;color:var(--text-muted);">Best For LLMs</td><td style="padding:0.75rem;text-align:center;color:var(--primary);">Yes</td><td style="padding:0.75rem;text-align:center;">Sometimes</td><td style="padding:0.75rem;text-align:center;">No</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 5: Best Practices -->
+<section id="sec5">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:30%;left:50%;transform:translateX(-50%);"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">LLM-Specific</span> Best Practices</h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">Canary deployments for LLMs have unique considerations beyond traditional services.</p>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:1.5rem;">
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(0,212,106,0.15);display:flex;align-items:center;justify-content:center;color:var(--primary);font-weight:700;">1</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Eval-Gated Promotion</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Don't just check error rates. Run automated evals at each canary stage: benchmark suites,
+            judge model scoring on sample outputs, and regression tests against known-good responses.
+            Gate promotion on passing all eval criteria.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(0,200,230,0.15);display:flex;align-items:center;justify-content:center;color:var(--secondary);font-weight:700;">2</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Shadow Mode First</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Before canary traffic, run the new model in shadow mode: duplicate requests to new model
+            but serve old model responses. Compare outputs offline. This catches quality regressions
+            before any user impact.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(168,85,247,0.15);display:flex;align-items:center;justify-content:center;color:var(--tertiary);font-weight:700;">3</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Sticky Sessions</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Multi-turn conversations should stick to the same model version. Switching models
+            mid-conversation can cause inconsistent behavior. Route entire sessions to either
+            old or new model based on initial assignment.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(239,68,68,0.15);display:flex;align-items:center;justify-content:center;color:var(--danger);font-weight:700;">4</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">KV Cache Warming</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            New model instances start with cold KV caches. The first few requests will have higher
+            TTFT. Account for this in your canary metrics -- compare against the new model's
+            steady-state latency, not its cold-start latency.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(16,185,129,0.15);display:flex;align-items:center;justify-content:center;color:var(--success);font-weight:700;">5</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">Gradual by Use Case</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Canary by use case, not just percentage. Start with lower-risk use cases (autocomplete)
+            before high-risk ones (medical, legal). Route based on API key or customer tier
+            to control which users see the canary first.
+          </p>
+        </div>
+
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+            <div style="width:40px;height:40px;border-radius:8px;background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-weight:700;">6</div>
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.1rem;">A/B + Canary Hybrid</h3>
+          </div>
+          <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+            Combine canary safety with A/B testing insights. During canary, collect detailed
+            comparison metrics. If the new model wins on quality and matches on latency,
+            promote with confidence. Log everything for post-hoc analysis.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+// Navigation
+const sections = document.querySelectorAll('section');
+const dotNav = document.getElementById('dotNav');
+const progressBar = document.getElementById('progressBar');
+sections.forEach((_,i) => {
+  const dot = document.createElement('div');
+  dot.className = 'dot';
+  dot.onclick = () => sections[i].scrollIntoView({behavior:'smooth'});
+  dotNav.appendChild(dot);
+});
+function updateScroll() {
+  const scrollTop = window.scrollY;
+  const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+  progressBar.style.width = (scrollTop/scrollHeight*100)+'%';
+  const dots = dotNav.querySelectorAll('.dot');
+  sections.forEach((sec,i) => {
+    const rect = sec.getBoundingClientRect();
+    if (rect.top < window.innerHeight/2 && rect.bottom > window.innerHeight/2) {
+      dots.forEach(d => d.classList.remove('active'));
+      dots[i].classList.add('active');
+    }
+    sec.querySelectorAll('.fade-in').forEach(el => { if (rect.top < window.innerHeight*0.85) el.classList.add('visible'); });
+  });
+}
+window.addEventListener('scroll', updateScroll);
+updateScroll();
+
+// Traffic shifting
+let canaryPercent = 0;
+function updateTraffic(value) {
+  canaryPercent = parseInt(value);
+  const oldPct = 100 - canaryPercent;
+  document.getElementById('trafficOld').style.width = oldPct + '%';
+  document.getElementById('trafficNew').style.width = canaryPercent + '%';
+  document.getElementById('oldLabel').innerHTML = `Old Model v1.0<br><span class="mono" style="font-size:2rem;">${oldPct}%</span>`;
+  document.getElementById('newLabel').innerHTML = `New Model v2.0<br><span class="mono" style="font-size:2rem;">${canaryPercent}%</span>`;
+
+  // Update simulated metrics
+  const newLat = 42 + (canaryPercent > 50 ? (canaryPercent - 50) * 0.1 : 0);
+  document.getElementById('newLatency').textContent = Math.round(newLat) + 'ms';
+}
+
+let canaryInterval = null;
+function autoCanary() {
+  if (canaryInterval) clearInterval(canaryInterval);
+  canaryPercent = 0;
+  const slider = document.getElementById('trafficSlider');
+  const steps = [5, 10, 25, 50, 75, 100];
+  let stepIdx = 0;
+  canaryInterval = setInterval(() => {
+    if (stepIdx >= steps.length) {
+      clearInterval(canaryInterval);
+      canaryInterval = null;
+      return;
+    }
+    slider.value = steps[stepIdx];
+    updateTraffic(steps[stepIdx]);
+    stepIdx++;
+  }, 800);
+}
+
+function autoRollback() {
+  if (canaryInterval) clearInterval(canaryInterval);
+  const slider = document.getElementById('trafficSlider');
+  // First go to 30%, then rollback
+  slider.value = 30;
+  updateTraffic(30);
+  document.getElementById('newErrors').textContent = '3.5%';
+  document.getElementById('newErrors').style.color = 'var(--danger)';
+
+  setTimeout(() => {
+    slider.value = 0;
+    updateTraffic(0);
+    document.getElementById('newErrors').textContent = '0.1%';
+    document.getElementById('newErrors').style.color = 'var(--primary)';
+    document.getElementById('rollbackBar').style.width = '100%';
+    document.getElementById('rollbackBar').style.background = 'var(--secondary)';
+    document.getElementById('rollbackBar').innerHTML = '<span>ROLLED BACK - 100% Old Model</span>';
+  }, 1500);
+}
+
+function resetTraffic() {
+  if (canaryInterval) clearInterval(canaryInterval);
+  canaryInterval = null;
+  document.getElementById('trafficSlider').value = 0;
+  updateTraffic(0);
+  document.getElementById('newErrors').textContent = '0.1%';
+  document.getElementById('newErrors').style.color = 'var(--primary)';
+}
+
+// Metrics charts
+let errorData = { old: [], new: [] };
+let latencyData = { old: [], new: [] };
+let metricsInterval = null;
+let isDegraded = false;
+
+function drawChart(canvasId, data, threshold, maxY) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 5; i++) {
+    const y = (i/4) * h;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+  }
+
+  // Threshold line
+  if (threshold !== null) {
+    const ty = h - (threshold / maxY) * h;
+    ctx.strokeStyle = 'rgba(239,68,68,0.5)';
+    ctx.setLineDash([5,5]);
+    ctx.beginPath(); ctx.moveTo(0, ty); ctx.lineTo(w, ty); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(239,68,68,0.5)';
+    ctx.font = '10px JetBrains Mono';
+    ctx.fillText('threshold', w - 60, ty - 5);
+  }
+
+  function drawLine(points, color) {
+    if (points.length < 2) return;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const step = w / (points.length - 1 || 1);
+    points.forEach((p, i) => {
+      const x = i * step;
+      const y = h - (p / maxY) * h;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+  }
+
+  drawLine(data.old, '#00c8e6');
+  drawLine(data.new, '#00d46a');
+}
+
+function addMetricPoint() {
+  const baseError = 0.2;
+  const baseLatency = 45;
+  errorData.old.push(baseError + Math.random() * 0.15);
+  latencyData.old.push(baseLatency + Math.random() * 5);
+
+  if (isDegraded) {
+    errorData.new.push(baseError * 8 + Math.random() * 2);
+    latencyData.new.push(baseLatency * 2.5 + Math.random() * 20);
+  } else {
+    errorData.new.push(baseError * 0.8 + Math.random() * 0.1);
+    latencyData.new.push(baseLatency * 0.95 + Math.random() * 4);
+  }
+
+  if (errorData.old.length > 50) { errorData.old.shift(); errorData.new.shift(); latencyData.old.shift(); latencyData.new.shift(); }
+
+  drawChart('errorChart', errorData, 1.0, 3);
+  drawChart('latencyChart', latencyData, null, 150);
+}
+
+function startMetricsNormal() {
+  isDegraded = false;
+  errorData = { old: [], new: [] };
+  latencyData = { old: [], new: [] };
+  if (metricsInterval) clearInterval(metricsInterval);
+  metricsInterval = setInterval(addMetricPoint, 300);
+}
+
+function startMetricsDegraded() {
+  isDegraded = true;
+  errorData = { old: [], new: [] };
+  latencyData = { old: [], new: [] };
+  if (metricsInterval) clearInterval(metricsInterval);
+  metricsInterval = setInterval(addMetricPoint, 300);
+}
+
+startMetricsNormal();
+
+// Deployment timeline
+function simulateSuccessfulRollout() {
+  const phases = document.querySelectorAll('.deploy-phase');
+  phases.forEach(p => { p.classList.remove('active','danger'); });
+  let i = 0;
+  const rolloutStatus = document.getElementById('rolloutStatus');
+  const interval = setInterval(() => {
+    if (i > 0) phases[i-1].classList.remove('active');
+    if (i < phases.length) {
+      phases[i].classList.add('active');
+      const names = ['5%','25%','50%','75%','100%'];
+      rolloutStatus.innerHTML = `<span style="color:var(--primary);">Phase ${i+1}: Canary at ${names[i]}. Metrics healthy. Promoting...</span>`;
+      i++;
+    } else {
+      clearInterval(interval);
+      rolloutStatus.innerHTML = '<span style="color:var(--primary);">Rollout complete! New model serving 100% of traffic.</span>';
+    }
+  }, 1200);
+}
+
+function simulateFailedRollout() {
+  const phases = document.querySelectorAll('.deploy-phase');
+  phases.forEach(p => { p.classList.remove('active','danger'); });
+  let i = 0;
+  const rolloutStatus = document.getElementById('rolloutStatus');
+  const interval = setInterval(() => {
+    if (i > 0) phases[i-1].classList.remove('active');
+    if (i < 2) {
+      phases[i].classList.add('active');
+      const names = ['5%','25%'];
+      rolloutStatus.innerHTML = `<span style="color:var(--primary);">Phase ${i+1}: Canary at ${names[i]}. Metrics healthy...</span>`;
+      i++;
+    } else if (i === 2) {
+      phases[2].classList.add('danger');
+      rolloutStatus.innerHTML = '<span style="color:var(--danger);">ERROR: Error rate spiked to 3.5% at 50% canary! Auto-rolling back...</span>';
+      i++;
+    } else if (i === 3) {
+      phases[2].classList.remove('danger');
+      phases[0].classList.add('active');
+      rolloutStatus.innerHTML = '<span style="color:var(--secondary);">ROLLED BACK to old model. Investigating root cause...</span>';
+      clearInterval(interval);
+    }
+  }, 1200);
+}
+
+// Strategy selection
+function selectStrategy(name) {
+  document.querySelectorAll('.strategy-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('strat-' + name).classList.add('selected');
+}
+
+// Generate request dots in traffic viz
+function spawnDots() {
+  const viz = document.getElementById('trafficViz');
+  for (let i = 0; i < 3; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'req-dot';
+    dot.style.left = (Math.random() * 90 + 5) + '%';
+    dot.style.animationDelay = (Math.random() * 2) + 's';
+    const isNew = Math.random() * 100 < canaryPercent;
+    dot.style.background = isNew ? 'var(--primary)' : 'var(--secondary)';
+    dot.style.boxShadow = isNew ? '0 0 6px rgba(0,212,106,0.5)' : '0 0 6px rgba(0,200,230,0.5)';
+    viz.appendChild(dot);
+    setTimeout(() => dot.remove(), 2000);
+  }
+}
+setInterval(spawnDots, 500);
+</script>
+</body>
+</html>

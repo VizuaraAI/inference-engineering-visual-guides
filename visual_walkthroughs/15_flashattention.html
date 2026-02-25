@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FlashAttention vs Standard Attention</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#0a0a0a;color:#f2f2f2;overflow-x:hidden;line-height:1.6}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#0a0a0a}
+::-webkit-scrollbar-thumb{background:#00d46a;border-radius:3px}
+.progress-bar{position:fixed;top:0;left:0;width:0%;height:3px;background:linear-gradient(90deg,#00d46a,#00c8e6);z-index:1000;transition:width .3s}
+.nav-dots{position:fixed;right:20px;top:50%;transform:translateY(-50%);z-index:100;display:flex;flex-direction:column;gap:12px}
+.nav-dot{width:10px;height:10px;border-radius:50%;background:#333;cursor:pointer;transition:all .3s;border:2px solid transparent}
+.nav-dot.active{background:#00d46a;border-color:#00c8e6;transform:scale(1.3)}
+section{min-height:100vh;padding:80px 60px;display:flex;flex-direction:column;justify-content:center;align-items:center}
+.hero-section{background:radial-gradient(ellipse at center,#1a1a1a 0%,#0a0a0a 70%)}
+.hero-title{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:3rem;text-align:center;margin-bottom:20px;background:linear-gradient(135deg,#00d46a,#00c8e6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero-subtitle{font-size:1.2rem;color:#a3a3a3;text-align:center;max-width:700px;margin-bottom:40px}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(0,212,106,.15);border:1px solid rgba(0,212,106,.3);border-radius:20px;padding:8px 20px;font-size:.85rem;color:#00d46a;margin-bottom:20px}
+.section-title{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;font-size:2rem;margin-bottom:10px;text-align:center}
+.section-desc{color:#a3a3a3;text-align:center;max-width:650px;margin-bottom:40px}
+.highlight{color:#22d3ee}.highlight-amber{color:#f59e0b}.highlight-green{color:#10b981}.highlight-red{color:#ef4444}
+.card{background:rgba(18,18,18,.6);border:1px solid #262626;border-radius:16px;padding:30px;transition:all .3s}
+.card:hover{border-color:#00d46a;box-shadow:0 0 20px rgba(0,212,106,.15),0 0 60px rgba(0,212,106,.05)}
+@keyframes fadeInUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes gradientShift{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+.gradient-bg{background:linear-gradient(135deg,#0a0a0a,#121212,#0a0a0a);background-size:200% 200%;animation:gradientShift 8s ease infinite}
+
+/* Side-by-side comparison */
+.comparison{display:grid;grid-template-columns:1fr 1fr;gap:30px;max-width:1000px;width:100%}
+.comp-panel{border-radius:16px;padding:25px;position:relative}
+.comp-panel.standard{background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.2)}
+.comp-panel.flash{background:rgba(16,185,129,.05);border:1px solid rgba(16,185,129,.2)}
+.comp-panel-title{font-size:1.1rem;font-weight:700;margin-bottom:15px}
+
+/* Memory architecture diagram */
+.mem-arch{display:flex;flex-direction:column;gap:15px;align-items:center;margin:20px 0}
+.mem-level{padding:12px 25px;border-radius:10px;text-align:center;font-weight:600;font-size:.85rem;width:200px}
+.sram-level{background:rgba(16,185,129,.15);border:1px solid #10b981;color:#6ee7b7}
+.hbm-level{background:rgba(0,212,106,.15);border:1px solid #00d46a;color:#00d46a}
+.mem-arrow{font-size:1.2rem;color:#475569}
+
+/* Matrix visualization */
+.matrix-container{position:relative;margin:15px auto}
+.matrix-grid{display:grid;gap:1px;border-radius:8px;overflow:hidden}
+.matrix-cell{width:100%;aspect-ratio:1;transition:all .3s}
+.matrix-label{text-align:center;font-size:.75rem;color:#94a3b8;margin-top:5px}
+
+/* Tiling animation */
+.tile-canvas{border-radius:12px;background:#111;border:1px solid #222}
+
+/* Memory counter */
+.mem-stats{display:flex;gap:25px;margin-top:20px;flex-wrap:wrap;justify-content:center}
+.mem-stat{text-align:center;padding:15px 20px;border-radius:12px}
+.mem-stat-value{font-size:1.8rem;font-weight:800}
+.mem-stat-label{font-size:.75rem;color:#94a3b8;margin-top:4px}
+
+/* Sequence slider */
+.seq-slider-area{max-width:600px;width:100%;margin:20px auto}
+.seq-slider{width:100%;accent-color:#00d46a}
+.mem-compare-bars{display:flex;gap:20px;margin-top:20px;align-items:flex-end;height:200px;justify-content:center}
+.mcb-wrap{display:flex;flex-direction:column;align-items:center;gap:8px}
+.mcb-bar{width:80px;border-radius:8px 8px 0 0;transition:height 1s;display:flex;align-items:flex-start;justify-content:center;padding-top:8px;min-height:5px}
+.mcb-label{font-size:.75rem;color:#94a3b8;text-align:center}
+
+/* Steps flow */
+.steps-flow{display:flex;flex-direction:column;gap:0;align-items:center}
+.step-item{display:flex;align-items:center;gap:12px;padding:10px 18px;border-radius:8px;width:100%;max-width:450px}
+.step-num{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;flex-shrink:0}
+.step-arrow{font-size:1rem;color:#475569;margin:2px 0}
+
+/* Performance chart */
+.perf-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;max-width:800px;width:100%}
+.perf-card{border-radius:12px;padding:20px;text-align:center;transition:all .3s}
+.perf-card:hover{transform:translateY(-3px)}
+
+.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;max-width:900px}
+
+@media(max-width:768px){.comparison{grid-template-columns:1fr}.perf-grid{grid-template-columns:1fr 1fr}section{padding:60px 20px}}
+</style>
+</head>
+<body>
+<div class="progress-bar" id="progressBar"></div>
+<nav class="nav-dots" id="navDots"></nav>
+
+<!-- Section 1: Hero -->
+<section class="hero-section" id="sec0">
+<div class="hero-badge">Chapter 15 -- Attention Optimization</div>
+<h1 class="hero-title">FlashAttention</h1>
+<p class="hero-subtitle">How tiling and kernel fusion eliminate the N x N memory bottleneck, making long-context inference practical.</p>
+<div style="display:flex;gap:20px;margin-top:20px;flex-wrap:wrap;justify-content:center">
+<div class="card" style="text-align:center;padding:20px 25px">
+<div style="font-size:2rem;font-weight:800;color:#ef4444">O(N<sup>2</sup>)</div>
+<div style="font-size:.75rem;color:#94a3b8">Standard Memory</div>
+</div>
+<div class="card" style="text-align:center;padding:20px 25px">
+<div style="font-size:2rem;font-weight:800;color:#10b981">O(N)</div>
+<div style="font-size:.75rem;color:#94a3b8">FlashAttention Memory</div>
+</div>
+<div class="card" style="text-align:center;padding:20px 25px">
+<div style="font-size:2rem;font-weight:800;color:#22d3ee">2-4x</div>
+<div style="font-size:.75rem;color:#94a3b8">Wall-clock Speedup</div>
+</div>
+</div>
+</section>
+
+<!-- Section 2: Memory Architecture -->
+<section class="gradient-bg" id="sec1">
+<h2 class="section-title">GPU Memory <span class="highlight">Architecture</span></h2>
+<p class="section-desc">The key insight: SRAM is ~1000x faster than HBM but ~1000x smaller. FlashAttention keeps data in SRAM.</p>
+<div class="comparison">
+<div class="comp-panel" style="border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.03)">
+<div class="mem-arch">
+<div class="mem-level sram-level">
+<div>SRAM (on-chip)</div>
+<div style="font-size:.7rem;margin-top:4px">~20 MB | ~19 TB/s</div>
+</div>
+<div class="mem-arrow">|<br>1000x faster<br>|</div>
+<div class="mem-level hbm-level">
+<div>HBM (off-chip)</div>
+<div style="font-size:.7rem;margin-top:4px">80-192 GB | ~3.35 TB/s</div>
+</div>
+</div>
+</div>
+<div class="comp-panel" style="border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.03)">
+<h3 style="color:#f59e0b;font-size:1rem;margin-bottom:15px">The Problem</h3>
+<p style="font-size:.82rem;color:#94a3b8;margin-bottom:10px">Standard attention writes the full N x N attention matrix to HBM. For a 128K sequence:</p>
+<div style="padding:12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px;margin-top:10px">
+<div style="font-size:.8rem;color:#fca5a5">128K x 128K x 2 bytes = <strong>32 GB</strong></div>
+<div style="font-size:.7rem;color:#94a3b8;margin-top:4px">Just for one attention head's S matrix!</div>
+</div>
+<div style="padding:12px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:8px;margin-top:10px">
+<div style="font-size:.8rem;color:#6ee7b7">FlashAttention: Never writes the full matrix</div>
+<div style="font-size:.7rem;color:#94a3b8;margin-top:4px">Tiles fit in 20 MB SRAM. O(N) memory.</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- Section 3: Standard vs Flash side-by-side -->
+<section id="sec2">
+<h2 class="section-title"><span class="highlight-red">Standard</span> vs <span class="highlight-green">Flash</span> Attention</h2>
+<p class="section-desc">Side by side: standard attention writes everything to HBM. FlashAttention tiles the computation.</p>
+<div class="comparison">
+<div class="comp-panel standard">
+<div class="comp-panel-title" style="color:#ef4444">Standard Attention</div>
+<div class="steps-flow">
+<div class="step-item" style="background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.15)">
+<div class="step-num" style="background:#ef4444;color:#fff">1</div>
+<div style="font-size:.8rem"><strong>S = Q @ K^T</strong><br><span style="color:#94a3b8;font-size:.7rem">Compute NxN scores, write to HBM</span></div>
+</div>
+<div class="step-arrow">|</div>
+<div class="step-item" style="background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.15)">
+<div class="step-num" style="background:#ef4444;color:#fff">2</div>
+<div style="font-size:.8rem"><strong>Read S from HBM</strong><br><span style="color:#94a3b8;font-size:.7rem">Full NxN matrix loaded back</span></div>
+</div>
+<div class="step-arrow">|</div>
+<div class="step-item" style="background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.15)">
+<div class="step-num" style="background:#ef4444;color:#fff">3</div>
+<div style="font-size:.8rem"><strong>P = softmax(S)</strong><br><span style="color:#94a3b8;font-size:.7rem">Write NxN P matrix to HBM</span></div>
+</div>
+<div class="step-arrow">|</div>
+<div class="step-item" style="background:rgba(239,68,68,.05);border:1px solid rgba(239,68,68,.15)">
+<div class="step-num" style="background:#ef4444;color:#fff">4</div>
+<div style="font-size:.8rem"><strong>O = P @ V</strong><br><span style="color:#94a3b8;font-size:.7rem">Read P from HBM, write O</span></div>
+</div>
+</div>
+<div style="margin-top:15px;text-align:center;font-size:.8rem">
+<span style="color:#ef4444;font-weight:700">HBM reads/writes: ~4N<sup>2</sup></span>
+</div>
+</div>
+<div class="comp-panel flash">
+<div class="comp-panel-title" style="color:#10b981">FlashAttention</div>
+<div class="steps-flow">
+<div class="step-item" style="background:rgba(16,185,129,.05);border:1px solid rgba(16,185,129,.15)">
+<div class="step-num" style="background:#10b981;color:#fff">1</div>
+<div style="font-size:.8rem"><strong>Load Q, K, V tiles</strong><br><span style="color:#94a3b8;font-size:.7rem">Small blocks from HBM to SRAM</span></div>
+</div>
+<div class="step-arrow">|</div>
+<div class="step-item" style="background:rgba(16,185,129,.05);border:1px solid rgba(16,185,129,.15)">
+<div class="step-num" style="background:#10b981;color:#fff">2</div>
+<div style="font-size:.8rem"><strong>S_tile = Q_tile @ K_tile^T</strong><br><span style="color:#94a3b8;font-size:.7rem">Compute in SRAM -- never to HBM!</span></div>
+</div>
+<div class="step-arrow">|</div>
+<div class="step-item" style="background:rgba(16,185,129,.05);border:1px solid rgba(16,185,129,.15)">
+<div class="step-num" style="background:#10b981;color:#fff">3</div>
+<div style="font-size:.8rem"><strong>P_tile = softmax(S_tile)</strong><br><span style="color:#94a3b8;font-size:.7rem">Online softmax in SRAM</span></div>
+</div>
+<div class="step-arrow">|</div>
+<div class="step-item" style="background:rgba(16,185,129,.05);border:1px solid rgba(16,185,129,.15)">
+<div class="step-num" style="background:#10b981;color:#fff">4</div>
+<div style="font-size:.8rem"><strong>O += P_tile @ V_tile</strong><br><span style="color:#94a3b8;font-size:.7rem">Accumulate output, write once</span></div>
+</div>
+</div>
+<div style="margin-top:15px;text-align:center;font-size:.8rem">
+<span style="color:#10b981;font-weight:700">HBM reads/writes: ~O(N)</span>
+</div>
+</div>
+</div>
+</section>
+
+<!-- Section 4: Tiling Visualization -->
+<section class="gradient-bg" id="sec3">
+<h2 class="section-title">The <span class="highlight-amber">Tiling</span> Strategy</h2>
+<p class="section-desc">FlashAttention processes the attention matrix in tiles that fit in SRAM. Click "Animate" to watch.</p>
+<div style="display:flex;gap:40px;align-items:center;flex-wrap:wrap;justify-content:center">
+<div>
+<canvas id="tileCanvas" class="tile-canvas" width="350" height="350"></canvas>
+<div style="text-align:center;font-size:.75rem;color:#94a3b8;margin-top:8px">N x N Attention Matrix</div>
+</div>
+<div style="max-width:300px">
+<h3 style="color:#10b981;margin-bottom:10px;font-size:1rem">How It Works</h3>
+<p style="font-size:.8rem;color:#94a3b8;margin-bottom:15px">The full NxN matrix is never materialized. Instead, we process it tile by tile:</p>
+<ol style="font-size:.8rem;color:#94a3b8;padding-left:20px;line-height:2">
+<li>Load a <span class="highlight-green">tile of K, V</span> into SRAM</li>
+<li>For each <span class="highlight">Q block</span>, compute local attention</li>
+<li>Use <span class="highlight-amber">online softmax</span> to track running max/sum</li>
+<li>Accumulate output incrementally</li>
+<li>Move to next tile</li>
+</ol>
+<button onclick="animateTiling()" style="margin-top:15px;padding:10px 25px;border:none;border-radius:8px;background:linear-gradient(135deg,#10b981,#059669);color:#fff;font-weight:600;cursor:pointer;font-size:.85rem;font-family:'Inter',sans-serif">Animate Tiling</button>
+</div>
+</div>
+</section>
+
+<!-- Section 5: Key Insight -->
+<section id="sec4">
+<h2 class="section-title">The Key <span class="highlight">Insight</span></h2>
+<p class="section-desc">Avoid materializing the full N x N attention matrix in HBM. This is what makes long context possible.</p>
+<div class="comparison" style="max-width:800px">
+<div class="comp-panel standard" style="text-align:center">
+<h3 style="color:#ef4444;margin-bottom:15px">Standard: Full NxN in HBM</h3>
+<div class="matrix-container" style="width:150px;height:150px;margin:15px auto">
+<div class="matrix-grid" style="grid-template-columns:repeat(8,1fr);width:150px;height:150px" id="fullMatrix"></div>
+</div>
+<div style="font-size:.8rem;color:#fca5a5;margin-top:10px">Every cell written to HBM</div>
+<div style="font-size:.75rem;color:#94a3b8;margin-top:5px">8K seq = 256 MB per head</div>
+</div>
+<div class="comp-panel flash" style="text-align:center">
+<h3 style="color:#10b981;margin-bottom:15px">Flash: Only tiles in SRAM</h3>
+<div class="matrix-container" style="width:150px;height:150px;margin:15px auto">
+<div class="matrix-grid" style="grid-template-columns:repeat(8,1fr);width:150px;height:150px" id="tiledMatrix"></div>
+</div>
+<div style="font-size:.8rem;color:#6ee7b7;margin-top:10px">Only active tile in SRAM</div>
+<div style="font-size:.75rem;color:#94a3b8;margin-top:5px">Always fits in ~20 MB SRAM</div>
+</div>
+</div>
+<div class="mem-stats">
+<div class="mem-stat" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2)">
+<div class="mem-stat-value" style="color:#ef4444" id="stdReads">4N<sup>2</sup></div>
+<div class="mem-stat-label">Standard HBM Accesses</div>
+</div>
+<div class="mem-stat" style="background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2)">
+<div class="mem-stat-value" style="color:#10b981">O(N)</div>
+<div class="mem-stat-label">Flash HBM Accesses</div>
+</div>
+<div class="mem-stat" style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2)">
+<div class="mem-stat-value" style="color:#f59e0b">~1000x</div>
+<div class="mem-stat-label">SRAM vs HBM Speed</div>
+</div>
+</div>
+</section>
+
+<!-- Section 6: Sequence Length Impact -->
+<section class="gradient-bg" id="sec5">
+<h2 class="section-title">Sequence Length <span class="highlight-amber">Impact</span></h2>
+<p class="section-desc">Drag the slider to see how memory usage diverges as sequence length increases.</p>
+<div class="seq-slider-area">
+<div style="display:flex;justify-content:space-between;font-size:.8rem;color:#64748b">
+<span>1K tokens</span>
+<span>Sequence Length</span>
+<span>256K tokens</span>
+</div>
+<input type="range" class="seq-slider" id="seqSlider" min="1" max="256" value="8" oninput="updateSeqImpact()">
+<div style="text-align:center;margin:15px 0">
+<span id="seqDisplay" style="font-size:1.5rem;font-weight:700;color:#00d46a">8K</span>
+</div>
+<div class="mem-compare-bars">
+<div class="mcb-wrap">
+<div class="mcb-bar" id="stdBar" style="background:linear-gradient(180deg,#ef4444,#b91c1c)">
+<span style="font-size:.7rem;font-weight:700;color:#fff" id="stdBarVal">256 MB</span>
+</div>
+<div class="mcb-label">Standard<br>Attention</div>
+</div>
+<div class="mcb-wrap">
+<div class="mcb-bar" id="flashBar" style="background:linear-gradient(180deg,#10b981,#059669)">
+<span style="font-size:.7rem;font-weight:700;color:#fff" id="flashBarVal">2 MB</span>
+</div>
+<div class="mcb-label">Flash<br>Attention</div>
+</div>
+</div>
+<div id="seqNote" style="margin-top:15px;font-size:.8rem;color:#94a3b8;text-align:center"></div>
+</div>
+</section>
+
+<!-- Section 7: Performance Versions -->
+<section id="sec6">
+<h2 class="section-title">FlashAttention <span class="highlight">Evolution</span></h2>
+<p class="section-desc">Each version brought significant improvements in speed and hardware utilization.</p>
+<div class="perf-grid">
+<div class="perf-card" style="background:rgba(0,212,106,.08);border:1px solid rgba(0,212,106,.2)">
+<div style="font-size:1.5rem;font-weight:800;color:#00d46a">FA-1</div>
+<div style="font-size:.7rem;color:#64748b;margin:5px 0">Jun 2022</div>
+<div style="font-size:.85rem;color:#94a3b8">IO-aware tiling</div>
+<div style="margin-top:10px;font-size:.75rem;color:#00d46a">2-4x speedup<br>over PyTorch</div>
+</div>
+<div class="perf-card" style="background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.2)">
+<div style="font-size:1.5rem;font-weight:800;color:#22d3ee">FA-2</div>
+<div style="font-size:.7rem;color:#64748b;margin:5px 0">Jul 2023</div>
+<div style="font-size:.85rem;color:#94a3b8">Better parallelism<br>& work partitioning</div>
+<div style="margin-top:10px;font-size:.75rem;color:#67e8f9">2x over FA-1<br>50-73% FLOPS util</div>
+</div>
+<div class="perf-card" style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2)">
+<div style="font-size:1.5rem;font-weight:800;color:#10b981">FA-3</div>
+<div style="font-size:.7rem;color:#64748b;margin:5px 0">Jul 2024</div>
+<div style="font-size:.85rem;color:#94a3b8">H100 Tensor Cores<br>FP8 support</div>
+<div style="margin-top:10px;font-size:.75rem;color:#6ee7b7">1.5-2x over FA-2<br>75% FLOPS util</div>
+</div>
+<div class="perf-card" style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2)">
+<div style="font-size:1.5rem;font-weight:800;color:#f59e0b">FA-4</div>
+<div style="font-size:.7rem;color:#64748b;margin:5px 0">2025</div>
+<div style="font-size:.85rem;color:#94a3b8">Blackwell TMA<br>Persistent kernels</div>
+<div style="margin-top:10px;font-size:.75rem;color:#fbbf24">Target: near 100%<br>FLOPS utilization</div>
+</div>
+</div>
+<div style="margin-top:30px;max-width:600px;text-align:center">
+<div style="font-size:.85rem;color:#94a3b8">Relative Performance (TFLOPS on H100):</div>
+<div style="display:flex;align-items:flex-end;gap:15px;justify-content:center;margin-top:15px;height:120px" id="faVersionBars">
+<div style="text-align:center">
+<div id="faBar0" style="width:60px;height:0;background:linear-gradient(180deg,#00d46a,#00a854);border-radius:6px 6px 0 0;transition:height 1.5s;display:flex;align-items:flex-start;justify-content:center;padding-top:5px"><span style="font-size:.7rem;font-weight:700;color:#fff">150</span></div>
+<div style="font-size:.7rem;color:#94a3b8;margin-top:5px">FA-1</div>
+</div>
+<div style="text-align:center">
+<div id="faBar1" style="width:60px;height:0;background:linear-gradient(180deg,#22d3ee,#0891b2);border-radius:6px 6px 0 0;transition:height 1.5s;display:flex;align-items:flex-start;justify-content:center;padding-top:5px"><span style="font-size:.7rem;font-weight:700;color:#fff">300</span></div>
+<div style="font-size:.7rem;color:#94a3b8;margin-top:5px">FA-2</div>
+</div>
+<div style="text-align:center">
+<div id="faBar2" style="width:60px;height:0;background:linear-gradient(180deg,#10b981,#059669);border-radius:6px 6px 0 0;transition:height 1.5s;display:flex;align-items:flex-start;justify-content:center;padding-top:5px"><span style="font-size:.7rem;font-weight:700;color:#fff">500</span></div>
+<div style="font-size:.7rem;color:#94a3b8;margin-top:5px">FA-3</div>
+</div>
+<div style="text-align:center">
+<div id="faBar3" style="width:60px;height:0;background:linear-gradient(180deg,#f59e0b,#d97706);border-radius:6px 6px 0 0;transition:height 1.5s;display:flex;align-items:flex-start;justify-content:center;padding-top:5px"><span style="font-size:.7rem;font-weight:700;color:#fff">700+</span></div>
+<div style="font-size:.7rem;color:#94a3b8;margin-top:5px">FA-4</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- Section 8: Takeaways -->
+<section class="gradient-bg" id="sec7">
+<h2 class="section-title">Key <span class="highlight-amber">Takeaways</span></h2>
+<div class="info-grid" style="margin-top:20px">
+<div class="card">
+<h4 style="color:#10b981;margin-bottom:8px">Tiling Is the Core Idea</h4>
+<p style="font-size:.82rem;color:#94a3b8">By processing attention in tiles that fit in SRAM, FlashAttention avoids the O(N^2) HBM bottleneck entirely.</p>
+</div>
+<div class="card">
+<h4 style="color:#22d3ee;margin-bottom:8px">Online Softmax Enables It</h4>
+<p style="font-size:.82rem;color:#94a3b8">The mathematical trick: compute softmax incrementally across tiles using running max and sum, then rescale. Exact results, no approximation.</p>
+</div>
+<div class="card">
+<h4 style="color:#f59e0b;margin-bottom:8px">Enables Long Context</h4>
+<p style="font-size:.82rem;color:#94a3b8">Without FlashAttention, 128K context would need 32 GB per attention head. With it, memory stays constant regardless of sequence length.</p>
+</div>
+<div class="card">
+<h4 style="color:#00d46a;margin-bottom:8px">Used Everywhere</h4>
+<p style="font-size:.82rem;color:#94a3b8">vLLM, SGLang, TensorRT-LLM, PyTorch all use FlashAttention by default. It is the single most impactful inference optimization.</p>
+</div>
+</div>
+</section>
+
+<script>
+const sections = document.querySelectorAll('section');
+const navDots = document.getElementById('navDots');
+sections.forEach((s,i) => {
+  const dot = document.createElement('div');
+  dot.className = 'nav-dot';
+  dot.onclick = () => s.scrollIntoView({behavior:'smooth'});
+  navDots.appendChild(dot);
+});
+window.addEventListener('scroll', () => {
+  const scrollPct = window.scrollY / (document.body.scrollHeight - window.innerHeight);
+  document.getElementById('progressBar').style.width = (scrollPct*100)+'%';
+  const dots = document.querySelectorAll('.nav-dot');
+  sections.forEach((s,i) => {
+    const rect = s.getBoundingClientRect();
+    if(rect.top < window.innerHeight/2 && rect.bottom > window.innerHeight/2){
+      dots.forEach(d => d.classList.remove('active'));
+      dots[i].classList.add('active');
+    }
+  });
+});
+
+// Fill matrices
+const fullMatrix = document.getElementById('fullMatrix');
+const tiledMatrix = document.getElementById('tiledMatrix');
+for(let i=0;i<64;i++){
+  const c1 = document.createElement('div');
+  c1.className = 'matrix-cell';
+  c1.style.background = 'rgba(239,68,68,.3)';
+  fullMatrix.appendChild(c1);
+  const c2 = document.createElement('div');
+  c2.className = 'matrix-cell';
+  c2.style.background = 'rgba(100,116,139,.1)';
+  c2.dataset.idx = i;
+  tiledMatrix.appendChild(c2);
+}
+
+// Animate tiled matrix
+let tileAnim;
+function animateTiledMatrix(){
+  const cells = tiledMatrix.querySelectorAll('.matrix-cell');
+  let tileIdx = 0;
+  const tileSize = 2;
+  const gridSize = 8;
+  clearInterval(tileAnim);
+  tileAnim = setInterval(() => {
+    cells.forEach(c => c.style.background = 'rgba(100,116,139,.1)');
+    const tileRow = Math.floor(tileIdx / (gridSize/tileSize)) * tileSize;
+    const tileCol = (tileIdx % (gridSize/tileSize)) * tileSize;
+    for(let r=tileRow;r<tileRow+tileSize && r<gridSize;r++){
+      for(let c=tileCol;c<tileCol+tileSize && c<gridSize;c++){
+        const idx = r*gridSize+c;
+        if(cells[idx]) cells[idx].style.background = 'rgba(16,185,129,.6)';
+      }
+    }
+    tileIdx = (tileIdx+1) % ((gridSize/tileSize)*(gridSize/tileSize));
+  }, 500);
+}
+animateTiledMatrix();
+
+// Tiling canvas animation
+function animateTiling(){
+  const canvas = document.getElementById('tileCanvas');
+  const ctx = canvas.getContext('2d');
+  const size = 350;
+  const gridN = 8;
+  const cellSize = size/gridN;
+  let currentTile = 0;
+  const totalTiles = gridN * gridN / 4;
+  const tileW = 2;
+
+  function draw(){
+    ctx.clearRect(0,0,size,size);
+    // Draw grid
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    for(let i=0;i<=gridN;i++){
+      ctx.beginPath();ctx.moveTo(i*cellSize,0);ctx.lineTo(i*cellSize,size);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(0,i*cellSize);ctx.lineTo(size,i*cellSize);ctx.stroke();
+    }
+    // Draw processed tiles
+    for(let t=0;t<=currentTile;t++){
+      const tRow = Math.floor(t/(gridN/tileW))*tileW;
+      const tCol = (t%(gridN/tileW))*tileW;
+      const isActive = t === currentTile;
+      ctx.fillStyle = isActive ? 'rgba(16,185,129,.5)' : 'rgba(0,212,106,.15)';
+      ctx.fillRect(tCol*cellSize, tRow*cellSize, tileW*cellSize, tileW*cellSize);
+      if(isActive){
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(tCol*cellSize, tRow*cellSize, tileW*cellSize, tileW*cellSize);
+        // Label
+        ctx.fillStyle = '#10b981';
+        ctx.font = '700 12px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText('SRAM', tCol*cellSize+tileW*cellSize/2, tRow*cellSize+tileW*cellSize/2+4);
+      }
+    }
+    // Labels
+    ctx.fillStyle = '#94a3b8';ctx.font = '11px Inter';ctx.textAlign = 'center';
+    ctx.fillText('Q (queries)', size/2, size+15);
+    ctx.save();ctx.rotate(-Math.PI/2);ctx.fillText('K (keys)', -size/2, -5);ctx.restore();
+
+    currentTile++;
+    if(currentTile < totalTiles) setTimeout(draw, 300);
+    else currentTile = 0;
+  }
+  draw();
+}
+
+// Sequence length slider
+function updateSeqImpact(){
+  const val = parseInt(document.getElementById('seqSlider').value);
+  document.getElementById('seqDisplay').textContent = val+'K';
+  const n = val * 1024;
+  const stdBytes = n*n*2;
+  const flashBytes = n*128*2;
+  const maxH = 180;
+  const stdH = Math.min(maxH, Math.log2(stdBytes/1e6+1)*20);
+  const flashH = Math.min(maxH, Math.log2(flashBytes/1e6+1)*20+5);
+  document.getElementById('stdBar').style.height = stdH+'px';
+  document.getElementById('flashBar').style.height = flashH+'px';
+  document.getElementById('stdBarVal').textContent = formatBytes(stdBytes);
+  document.getElementById('flashBarVal').textContent = formatBytes(flashBytes);
+
+  const ratio = (stdBytes/flashBytes).toFixed(0);
+  document.getElementById('seqNote').textContent = `Standard uses ${ratio}x more memory than FlashAttention at ${val}K tokens.`;
+}
+function formatBytes(b){
+  if(b<1024) return b+' B';
+  if(b<1048576) return (b/1024).toFixed(0)+' KB';
+  if(b<1073741824) return (b/1048576).toFixed(0)+' MB';
+  return (b/1073741824).toFixed(1)+' GB';
+}
+updateSeqImpact();
+
+// FA version bars
+let faAnimated = false;
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if(e.isIntersecting && e.target.id === 'sec6' && !faAnimated){
+      faAnimated = true;
+      const heights = [30, 60, 100, 120];
+      heights.forEach((h,i) => {
+        setTimeout(() => document.getElementById('faBar'+i).style.height = h+'px', i*200);
+      });
+    }
+  });
+},{threshold:.3});
+sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

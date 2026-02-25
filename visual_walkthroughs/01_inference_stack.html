@@ -4,20 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Full Inference Stack - Visual Walkthrough</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 :root {
-  --bg: #0a0a0f;
-  --bg-card: #12121a;
-  --bg-card-hover: #1a1a2e;
-  --border: #1e1e3a;
-  --primary: #6366f1;
-  --secondary: #22d3ee;
+  --bg: #0a0a0a;
+  --bg-card: #121212;
+  --bg-card-hover: #1a1a1a;
+  --border: #262626;
+  --primary: #00d46a;
+  --secondary: #00c8e6;
   --tertiary: #f59e0b;
   --success: #10b981;
-  --text: #e2e8f0;
-  --text-muted: #94a3b8;
+  --text: #f2f2f2;
+  --text-muted: #a3a3a3;
   --text-dim: #64748b;
   --danger: #ef4444;
 }
@@ -39,20 +39,20 @@ code, .mono { font-family: 'JetBrains Mono', monospace; }
 /* Background effects */
 .bg-grid {
   background-image:
-    linear-gradient(rgba(99,102,241,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(99,102,241,0.03) 1px, transparent 1px);
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
   background-size: 60px 60px;
 }
 .bg-glow-1 {
   position: fixed; top: 20%; left: 10%;
   width: 600px; height: 600px;
-  background: radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(0,212,106,0.08) 0%, transparent 70%);
   pointer-events: none; z-index: 0;
 }
 .bg-glow-2 {
   position: fixed; bottom: 10%; right: 10%;
   width: 500px; height: 500px;
-  background: radial-gradient(circle, rgba(34,211,238,0.06) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(0,200,230,0.06) 0%, transparent 70%);
   pointer-events: none; z-index: 0;
 }
 
@@ -66,7 +66,7 @@ code, .mono { font-family: 'JetBrains Mono', monospace; }
 /* Navigation */
 .nav {
   position: fixed; top: 0; left: 0; right: 0;
-  background: rgba(10,10,15,0.85);
+  background: rgba(10,10,10,0.85);
   backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
   z-index: 999; padding: 0 2rem;
@@ -101,11 +101,11 @@ code, .mono { font-family: 'JetBrains Mono', monospace; }
 .section-content.visible { opacity: 1; transform: translateY(0); }
 
 /* Typography */
-h1 { font-size: 3.5rem; font-weight: 800; line-height: 1.1; margin-bottom: 1rem; }
-h2 { font-size: 2.5rem; font-weight: 700; line-height: 1.2; margin-bottom: 1rem; }
+h1 { font-size: 3.5rem; font-weight: 800; line-height: 1.1; margin-bottom: 1rem; font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; }
+h2 { font-size: 2.5rem; font-weight: 700; line-height: 1.2; margin-bottom: 1rem; font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; }
 h3 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; }
 .gradient-text {
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  background: linear-gradient(135deg, #00d46a, #00c8e6);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   background-clip: text;
 }
@@ -114,8 +114,8 @@ h3 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; }
   display: inline-flex; align-items: center; gap: 8px;
   padding: 6px 16px; border-radius: 100px;
   font-size: 0.8rem; font-weight: 500;
-  border: 1px solid rgba(99,102,241,0.3);
-  background: rgba(99,102,241,0.1);
+  border: 1px solid rgba(0,212,106,0.3);
+  background: rgba(0,212,106,0.1);
   color: var(--primary); margin-bottom: 1.5rem;
 }
 .badge .pulse {
@@ -190,15 +190,15 @@ h3 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; }
   gap: 12px;
 }
 .component-card {
-  background: rgba(99,102,241,0.05);
-  border: 1px solid rgba(99,102,241,0.15);
+  background: rgba(0,212,106,0.05);
+  border: 1px solid rgba(0,212,106,0.15);
   border-radius: 12px; padding: 1rem;
   transition: all 0.3s; position: relative;
 }
 .component-card:hover {
-  border-color: rgba(99,102,241,0.4);
+  border-color: rgba(0,212,106,0.4);
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(99,102,241,0.1);
+  box-shadow: 0 0 20px rgba(0,212,106,0.15), 0 0 60px rgba(0,212,106,0.05);
 }
 .component-card h4 {
   font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem;
@@ -381,7 +381,7 @@ h3 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; }
       from low-level GPU operations to high-level orchestration tooling.
     </p>
     <div style="display:flex;gap:1rem;margin-top:2rem;flex-wrap:wrap;">
-      <div style="padding:12px 20px;border-radius:12px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);font-size:0.85rem;">
+      <div style="padding:12px 20px;border-radius:12px;background:rgba(0,212,106,0.1);border:1px solid rgba(0,212,106,0.3);font-size:0.85rem;">
         <span style="color:var(--primary);font-weight:600;">3 Layers</span>
         <span style="color:var(--text-muted);"> to understand</span>
       </div>
@@ -526,7 +526,7 @@ h3 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; }
       <div class="stack-layer" data-layer="runtime" onclick="toggleLayer(this)">
         <div class="layer-header">
           <div class="layer-header-left">
-            <div class="layer-icon" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);color:var(--primary);">&#x26A1;</div>
+            <div class="layer-icon" style="background:rgba(0,212,106,0.15);border:1px solid rgba(0,212,106,0.3);color:var(--primary);">&#x26A1;</div>
             <div>
               <div class="layer-title" style="color:var(--primary);">Runtime</div>
               <div class="layer-subtitle">Low-level execution, GPU kernels, and model compilation</div>
@@ -536,29 +536,29 @@ h3 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; }
         </div>
         <div class="layer-content">
           <div class="components-grid">
-            <div class="component-card tooltip-container" style="border-color:rgba(99,102,241,0.2);">
+            <div class="component-card tooltip-container" style="border-color:rgba(0,212,106,0.2);">
               <div class="tooltip">NVIDIA's parallel computing platform for GPU programming</div>
               <h4 style="color:var(--primary);">CUDA / cuDNN</h4>
               <p>GPU kernel execution, memory management, and optimized math libraries</p>
-              <span class="component-tag" style="background:rgba(99,102,241,0.15);color:var(--primary);">GPU</span>
+              <span class="component-tag" style="background:rgba(0,212,106,0.15);color:var(--primary);">GPU</span>
             </div>
-            <div class="component-card tooltip-container" style="border-color:rgba(99,102,241,0.2);">
+            <div class="component-card tooltip-container" style="border-color:rgba(0,212,106,0.2);">
               <div class="tooltip">Deep learning framework with automatic differentiation</div>
               <h4 style="color:var(--primary);">PyTorch</h4>
               <p>Model definition, tensor operations, and the foundation for inference engines</p>
-              <span class="component-tag" style="background:rgba(99,102,241,0.15);color:var(--primary);">Framework</span>
+              <span class="component-tag" style="background:rgba(0,212,106,0.15);color:var(--primary);">Framework</span>
             </div>
-            <div class="component-card tooltip-container" style="border-color:rgba(99,102,241,0.2);">
+            <div class="component-card tooltip-container" style="border-color:rgba(0,212,106,0.2);">
               <div class="tooltip">Compiles PyTorch models into optimized GPU code</div>
               <h4 style="color:var(--primary);">torch.compile / Dynamo</h4>
               <p>Graph capture, operator fusion, and automatic kernel optimization</p>
-              <span class="component-tag" style="background:rgba(99,102,241,0.15);color:var(--primary);">Compiler</span>
+              <span class="component-tag" style="background:rgba(0,212,106,0.15);color:var(--primary);">Compiler</span>
             </div>
-            <div class="component-card tooltip-container" style="border-color:rgba(99,102,241,0.2);">
+            <div class="component-card tooltip-container" style="border-color:rgba(0,212,106,0.2);">
               <div class="tooltip">Custom CUDA kernels for attention and memory operations</div>
               <h4 style="color:var(--primary);">FlashAttention / Custom Kernels</h4>
               <p>IO-aware attention, fused operations, and hardware-specific optimizations</p>
-              <span class="component-tag" style="background:rgba(99,102,241,0.15);color:var(--primary);">Kernels</span>
+              <span class="component-tag" style="background:rgba(0,212,106,0.15);color:var(--primary);">Kernels</span>
             </div>
           </div>
         </div>
@@ -633,28 +633,28 @@ h3 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; }
         <h3 style="color:var(--primary);font-size:1rem;margin-bottom:1rem;">Execution Pipeline</h3>
         <div style="display:flex;flex-direction:column;gap:0.75rem;">
           <div class="runtime-step" style="display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;transition:all 0.3s;" onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)'">
-            <div style="width:36px;height:36px;border-radius:8px;background:rgba(99,102,241,0.2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--primary);font-size:0.85rem;flex-shrink:0;">1</div>
+            <div style="width:36px;height:36px;border-radius:8px;background:rgba(0,212,106,0.2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--primary);font-size:0.85rem;flex-shrink:0;">1</div>
             <div>
               <div style="font-weight:600;font-size:0.9rem;">Python &rarr; TorchDynamo</div>
               <div style="font-size:0.78rem;color:var(--text-muted);">Graph capture from eager-mode PyTorch</div>
             </div>
           </div>
           <div class="runtime-step" style="display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;transition:all 0.3s;" onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)'">
-            <div style="width:36px;height:36px;border-radius:8px;background:rgba(99,102,241,0.2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--primary);font-size:0.85rem;flex-shrink:0;">2</div>
+            <div style="width:36px;height:36px;border-radius:8px;background:rgba(0,212,106,0.2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--primary);font-size:0.85rem;flex-shrink:0;">2</div>
             <div>
               <div style="font-weight:600;font-size:0.9rem;">TorchInductor Backend</div>
               <div style="font-size:0.78rem;color:var(--text-muted);">Operator fusion and Triton kernel generation</div>
             </div>
           </div>
           <div class="runtime-step" style="display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;transition:all 0.3s;" onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)'">
-            <div style="width:36px;height:36px;border-radius:8px;background:rgba(99,102,241,0.2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--primary);font-size:0.85rem;flex-shrink:0;">3</div>
+            <div style="width:36px;height:36px;border-radius:8px;background:rgba(0,212,106,0.2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--primary);font-size:0.85rem;flex-shrink:0;">3</div>
             <div>
               <div style="font-weight:600;font-size:0.9rem;">CUDA Kernels Launch</div>
               <div style="font-size:0.78rem;color:var(--text-muted);">Compiled kernels dispatched to GPU SMs</div>
             </div>
           </div>
           <div class="runtime-step" style="display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;transition:all 0.3s;" onmouseenter="this.style.borderColor='var(--primary)'" onmouseleave="this.style.borderColor='var(--border)'">
-            <div style="width:36px;height:36px;border-radius:8px;background:rgba(99,102,241,0.2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--primary);font-size:0.85rem;flex-shrink:0;">4</div>
+            <div style="width:36px;height:36px;border-radius:8px;background:rgba(0,212,106,0.2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--primary);font-size:0.85rem;flex-shrink:0;">4</div>
             <div>
               <div style="font-weight:600;font-size:0.9rem;">Tensor Core MMA</div>
               <div style="font-size:0.78rem;color:var(--text-muted);">Matrix multiply-accumulate on hardware units</div>
@@ -755,9 +755,9 @@ h3 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; }
   --gpu-memory-utilization <span class="number">0.95</span>
         </div>
         <div style="display:flex;gap:0.5rem;margin-top:1rem;flex-wrap:wrap;">
-          <span style="padding:4px 10px;border-radius:6px;background:rgba(99,102,241,0.1);color:var(--primary);font-size:0.7rem;font-weight:600;">PagedAttention</span>
-          <span style="padding:4px 10px;border-radius:6px;background:rgba(99,102,241,0.1);color:var(--primary);font-size:0.7rem;font-weight:600;">Continuous Batching</span>
-          <span style="padding:4px 10px;border-radius:6px;background:rgba(99,102,241,0.1);color:var(--primary);font-size:0.7rem;font-weight:600;">Prefix Caching</span>
+          <span style="padding:4px 10px;border-radius:6px;background:rgba(0,212,106,0.1);color:var(--primary);font-size:0.7rem;font-weight:600;">PagedAttention</span>
+          <span style="padding:4px 10px;border-radius:6px;background:rgba(0,212,106,0.1);color:var(--primary);font-size:0.7rem;font-weight:600;">Continuous Batching</span>
+          <span style="padding:4px 10px;border-radius:6px;background:rgba(0,212,106,0.1);color:var(--primary);font-size:0.7rem;font-weight:600;">Prefix Caching</span>
         </div>
       </div>
       <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:1.5rem;transition:all 0.3s;" onmouseenter="this.style.borderColor='var(--success)'" onmouseleave="this.style.borderColor='var(--border)'">
@@ -805,7 +805,7 @@ h3 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; }
           <div style="font-size:0.78rem;color:var(--text-muted);">Kubernetes, Autoscaling, Multi-cloud</div>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:1rem;padding:0.75rem;border-radius:10px;background:rgba(99,102,241,0.05);border-left:3px solid var(--primary);">
+      <div style="display:flex;align-items:center;gap:1rem;padding:0.75rem;border-radius:10px;background:rgba(0,212,106,0.05);border-left:3px solid var(--primary);">
         <span style="font-size:1.2rem;">&#x26A1;</span>
         <div>
           <div style="font-weight:600;color:var(--primary);font-size:0.9rem;">Runtime</div>
@@ -944,7 +944,7 @@ class Particle {
     this.speedX = (Math.random() - 0.5) * 0.3;
     this.speedY = (Math.random() - 0.5) * 0.3;
     this.opacity = Math.random() * 0.3 + 0.1;
-    const colors = ['99,102,241', '34,211,238', '245,158,11'];
+    const colors = ['0,212,106', '34,211,238', '245,158,11'];
     this.color = colors[Math.floor(Math.random() * colors.length)];
   }
   update() {

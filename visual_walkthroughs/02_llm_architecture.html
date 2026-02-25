@@ -4,20 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LLM Architecture Deep Dive - Visual Walkthrough</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#0a0a0f;--bg-card:#12121a;--bg-card-hover:#1a1a2e;--border:#1e1e3a;--primary:#6366f1;--secondary:#22d3ee;--tertiary:#f59e0b;--success:#10b981;--text:#e2e8f0;--text-muted:#94a3b8;--text-dim:#64748b;--danger:#ef4444}
+:root{--bg:#0a0a0a;--bg-card:#121212;--bg-card-hover:#1a1a1a;--border:#262626;--primary:#00d46a;--secondary:#00c8e6;--tertiary:#f59e0b;--success:#10b981;--text:#f2f2f2;--text-muted:#a3a3a3;--text-dim:#64748b;--danger:#ef4444}
 body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;line-height:1.6;overflow-x:hidden}
 code,.mono{font-family:'JetBrains Mono',monospace}
 ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 
-.bg-grid{background-image:linear-gradient(rgba(99,102,241,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(99,102,241,0.03) 1px,transparent 1px);background-size:60px 60px}
-.bg-glow-1{position:fixed;top:15%;left:5%;width:600px;height:600px;background:radial-gradient(circle,rgba(99,102,241,0.08) 0%,transparent 70%);pointer-events:none;z-index:0}
-.bg-glow-2{position:fixed;bottom:10%;right:5%;width:500px;height:500px;background:radial-gradient(circle,rgba(34,211,238,0.06) 0%,transparent 70%);pointer-events:none;z-index:0}
+.bg-grid{background-image:linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px);background-size:60px 60px}
+.bg-glow-1{position:fixed;top:15%;left:5%;width:600px;height:600px;background:radial-gradient(circle,rgba(0,212,106,0.08) 0%,transparent 70%);pointer-events:none;z-index:0}
+.bg-glow-2{position:fixed;bottom:10%;right:5%;width:500px;height:500px;background:radial-gradient(circle,rgba(0,200,230,0.06) 0%,transparent 70%);pointer-events:none;z-index:0}
 
 .progress-bar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--primary),var(--secondary));z-index:1000;transition:width .3s}
-.nav{position:fixed;top:0;left:0;right:0;background:rgba(10,10,15,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);z-index:999;padding:0 2rem}
+.nav{position:fixed;top:0;left:0;right:0;background:rgba(10,10,10,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);z-index:999;padding:0 2rem}
 .nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:60px}
 .nav-title{font-weight:700;font-size:.9rem}.nav-title span{color:var(--primary)}
 .nav-dots{display:flex;gap:8px}
@@ -29,12 +29,12 @@ code,.mono{font-family:'JetBrains Mono',monospace}
 .section-content{max-width:1100px;width:100%;margin:0 auto;opacity:0;transform:translateY(40px);transition:all .8s cubic-bezier(.16,1,.3,1)}
 .section-content.visible{opacity:1;transform:translateY(0)}
 
-h1{font-size:3.5rem;font-weight:800;line-height:1.1;margin-bottom:1rem}
-h2{font-size:2.5rem;font-weight:700;line-height:1.2;margin-bottom:1rem}
+h1{font-size:3.5rem;font-weight:800;line-height:1.1;margin-bottom:1rem;font-family:'Instrument Serif',serif;font-style:italic;font-weight:400}
+h2{font-size:2.5rem;font-weight:700;line-height:1.2;margin-bottom:1rem;font-family:'Instrument Serif',serif;font-style:italic;font-weight:400}
 h3{font-size:1.3rem;font-weight:600;margin-bottom:.75rem}
-.gradient-text{background:linear-gradient(135deg,var(--primary),var(--secondary));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.gradient-text{background:linear-gradient(135deg,#00d46a,#00c8e6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .subtitle{font-size:1.15rem;color:var(--text-muted);max-width:700px;margin-bottom:2rem}
-.badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:100px;font-size:.8rem;font-weight:500;border:1px solid rgba(99,102,241,0.3);background:rgba(99,102,241,0.1);color:var(--primary);margin-bottom:1.5rem}
+.badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:100px;font-size:.8rem;font-weight:500;border:1px solid rgba(0,212,106,0.3);background:rgba(0,212,106,0.1);color:var(--primary);margin-bottom:1.5rem}
 .badge .pulse{width:8px;height:8px;border-radius:50%;background:var(--primary);animation:pulse 2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.3)}}
 
@@ -48,20 +48,20 @@ h3{font-size:1.3rem;font-weight:600;margin-bottom:.75rem}
 /* Token flow animation */
 .token-flow{display:flex;align-items:center;gap:4px;padding:1rem;overflow-x:auto;margin:1rem 0}
 .token{display:inline-flex;align-items:center;justify-content:center;padding:6px 14px;border-radius:8px;font-size:.8rem;font-weight:600;white-space:nowrap;transition:all .4s;cursor:default;border:1px solid transparent}
-.token-input{background:rgba(99,102,241,0.15);color:var(--primary);border-color:rgba(99,102,241,0.3)}
+.token-input{background:rgba(0,212,106,0.15);color:var(--primary);border-color:rgba(0,212,106,0.3)}
 .token-special{background:rgba(245,158,11,0.15);color:var(--tertiary);border-color:rgba(245,158,11,0.3)}
 .token-output{background:rgba(16,185,129,0.15);color:var(--success);border-color:rgba(16,185,129,0.3)}
-.token.active{transform:scale(1.1);box-shadow:0 0 15px rgba(99,102,241,0.3)}
+.token.active{transform:scale(1.1);box-shadow:0 0 15px rgba(0,212,106,0.3)}
 
 /* Layer slider */
 .slider-container{margin:2rem 0;text-align:center}
 .layer-slider{-webkit-appearance:none;width:100%;max-width:500px;height:6px;border-radius:3px;background:var(--border);outline:none;transition:all .3s}
-.layer-slider::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--primary);cursor:pointer;box-shadow:0 0 12px rgba(99,102,241,0.5)}
+.layer-slider::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--primary);cursor:pointer;box-shadow:0 0 12px rgba(0,212,106,0.5)}
 .slider-label{font-size:1rem;font-weight:600;color:var(--secondary);margin-bottom:.5rem}
 
 /* Transformer block */
 .transformer-block{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:1.5rem;margin:1rem 0;transition:all .5s;position:relative;overflow:hidden}
-.transformer-block.highlight{border-color:var(--primary);box-shadow:0 0 30px rgba(99,102,241,0.15)}
+.transformer-block.highlight{border-color:var(--primary);box-shadow:0 0 30px rgba(0,212,106,0.15)}
 .transformer-block::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--primary),var(--secondary));opacity:0;transition:opacity .3s}
 .transformer-block.highlight::before{opacity:1}
 
@@ -131,7 +131,7 @@ canvas#particles{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;po
     <h1>LLM Architecture<br><span class="gradient-text">Deep Dive</span></h1>
     <p class="subtitle">Follow a forward pass through a Large Language Model &mdash; from raw text to generated tokens. Understand every component along the way.</p>
     <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:1.5rem;">
-      <div style="padding:10px 18px;border-radius:10px;background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.3);font-size:.82rem;">
+      <div style="padding:10px 18px;border-radius:10px;background:rgba(0,212,106,0.1);border:1px solid rgba(0,212,106,0.3);font-size:.82rem;">
         <span style="color:var(--primary);font-weight:600;">Tokenization</span>
       </div>
       <div style="padding:10px 18px;border-radius:10px;background:rgba(34,211,238,0.1);border:1px solid rgba(34,211,238,0.3);font-size:.82rem;">
@@ -206,7 +206,7 @@ canvas#particles{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;po
           <div style="display:flex;align-items:center;gap:.75rem;">
             <span class="token token-input" style="min-width:70px;justify-content:center;">The</span>
             <span style="color:var(--text-dim);">&rarr;</span>
-            <div style="flex:1;height:24px;background:linear-gradient(90deg,rgba(99,102,241,0.3),rgba(34,211,238,0.3),rgba(99,102,241,0.1));border-radius:4px;position:relative;overflow:hidden;">
+            <div style="flex:1;height:24px;background:linear-gradient(90deg,rgba(0,212,106,0.3),rgba(34,211,238,0.3),rgba(0,212,106,0.1));border-radius:4px;position:relative;overflow:hidden;">
               <div class="flow-line" style="top:11px;"></div>
             </div>
             <span class="mono" style="font-size:.7rem;color:var(--text-dim);white-space:nowrap;">[d=8192]</span>
@@ -214,7 +214,7 @@ canvas#particles{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;po
           <div style="display:flex;align-items:center;gap:.75rem;">
             <span class="token token-input" style="min-width:70px;justify-content:center;">_trans</span>
             <span style="color:var(--text-dim);">&rarr;</span>
-            <div style="flex:1;height:24px;background:linear-gradient(90deg,rgba(34,211,238,0.3),rgba(99,102,241,0.3),rgba(34,211,238,0.1));border-radius:4px;position:relative;overflow:hidden;">
+            <div style="flex:1;height:24px;background:linear-gradient(90deg,rgba(34,211,238,0.3),rgba(0,212,106,0.3),rgba(34,211,238,0.1));border-radius:4px;position:relative;overflow:hidden;">
               <div class="flow-line" style="top:11px;animation-delay:.5s;"></div>
             </div>
             <span class="mono" style="font-size:.7rem;color:var(--text-dim);white-space:nowrap;">[d=8192]</span>
@@ -222,7 +222,7 @@ canvas#particles{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;po
           <div style="display:flex;align-items:center;gap:.75rem;">
             <span class="token token-input" style="min-width:70px;justify-content:center;">former</span>
             <span style="color:var(--text-dim);">&rarr;</span>
-            <div style="flex:1;height:24px;background:linear-gradient(90deg,rgba(99,102,241,0.2),rgba(245,158,11,0.3),rgba(99,102,241,0.1));border-radius:4px;position:relative;overflow:hidden;">
+            <div style="flex:1;height:24px;background:linear-gradient(90deg,rgba(0,212,106,0.2),rgba(245,158,11,0.3),rgba(0,212,106,0.1));border-radius:4px;position:relative;overflow:hidden;">
               <div class="flow-line" style="top:11px;animation-delay:1s;"></div>
             </div>
             <span class="mono" style="font-size:.7rem;color:var(--text-dim);white-space:nowrap;">[d=8192]</span>
@@ -454,7 +454,7 @@ canvas#particles{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;po
             </div>
             <div class="logits-row">
               <div class="logits-token">floor</div>
-              <div class="logits-bar-bg"><div class="logits-bar" style="width:0%;background:linear-gradient(90deg,var(--primary),rgba(99,102,241,0.5));" data-width="12">12%</div></div>
+              <div class="logits-bar-bg"><div class="logits-bar" style="width:0%;background:linear-gradient(90deg,var(--primary),rgba(0,212,106,0.5));" data-width="12">12%</div></div>
               <div class="logits-prob">0.12</div>
             </div>
             <div class="logits-row">
@@ -509,7 +509,7 @@ canvas#particles{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;po
 
     <div style="display:inline-block;text-align:left;background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:2rem;max-width:650px;width:100%;">
       <div style="display:flex;flex-direction:column;gap:.75rem;">
-        <div style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;border-radius:8px;background:rgba(99,102,241,0.05);border-left:3px solid var(--primary);">
+        <div style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;border-radius:8px;background:rgba(0,212,106,0.05);border-left:3px solid var(--primary);">
           <span style="font-size:1.1rem;min-width:24px;text-align:center;">1</span>
           <div><span style="font-weight:600;color:var(--primary);">Tokenize</span> <span style="color:var(--text-muted);font-size:.85rem;">&mdash; text to integer IDs via BPE</span></div>
         </div>
@@ -658,7 +658,7 @@ class Particle{
     this.size=Math.random()*1.5+0.5;
     this.speedX=(Math.random()-0.5)*0.3;this.speedY=(Math.random()-0.5)*0.3;
     this.opacity=Math.random()*0.25+0.05;
-    const c=['99,102,241','34,211,238','245,158,11'];
+    const c=['0,212,106','34,211,238','245,158,11'];
     this.color=c[Math.floor(Math.random()*c.length)];
   }
   update(){

@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prefix Caching & KV Cache Reuse | Inference Engineering</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a;
+  --bg-card: #121212;
+  --bg-card-hover: #1a1a1a;
+  --border: #262626;
+  --primary: #00d46a;
+  --secondary: #00c8e6;
+  --tertiary: #a855f7;
+  --success: #10b981;
+  --text: #f2f2f2;
+  --text-muted: #a3a3a3;
+  --text-dim: #737373;
+  --danger: #ef4444;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); overflow-x: hidden; }
+code, .mono { font-family: 'JetBrains Mono', monospace; }
+h1, h2 { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; }
+.gradient-text { background: linear-gradient(135deg, #00d46a, #00c8e6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+.grid-bg {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 60px 60px; z-index: 0; pointer-events: none;
+}
+.glow-orb { position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; }
+.glow-orb.green { width: 400px; height: 400px; background: rgba(0,212,106,0.08); top: 10%; left: -100px; }
+.glow-orb.cyan { width: 350px; height: 350px; background: rgba(0,200,230,0.06); bottom: 10%; right: -80px; }
+
+nav {
+  position: fixed; top: 0; left: 0; width: 100%; z-index: 1000;
+  background: rgba(10,10,10,0.85); backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border); padding: 0 2rem; height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+nav .logo { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.3rem; }
+nav .nav-links { display: flex; gap: 2rem; }
+nav .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 0.85rem; transition: color 0.3s; }
+nav .nav-links a:hover { color: var(--primary); }
+
+.progress-bar { position: fixed; top: 60px; left: 0; height: 3px; z-index: 999; background: linear-gradient(90deg, var(--primary), var(--secondary)); transition: width 0.3s ease; }
+
+.section-dots { position: fixed; right: 1.5rem; top: 50%; transform: translateY(-50%); z-index: 999; display: flex; flex-direction: column; gap: 12px; }
+.section-dots .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--text-dim); background: transparent; cursor: pointer; transition: all 0.3s; }
+.section-dots .dot.active { background: var(--primary); border-color: var(--primary); box-shadow: 0 0 10px rgba(0,212,106,0.5); }
+
+section { min-height: 100vh; position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; padding: 80px 2rem 2rem; }
+.section-inner { max-width: 1200px; width: 100%; opacity: 0; transform: translateY(40px); transition: all 0.8s cubic-bezier(0.16,1,0.3,1); }
+.section-inner.visible { opacity: 1; transform: translateY(0); }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; transition: all 0.3s; }
+.card:hover { background: var(--bg-card-hover); box-shadow: 0 0 40px rgba(0,212,106,0.15); }
+.badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; border: 1px solid var(--primary); background: rgba(0,212,106,0.1); color: var(--primary); margin-bottom: 1rem; }
+
+.hero h1 { font-size: clamp(2.5rem, 5vw, 4rem); line-height: 1.1; margin-bottom: 1rem; }
+.hero p { color: var(--text-muted); font-size: 1.15rem; max-width: 650px; line-height: 1.7; }
+
+.section-tag { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; color: var(--primary); margin-bottom: 0.5rem; }
+.section-title { font-size: clamp(1.8rem, 3vw, 2.5rem); margin-bottom: 1rem; }
+.section-desc { color: var(--text-muted); font-size: 1rem; max-width: 700px; line-height: 1.7; margin-bottom: 2rem; }
+
+.btn { padding: 0.6rem 1.5rem; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-family: 'Inter', sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.3s; }
+.btn:hover { border-color: var(--primary); box-shadow: 0 0 20px rgba(0,212,106,0.15); }
+.btn.active { background: rgba(0,212,106,0.15); border-color: var(--primary); color: var(--primary); }
+
+.explain-panel { margin-top: 1.5rem; padding: 1.5rem; background: rgba(0,212,106,0.03); border: 1px solid rgba(0,212,106,0.15); border-radius: 12px; font-size: 0.9rem; color: var(--text-muted); line-height: 1.7; }
+.explain-panel strong { color: var(--text); }
+
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+.stat-card { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; text-align: center; }
+.stat-card .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 1.8rem; font-weight: 700; margin-bottom: 0.25rem; }
+.stat-card .stat-label { font-size: 0.75rem; color: var(--text-muted); }
+
+/* Cache visualization */
+.cache-container {
+  background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 12px;
+  padding: 1.5rem; position: relative;
+}
+.cache-slot {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 8px 14px; border-radius: 8px; font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem; font-weight: 500; margin: 3px; transition: all 0.4s;
+  border: 1px solid var(--border); background: rgba(255,255,255,0.02);
+  color: var(--text-dim); position: relative;
+}
+.cache-slot.cached { background: rgba(0,212,106,0.1); border-color: rgba(0,212,106,0.3); color: var(--primary); }
+.cache-slot.computing { background: rgba(168,85,247,0.15); border-color: rgba(168,85,247,0.3); color: var(--tertiary); animation: pulse-comp 0.6s ease infinite; }
+.cache-slot.hit { background: rgba(0,200,230,0.15); border-color: rgba(0,200,230,0.4); color: var(--secondary); box-shadow: 0 0 12px rgba(0,200,230,0.2); }
+.cache-slot.miss { background: rgba(239,68,68,0.1); border-color: rgba(239,68,68,0.3); color: var(--danger); }
+.cache-slot.evicted { background: rgba(239,68,68,0.05); border-color: rgba(239,68,68,0.2); color: var(--danger); opacity: 0.5; text-decoration: line-through; }
+
+@keyframes pulse-comp {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(168,85,247,0.3); }
+  50% { box-shadow: 0 0 12px 3px rgba(168,85,247,0.15); }
+}
+
+/* Request card */
+.request-card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 1rem 1.5rem; margin-bottom: 0.75rem; transition: all 0.3s;
+  display: flex; align-items: center; gap: 1rem;
+}
+.request-card.processing { border-color: rgba(168,85,247,0.5); }
+.request-card.done { border-color: rgba(0,212,106,0.3); opacity: 0.8; }
+
+.request-status {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.request-status.pending { background: var(--text-dim); }
+.request-status.processing { background: var(--tertiary); animation: pulse-dot 1s ease infinite; }
+.request-status.done { background: var(--primary); }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; } 50% { opacity: 0.3; }
+}
+
+/* LRU visualization */
+.lru-container {
+  display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem;
+}
+.lru-slot {
+  width: 80px; height: 70px; border-radius: 10px; border: 1px solid var(--border);
+  background: rgba(255,255,255,0.02); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; font-size: 0.7rem;
+  transition: all 0.4s; position: relative;
+}
+.lru-slot.occupied { border-color: rgba(0,212,106,0.3); background: rgba(0,212,106,0.05); }
+.lru-slot.mru { border-color: var(--primary); box-shadow: 0 0 15px rgba(0,212,106,0.2); }
+.lru-slot.lru-target { border-color: var(--danger); box-shadow: 0 0 15px rgba(239,68,68,0.2); }
+.lru-slot .slot-label { font-size: 0.6rem; color: var(--text-dim); margin-top: 4px; }
+.lru-slot .slot-prefix { color: var(--primary); font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 0.75rem; }
+
+/* TTFT chart */
+.ttft-chart {
+  position: relative; height: 200px; background: rgba(0,0,0,0.2);
+  border-radius: 8px; border: 1px solid var(--border); overflow: hidden;
+}
+.ttft-bar-group {
+  position: absolute; bottom: 0; display: flex; flex-direction: column;
+  align-items: center; gap: 2px;
+}
+.ttft-bar {
+  width: 40px; border-radius: 4px 4px 0 0; transition: height 1s ease;
+}
+.ttft-label {
+  font-size: 0.65rem; color: var(--text-dim); position: absolute; bottom: -20px;
+  white-space: nowrap; text-align: center; width: 80px; left: 50%; transform: translateX(-50%);
+}
+
+/* Interactive request sender */
+.request-input {
+  display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap;
+}
+.request-input select, .request-input input {
+  padding: 0.6rem 1rem; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text); font-family: 'Inter', sans-serif;
+  font-size: 0.85rem;
+}
+.request-input select:focus, .request-input input:focus { border-color: var(--primary); outline: none; }
+
+@media (max-width: 768px) {
+  section { padding: 80px 1rem 1rem; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .request-input { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div class="glow-orb green"></div>
+<div class="glow-orb cyan"></div>
+
+<nav>
+  <div class="logo"><span class="gradient-text">Vizuara</span> Inference Engineering</div>
+  <div class="nav-links">
+    <a href="#hero">Overview</a>
+    <a href="#concept">Concept</a>
+    <a href="#matching">Matching</a>
+    <a href="#interactive">Interactive</a>
+    <a href="#lru">Eviction</a>
+    <a href="#summary">Summary</a>
+  </div>
+</nav>
+
+<div class="progress-bar" id="progressBar"></div>
+<div class="section-dots" id="sectionDots"></div>
+
+<!-- Hero -->
+<section id="hero">
+  <div class="section-inner hero">
+    <div class="badge">Module 18</div>
+    <h1><span class="gradient-text">Prefix Caching</span> & KV Cache Reuse</h1>
+    <p>Avoid recomputing the same KV cache for common prefixes. When multiple requests share system prompts or conversation history, prefix caching can slash Time-to-First-Token by 5-20x.</p>
+    <div style="display: flex; gap: 1rem; margin-top: 2rem; flex-wrap: wrap;">
+      <div class="stat-card" style="text-align: left; padding: 1rem 1.5rem;">
+        <div class="stat-value" style="font-size: 1.2rem; color: var(--primary);">5-20x</div>
+        <div class="stat-label">TTFT Improvement</div>
+      </div>
+      <div class="stat-card" style="text-align: left; padding: 1rem 1.5rem;">
+        <div class="stat-value" style="font-size: 1.2rem; color: var(--secondary);">~90%+</div>
+        <div class="stat-label">Hit Rate (Chatbots)</div>
+      </div>
+      <div class="stat-card" style="text-align: left; padding: 1rem 1.5rem;">
+        <div class="stat-value" style="font-size: 1.2rem; color: var(--tertiary);">GPU Mem</div>
+        <div class="stat-label">Tradeoff Resource</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Concept -->
+<section id="concept">
+  <div class="section-inner">
+    <div class="section-tag">Core Idea</div>
+    <h2 class="section-title"><span class="gradient-text">Why Prefix Caching?</span></h2>
+    <div class="section-desc">Many requests to an LLM share the same prefix (system prompt, few-shot examples, conversation history). Computing the KV cache for these shared tokens is wasted work.</div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+      <div class="card">
+        <h3 style="color: var(--danger); font-size: 1rem; margin-bottom: 1rem;">Without Prefix Caching</h3>
+        <div class="cache-container">
+          <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.5rem;">Request 1:</div>
+          <div style="display: flex; flex-wrap: wrap; margin-bottom: 1rem;">
+            <span class="cache-slot computing">You are</span>
+            <span class="cache-slot computing">a helpful</span>
+            <span class="cache-slot computing">assistant.</span>
+            <span class="cache-slot computing">What is</span>
+            <span class="cache-slot computing">Python?</span>
+          </div>
+          <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.5rem;">Request 2:</div>
+          <div style="display: flex; flex-wrap: wrap;">
+            <span class="cache-slot computing">You are</span>
+            <span class="cache-slot computing">a helpful</span>
+            <span class="cache-slot computing">assistant.</span>
+            <span class="cache-slot computing">Explain</span>
+            <span class="cache-slot computing">recursion</span>
+          </div>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--danger); margin-top: 1rem;">
+          System prompt computed twice. 60% wasted computation.
+        </p>
+      </div>
+
+      <div class="card" style="border-color: rgba(0,212,106,0.3);">
+        <h3 style="color: var(--primary); font-size: 1rem; margin-bottom: 1rem;">With Prefix Caching</h3>
+        <div class="cache-container">
+          <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.5rem;">Request 1:</div>
+          <div style="display: flex; flex-wrap: wrap; margin-bottom: 1rem;">
+            <span class="cache-slot computing">You are</span>
+            <span class="cache-slot computing">a helpful</span>
+            <span class="cache-slot computing">assistant.</span>
+            <span class="cache-slot computing">What is</span>
+            <span class="cache-slot computing">Python?</span>
+          </div>
+          <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.5rem;">Request 2:</div>
+          <div style="display: flex; flex-wrap: wrap;">
+            <span class="cache-slot hit">You are</span>
+            <span class="cache-slot hit">a helpful</span>
+            <span class="cache-slot hit">assistant.</span>
+            <span class="cache-slot computing">Explain</span>
+            <span class="cache-slot computing">recursion</span>
+          </div>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--primary); margin-top: 1rem;">
+          System prompt cached and reused. Only unique tokens computed.
+        </p>
+      </div>
+    </div>
+
+    <div class="explain-panel">
+      <strong>How It Works:</strong> After processing the first request, the KV cache for the shared prefix ("You are a helpful assistant.") is stored in GPU memory. Subsequent requests with the same prefix skip prefill for those tokens and jump straight to computing the unique suffix. This dramatically reduces TTFT.
+    </div>
+  </div>
+</section>
+
+<!-- Prefix Matching -->
+<section id="matching">
+  <div class="section-inner">
+    <div class="section-tag">Matching</div>
+    <h2 class="section-title"><span class="gradient-text">Prefix Matching in Action</span></h2>
+    <div class="section-desc">Watch how incoming requests are matched against cached prefixes. Matching uses a hash-based trie for O(1) prefix lookups.</div>
+
+    <div class="card">
+      <h3 style="font-size: 1rem; margin-bottom: 1rem;">Animated Request Processing</h3>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+        <div>
+          <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.75rem;">Incoming Request Tokens:</div>
+          <div id="matchTokens" style="display: flex; flex-wrap: wrap; gap: 4px; min-height: 80px;"></div>
+          <div style="margin-top: 1.5rem;">
+            <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.5rem;">Prefix Cache (stored KV caches):</div>
+            <div id="cacheEntries" style="display: flex; flex-direction: column; gap: 0.5rem;"></div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.75rem;">Result:</div>
+          <div id="matchResult" style="min-height: 100px; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 8px;">
+            <span style="color: var(--text-dim); font-size: 0.85rem;">Click "Run Match" to see prefix matching</span>
+          </div>
+          <div style="margin-top: 1rem;">
+            <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.5rem;">TTFT Comparison:</div>
+            <div id="ttftCompare" style="display: flex; gap: 1rem;">
+              <div class="stat-card" style="flex: 1;">
+                <div class="stat-value" id="ttftNoCache" style="font-size: 1.2rem; color: var(--danger);">--</div>
+                <div class="stat-label">Without Cache</div>
+              </div>
+              <div class="stat-card" style="flex: 1;">
+                <div class="stat-value" id="ttftWithCache" style="font-size: 1.2rem; color: var(--primary);">--</div>
+                <div class="stat-label">With Cache</div>
+              </div>
+              <div class="stat-card" style="flex: 1;">
+                <div class="stat-value" id="ttftSpeedup" style="font-size: 1.2rem; color: var(--secondary);">--</div>
+                <div class="stat-label">Speedup</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem; flex-wrap: wrap;">
+        <button class="btn" onclick="runPrefixMatch('system')">Match: System Prompt</button>
+        <button class="btn" onclick="runPrefixMatch('fewshot')">Match: Few-Shot</button>
+        <button class="btn" onclick="runPrefixMatch('miss')">Match: Cache Miss</button>
+        <button class="btn" onclick="resetMatch()">Reset</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Interactive Playground -->
+<section id="interactive">
+  <div class="section-inner">
+    <div class="section-tag">Playground</div>
+    <h2 class="section-title"><span class="gradient-text">Send Requests, See Cache Hits</span></h2>
+    <div class="section-desc">Simulate a series of requests and watch the prefix cache populate and serve cache hits.</div>
+
+    <div class="card">
+      <div class="request-input">
+        <select id="reqTemplate">
+          <option value="chat1">Chat: "What is machine learning?"</option>
+          <option value="chat2">Chat: "Explain neural networks"</option>
+          <option value="chat3">Chat: "How does backprop work?"</option>
+          <option value="code1">Code: "Write a Python sort function"</option>
+          <option value="code2">Code: "Write a binary search in Python"</option>
+          <option value="new1">New System: "You are a poet. Write haiku"</option>
+        </select>
+        <button class="btn" onclick="sendRequest()">Send Request</button>
+        <button class="btn" onclick="clearRequests()">Clear All</button>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+        <div>
+          <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.75rem;">Request Log</div>
+          <div id="requestLog" style="max-height: 350px; overflow-y: auto;"></div>
+        </div>
+        <div>
+          <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.75rem;">Prefix Cache State</div>
+          <div id="cacheState" style="min-height: 200px;">
+            <div style="font-size: 0.8rem; color: var(--text-dim);">Cache is empty. Send some requests.</div>
+          </div>
+          <div class="stats-grid" style="grid-template-columns: repeat(2, 1fr);">
+            <div class="stat-card">
+              <div class="stat-value" id="hitCount" style="font-size: 1.4rem; color: var(--primary);">0</div>
+              <div class="stat-label">Cache Hits</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="missCount" style="font-size: 1.4rem; color: var(--danger);">0</div>
+              <div class="stat-label">Cache Misses</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="hitRate" style="font-size: 1.4rem; color: var(--secondary);">0%</div>
+              <div class="stat-label">Hit Rate</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" id="savedTokens" style="font-size: 1.4rem; color: var(--tertiary);">0</div>
+              <div class="stat-label">Tokens Saved</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LRU Eviction -->
+<section id="lru">
+  <div class="section-inner">
+    <div class="section-tag">Eviction</div>
+    <h2 class="section-title"><span class="gradient-text">Cache Eviction Policies</span></h2>
+    <div class="section-desc">GPU memory is limited. When the cache is full, which entries should be evicted? LRU (Least Recently Used) is the standard approach.</div>
+
+    <div class="card">
+      <h3 style="font-size: 1rem; margin-bottom: 1rem;">LRU Cache Simulation (Capacity: 6 entries)</h3>
+      <div class="lru-container" id="lruSlots">
+        <div class="lru-slot" data-slot="0"><span class="slot-prefix">Empty</span><div class="slot-label">Slot 0</div></div>
+        <div class="lru-slot" data-slot="1"><span class="slot-prefix">Empty</span><div class="slot-label">Slot 1</div></div>
+        <div class="lru-slot" data-slot="2"><span class="slot-prefix">Empty</span><div class="slot-label">Slot 2</div></div>
+        <div class="lru-slot" data-slot="3"><span class="slot-prefix">Empty</span><div class="slot-label">Slot 3</div></div>
+        <div class="lru-slot" data-slot="4"><span class="slot-prefix">Empty</span><div class="slot-label">Slot 4</div></div>
+        <div class="lru-slot" data-slot="5"><span class="slot-prefix">Empty</span><div class="slot-label">Slot 5</div></div>
+      </div>
+
+      <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem; flex-wrap: wrap;">
+        <button class="btn" onclick="lruAccess('SysA')">Access "System A"</button>
+        <button class="btn" onclick="lruAccess('SysB')">Access "System B"</button>
+        <button class="btn" onclick="lruAccess('FewC')">Access "Few-shot C"</button>
+        <button class="btn" onclick="lruAccess('ConvD')">Access "Conv D"</button>
+        <button class="btn" onclick="lruAccess('CodeE')">Access "Code E"</button>
+        <button class="btn" onclick="lruAccess('NewF')">Access "New F"</button>
+        <button class="btn" onclick="lruAccess('ExtraG')">Access "Extra G" (eviction!)</button>
+        <button class="btn" onclick="resetLRU()">Reset</button>
+      </div>
+
+      <div id="lruLog" style="margin-top: 1rem; max-height: 150px; overflow-y: auto; font-size: 0.8rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;"></div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem;">
+      <div class="card">
+        <h3 style="font-size: 1rem; color: var(--primary); margin-bottom: 1rem;">TTFT With vs Without Cache</h3>
+        <div class="ttft-chart" id="ttftChart">
+          <div style="position: absolute; left: 0; bottom: 0; width: 100%; height: 1px; background: var(--border);"></div>
+        </div>
+        <div style="display: flex; justify-content: space-around; margin-top: 1.5rem; font-size: 0.7rem; color: var(--text-dim);">
+          <span>128 tokens</span><span>512 tokens</span><span>1024 tokens</span><span>4096 tokens</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="font-size: 1rem; color: var(--secondary); margin-bottom: 1rem;">Cache Size Tradeoff</h3>
+        <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.8;">
+          <p><strong style="color: var(--text);">Memory Cost:</strong> Each cached prefix uses GPU memory proportional to <code class="mono" style="color: var(--secondary);">2 * num_layers * hidden_dim * seq_len * dtype_size</code></p>
+          <p style="margin-top: 0.75rem;"><strong style="color: var(--text);">For a 7B Model:</strong></p>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; margin-top: 0.5rem; padding: 0.75rem; background: rgba(0,0,0,0.3); border-radius: 8px;">
+            <div>Prefix: 1024 tokens</div>
+            <div>KV Cache: 2 * 32 * 4096 * 1024 * 2B</div>
+            <div style="color: var(--secondary);">= 512 MB per prefix entry</div>
+            <div style="margin-top: 0.5rem; color: var(--primary);">6 cached prefixes = ~3 GB GPU memory</div>
+          </div>
+          <p style="margin-top: 0.75rem;"><strong style="color: var(--text);">Decision:</strong> Trade GPU memory for compute savings. In high-traffic scenarios with shared prefixes, the memory cost is worth the TTFT improvement.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Summary -->
+<section id="summary">
+  <div class="section-inner" style="text-align: center;">
+    <div class="section-tag">Key Takeaways</div>
+    <h2 class="section-title"><span class="gradient-text">Prefix Caching Summary</span></h2>
+    <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); max-width: 800px; margin: 0 auto 2rem;">
+      <div class="stat-card">
+        <div class="stat-value" style="font-size: 1.3rem; color: var(--primary);">5-20x</div>
+        <div class="stat-label">TTFT Reduction</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="font-size: 1.3rem; color: var(--secondary);">LRU</div>
+        <div class="stat-label">Eviction Policy</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="font-size: 1.3rem; color: var(--tertiary);">Hash Trie</div>
+        <div class="stat-label">Matching Structure</div>
+      </div>
+    </div>
+    <div class="explain-panel" style="text-align: left; max-width: 800px; margin: 0 auto;">
+      <strong>Practical Impact:</strong> Prefix caching is one of the highest-ROI optimizations for production LLM serving. Chat applications typically have 90%+ cache hit rates because all users share the same system prompt. Combined with paged attention (vLLM), prefix caching enables efficient memory management while dramatically improving user-perceived latency.
+    </div>
+    <div style="margin-top: 2rem; color: var(--text-dim); font-size: 0.85rem;">
+      Module 18 of Inference Engineering &mdash; <span class="gradient-text" style="font-weight: 600;">VizuaraAI</span>
+    </div>
+  </div>
+</section>
+
+<script>
+// Section management
+const sections = document.querySelectorAll('section');
+const sectionIds = Array.from(sections).map(s => s.id);
+const dotsContainer = document.getElementById('sectionDots');
+sectionIds.forEach(id => {
+  const dot = document.createElement('div');
+  dot.className = 'dot';
+  dot.onclick = () => document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+  dotsContainer.appendChild(dot);
+});
+const dots = dotsContainer.querySelectorAll('.dot');
+
+function updateProgress() {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  document.getElementById('progressBar').style.width = ((scrollTop / docHeight) * 100) + '%';
+  sections.forEach((section, i) => {
+    const rect = section.getBoundingClientRect();
+    const inner = section.querySelector('.section-inner');
+    if (rect.top < window.innerHeight * 0.75 && rect.bottom > 0) {
+      if (inner) inner.classList.add('visible');
+      dots[i].classList.add('active');
+    } else { dots[i].classList.remove('active'); }
+  });
+  animateTTFT();
+}
+window.addEventListener('scroll', updateProgress);
+window.addEventListener('load', () => { updateProgress(); initTTFTChart(); });
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Prefix matching animation
+const prefixCache = {
+  system: { tokens: ['You', 'are', 'a', 'helpful', 'assistant', '.'], label: 'System Prompt' },
+  fewshot: { tokens: ['You', 'are', 'a', 'helpful', 'assistant', '.', 'Example:', 'Q:', 'Hello', 'A:', 'Hi!'], label: 'Few-Shot' },
+};
+
+async function runPrefixMatch(type) {
+  const tokensContainer = document.getElementById('matchTokens');
+  const resultContainer = document.getElementById('matchResult');
+  const cacheEntries = document.getElementById('cacheEntries');
+
+  tokensContainer.innerHTML = '';
+  resultContainer.innerHTML = '';
+
+  // Show cache entries
+  cacheEntries.innerHTML = '';
+  Object.entries(prefixCache).forEach(([key, val]) => {
+    const entry = document.createElement('div');
+    entry.style.cssText = 'padding: 0.5rem 1rem; background: rgba(0,212,106,0.05); border: 1px solid rgba(0,212,106,0.2); border-radius: 8px; font-size: 0.75rem;';
+    entry.innerHTML = `<span style="color: var(--primary); font-weight: 600;">${val.label}:</span> <span class="mono" style="color: var(--text-dim);">"${val.tokens.join(' ')}"</span>`;
+    cacheEntries.appendChild(entry);
+  });
+
+  let requestTokens, matchLen, totalTokens;
+
+  if (type === 'system') {
+    requestTokens = ['You', 'are', 'a', 'helpful', 'assistant', '.', 'What', 'is', 'Python', '?'];
+    matchLen = 6;
+    totalTokens = 10;
+  } else if (type === 'fewshot') {
+    requestTokens = ['You', 'are', 'a', 'helpful', 'assistant', '.', 'Example:', 'Q:', 'Hello', 'A:', 'Hi!', 'Now:', 'Explain', 'ML'];
+    matchLen = 11;
+    totalTokens = 14;
+  } else {
+    requestTokens = ['You', 'are', 'a', 'creative', 'writer', '.', 'Write', 'a', 'poem'];
+    matchLen = 0;
+    totalTokens = 9;
+  }
+
+  // Animate tokens appearing
+  for (let i = 0; i < requestTokens.length; i++) {
+    const token = document.createElement('span');
+    token.className = 'cache-slot';
+    token.textContent = requestTokens[i];
+    token.style.opacity = '0';
+    token.style.transform = 'scale(0.8)';
+    tokensContainer.appendChild(token);
+    await sleep(80);
+    token.style.opacity = '1';
+    token.style.transform = 'scale(1)';
+  }
+
+  await sleep(400);
+
+  // Animate matching
+  const allTokens = tokensContainer.querySelectorAll('.cache-slot');
+  for (let i = 0; i < matchLen; i++) {
+    await sleep(120);
+    allTokens[i].classList.add('hit');
+  }
+  for (let i = matchLen; i < requestTokens.length; i++) {
+    await sleep(80);
+    allTokens[i].classList.add('computing');
+  }
+
+  await sleep(300);
+
+  // Show result
+  const noCacheTime = totalTokens * 8; // 8ms per token prefill
+  const withCacheTime = (totalTokens - matchLen) * 8;
+  const speedup = matchLen > 0 ? (noCacheTime / withCacheTime).toFixed(1) : '1.0';
+
+  if (matchLen > 0) {
+    resultContainer.innerHTML = `
+      <div style="color: var(--primary); font-weight: 600; margin-bottom: 0.5rem;">Cache HIT!</div>
+      <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
+        Matched <span style="color: var(--secondary);" class="mono">${matchLen}</span> tokens from cache.<br>
+        Only <span style="color: var(--tertiary);" class="mono">${totalTokens - matchLen}</span> tokens need computation.<br>
+        <span style="color: var(--primary);" class="mono">${matchLen}</span> tokens loaded from cached KV states instantly.
+      </div>`;
+  } else {
+    resultContainer.innerHTML = `
+      <div style="color: var(--danger); font-weight: 600; margin-bottom: 0.5rem;">Cache MISS</div>
+      <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
+        No matching prefix found. All <span class="mono" style="color: var(--danger);">${totalTokens}</span> tokens must be computed from scratch.<br>
+        This prefix will be cached for future requests.
+      </div>`;
+  }
+
+  document.getElementById('ttftNoCache').textContent = noCacheTime + 'ms';
+  document.getElementById('ttftWithCache').textContent = withCacheTime + 'ms';
+  document.getElementById('ttftSpeedup').textContent = speedup + 'x';
+}
+
+function resetMatch() {
+  document.getElementById('matchTokens').innerHTML = '';
+  document.getElementById('matchResult').innerHTML = '<span style="color: var(--text-dim); font-size: 0.85rem;">Click "Run Match" to see prefix matching</span>';
+  document.getElementById('cacheEntries').innerHTML = '';
+  document.getElementById('ttftNoCache').textContent = '--';
+  document.getElementById('ttftWithCache').textContent = '--';
+  document.getElementById('ttftSpeedup').textContent = '--';
+}
+
+// Interactive request simulation
+const requestTemplates = {
+  chat1: { system: 'You are a helpful AI assistant.', user: 'What is machine learning?', systemKey: 'sysA' },
+  chat2: { system: 'You are a helpful AI assistant.', user: 'Explain neural networks', systemKey: 'sysA' },
+  chat3: { system: 'You are a helpful AI assistant.', user: 'How does backprop work?', systemKey: 'sysA' },
+  code1: { system: 'You are a Python coding expert.', user: 'Write a Python sort function', systemKey: 'sysB' },
+  code2: { system: 'You are a Python coding expert.', user: 'Write a binary search in Python', systemKey: 'sysB' },
+  new1: { system: 'You are a poet. Write beautiful verse.', user: 'Write haiku about the moon', systemKey: 'sysC' },
+};
+
+let cacheStore = {};
+let stats = { hits: 0, misses: 0, tokensSaved: 0 };
+let requestCount = 0;
+
+function sendRequest() {
+  const templateKey = document.getElementById('reqTemplate').value;
+  const template = requestTemplates[templateKey];
+  requestCount++;
+
+  const isHit = cacheStore[template.systemKey] !== undefined;
+  const systemTokenCount = template.system.split(' ').length;
+
+  if (isHit) {
+    stats.hits++;
+    stats.tokensSaved += systemTokenCount;
+  } else {
+    stats.misses++;
+    cacheStore[template.systemKey] = { system: template.system, accessCount: 0 };
+  }
+  cacheStore[template.systemKey].accessCount++;
+
+  // Update log
+  const log = document.getElementById('requestLog');
+  const entry = document.createElement('div');
+  entry.className = 'request-card';
+  entry.innerHTML = `
+    <div class="request-status ${isHit ? 'done' : 'processing'}"></div>
+    <div style="flex: 1;">
+      <div style="font-size: 0.8rem; font-weight: 500;">#${requestCount}: "${template.user}"</div>
+      <div style="font-size: 0.7rem; color: var(--text-dim); margin-top: 2px;">System: "${template.system.substring(0, 30)}..."</div>
+    </div>
+    <div style="font-size: 0.75rem; font-weight: 600; ${isHit ? 'color: var(--primary);' : 'color: var(--danger);'}">
+      ${isHit ? 'HIT' : 'MISS'}
+    </div>`;
+  log.insertBefore(entry, log.firstChild);
+
+  setTimeout(() => {
+    entry.querySelector('.request-status').className = 'request-status done';
+    entry.classList.add('done');
+  }, 500);
+
+  // Update cache state
+  updateCacheDisplay();
+  updateStats();
+}
+
+function updateCacheDisplay() {
+  const container = document.getElementById('cacheState');
+  container.innerHTML = '';
+  Object.entries(cacheStore).forEach(([key, val]) => {
+    const entry = document.createElement('div');
+    entry.style.cssText = 'padding: 0.75rem 1rem; background: rgba(0,212,106,0.05); border: 1px solid rgba(0,212,106,0.2); border-radius: 8px; margin-bottom: 0.5rem;';
+    entry.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.8rem; color: var(--primary); font-weight: 600;">${key}</span>
+        <span style="font-size: 0.7rem; color: var(--text-dim);">${val.accessCount} accesses</span>
+      </div>
+      <div style="font-size: 0.7rem; color: var(--text-dim); margin-top: 4px;" class="mono">"${val.system}"</div>`;
+    container.appendChild(entry);
+  });
+}
+
+function updateStats() {
+  const total = stats.hits + stats.misses;
+  document.getElementById('hitCount').textContent = stats.hits;
+  document.getElementById('missCount').textContent = stats.misses;
+  document.getElementById('hitRate').textContent = total > 0 ? Math.round((stats.hits / total) * 100) + '%' : '0%';
+  document.getElementById('savedTokens').textContent = stats.tokensSaved;
+}
+
+function clearRequests() {
+  cacheStore = {};
+  stats = { hits: 0, misses: 0, tokensSaved: 0 };
+  requestCount = 0;
+  document.getElementById('requestLog').innerHTML = '';
+  document.getElementById('cacheState').innerHTML = '<div style="font-size: 0.8rem; color: var(--text-dim);">Cache is empty. Send some requests.</div>';
+  updateStats();
+}
+
+// LRU simulation
+let lruCache = [];
+const LRU_CAPACITY = 6;
+
+function lruAccess(key) {
+  const log = document.getElementById('lruLog');
+  const existing = lruCache.findIndex(e => e === key);
+
+  if (existing !== -1) {
+    // Hit: move to front (MRU)
+    lruCache.splice(existing, 1);
+    lruCache.unshift(key);
+    log.innerHTML = `<div style="color: var(--primary);">[HIT] "${key}" moved to MRU position</div>` + log.innerHTML;
+  } else if (lruCache.length < LRU_CAPACITY) {
+    // Insert
+    lruCache.unshift(key);
+    log.innerHTML = `<div style="color: var(--secondary);">[INSERT] "${key}" added to cache</div>` + log.innerHTML;
+  } else {
+    // Eviction needed
+    const evicted = lruCache.pop();
+    lruCache.unshift(key);
+    log.innerHTML = `<div style="color: var(--danger);">[EVICT] "${evicted}" evicted, "${key}" inserted</div>` + log.innerHTML;
+  }
+
+  updateLRUDisplay();
+}
+
+function updateLRUDisplay() {
+  const slots = document.querySelectorAll('.lru-slot');
+  slots.forEach((slot, i) => {
+    slot.className = 'lru-slot';
+    if (i < lruCache.length) {
+      slot.querySelector('.slot-prefix').textContent = lruCache[i];
+      slot.classList.add('occupied');
+      if (i === 0) slot.classList.add('mru');
+      if (i === lruCache.length - 1 && lruCache.length === LRU_CAPACITY) slot.classList.add('lru-target');
+    } else {
+      slot.querySelector('.slot-prefix').textContent = 'Empty';
+    }
+  });
+}
+
+function resetLRU() {
+  lruCache = [];
+  updateLRUDisplay();
+  document.getElementById('lruLog').innerHTML = '';
+}
+
+// TTFT Chart
+let ttftAnimated = false;
+function initTTFTChart() {
+  const chart = document.getElementById('ttftChart');
+  const data = [
+    { label: '128 tok', noCache: 25, withCache: 8, x: 10 },
+    { label: '512 tok', noCache: 70, withCache: 12, x: 30 },
+    { label: '1024 tok', noCache: 100, withCache: 18, x: 52 },
+    { label: '4096 tok', noCache: 170, withCache: 25, x: 74 },
+  ];
+
+  data.forEach(d => {
+    const noCacheBar = document.createElement('div');
+    noCacheBar.className = 'ttft-bar-group';
+    noCacheBar.style.cssText = `left: ${d.x}%; bottom: 0;`;
+    noCacheBar.innerHTML = `
+      <div class="ttft-bar ttft-no-cache" style="width: 30px; height: 0; background: rgba(239,68,68,0.4);" data-height="${d.noCache}"></div>`;
+    chart.appendChild(noCacheBar);
+
+    const withCacheBar = document.createElement('div');
+    withCacheBar.className = 'ttft-bar-group';
+    withCacheBar.style.cssText = `left: calc(${d.x}% + 35px); bottom: 0;`;
+    withCacheBar.innerHTML = `
+      <div class="ttft-bar ttft-with-cache" style="width: 30px; height: 0; background: rgba(0,212,106,0.5);" data-height="${d.withCache}"></div>`;
+    chart.appendChild(withCacheBar);
+  });
+}
+
+function animateTTFT() {
+  if (ttftAnimated) return;
+  const chart = document.getElementById('ttftChart');
+  if (!chart) return;
+  const rect = chart.getBoundingClientRect();
+  if (rect.top < window.innerHeight * 0.8) {
+    ttftAnimated = true;
+    chart.querySelectorAll('.ttft-bar').forEach(bar => {
+      bar.style.height = bar.dataset.height + 'px';
+    });
+  }
+}
+</script>
+</body>
+</html>

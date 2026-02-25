@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EAGLE vs Medusa vs Draft-Target | Inference Engineering</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a;
+  --bg-card: #121212;
+  --bg-card-hover: #1a1a1a;
+  --border: #262626;
+  --primary: #00d46a;
+  --secondary: #00c8e6;
+  --tertiary: #a855f7;
+  --success: #10b981;
+  --text: #f2f2f2;
+  --text-muted: #a3a3a3;
+  --text-dim: #737373;
+  --danger: #ef4444;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); overflow-x: hidden; }
+code, .mono { font-family: 'JetBrains Mono', monospace; }
+h1, h2 { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; }
+.gradient-text { background: linear-gradient(135deg, #00d46a, #00c8e6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+
+.grid-bg {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 60px 60px; z-index: 0; pointer-events: none;
+}
+.glow-orb { position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; }
+.glow-orb.green { width: 400px; height: 400px; background: rgba(0,212,106,0.08); top: 10%; left: -100px; }
+.glow-orb.cyan { width: 350px; height: 350px; background: rgba(0,200,230,0.06); bottom: 10%; right: -80px; }
+
+nav {
+  position: fixed; top: 0; left: 0; width: 100%; z-index: 1000;
+  background: rgba(10,10,10,0.85); backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border); padding: 0 2rem; height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+nav .logo { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.3rem; }
+nav .nav-links { display: flex; gap: 2rem; }
+nav .nav-links a { color: var(--text-muted); text-decoration: none; font-size: 0.85rem; transition: color 0.3s; }
+nav .nav-links a:hover { color: var(--primary); }
+
+.progress-bar { position: fixed; top: 60px; left: 0; height: 3px; z-index: 999; background: linear-gradient(90deg, var(--primary), var(--secondary)); transition: width 0.3s ease; }
+
+.section-dots { position: fixed; right: 1.5rem; top: 50%; transform: translateY(-50%); z-index: 999; display: flex; flex-direction: column; gap: 12px; }
+.section-dots .dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--text-dim); background: transparent; cursor: pointer; transition: all 0.3s; }
+.section-dots .dot.active { background: var(--primary); border-color: var(--primary); box-shadow: 0 0 10px rgba(0,212,106,0.5); }
+
+section { min-height: 100vh; position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; padding: 80px 2rem 2rem; }
+.section-inner { max-width: 1200px; width: 100%; opacity: 0; transform: translateY(40px); transition: all 0.8s cubic-bezier(0.16,1,0.3,1); }
+.section-inner.visible { opacity: 1; transform: translateY(0); }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; transition: all 0.3s; }
+.card:hover { background: var(--bg-card-hover); box-shadow: 0 0 40px rgba(0,212,106,0.15); }
+.badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; border: 1px solid var(--primary); background: rgba(0,212,106,0.1); color: var(--primary); margin-bottom: 1rem; }
+
+.hero h1 { font-size: clamp(2.5rem, 5vw, 4rem); line-height: 1.1; margin-bottom: 1rem; }
+.hero p { color: var(--text-muted); font-size: 1.15rem; max-width: 650px; line-height: 1.7; }
+
+.section-tag { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 2px; color: var(--primary); margin-bottom: 0.5rem; }
+.section-title { font-size: clamp(1.8rem, 3vw, 2.5rem); margin-bottom: 1rem; }
+.section-desc { color: var(--text-muted); font-size: 1rem; max-width: 700px; line-height: 1.7; margin-bottom: 2rem; }
+
+.btn { padding: 0.6rem 1.5rem; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text); font-family: 'Inter', sans-serif; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.3s; }
+.btn:hover { border-color: var(--primary); box-shadow: 0 0 20px rgba(0,212,106,0.15); }
+.btn.active { background: rgba(0,212,106,0.15); border-color: var(--primary); color: var(--primary); }
+
+.explain-panel { margin-top: 1.5rem; padding: 1.5rem; background: rgba(0,212,106,0.03); border: 1px solid rgba(0,212,106,0.15); border-radius: 12px; font-size: 0.9rem; color: var(--text-muted); line-height: 1.7; }
+.explain-panel strong { color: var(--text); }
+
+/* Method tabs */
+.method-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.method-tab {
+  padding: 0.6rem 1.5rem; border-radius: 10px; border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text-muted); cursor: pointer;
+  font-size: 0.85rem; font-weight: 500; transition: all 0.3s;
+}
+.method-tab.active-dt { background: rgba(0,212,106,0.15); border-color: var(--primary); color: var(--primary); }
+.method-tab.active-medusa { background: rgba(0,200,230,0.15); border-color: var(--secondary); color: var(--secondary); }
+.method-tab.active-eagle { background: rgba(168,85,247,0.15); border-color: var(--tertiary); color: var(--tertiary); }
+
+/* Architecture diagram */
+.arch-diagram {
+  position: relative; min-height: 400px; background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border); border-radius: 12px; padding: 2rem; overflow: hidden;
+}
+.arch-box {
+  position: absolute; border-radius: 12px; padding: 1rem; text-align: center;
+  font-size: 0.8rem; font-weight: 600; transition: all 0.6s cubic-bezier(0.16,1,0.3,1);
+}
+.arch-arrow {
+  position: absolute; transition: all 0.6s cubic-bezier(0.16,1,0.3,1);
+}
+
+/* Token tree */
+.token-tree { position: relative; min-height: 280px; }
+.tree-node {
+  position: absolute; display: flex; align-items: center; justify-content: center;
+  width: 60px; height: 36px; border-radius: 8px; font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem; font-weight: 500; transition: all 0.5s;
+  opacity: 0; transform: scale(0.7);
+}
+.tree-node.show { opacity: 1; transform: scale(1); }
+.tree-line {
+  position: absolute; background: var(--border); transition: all 0.5s; opacity: 0;
+  transform-origin: top left;
+}
+.tree-line.show { opacity: 1; }
+
+/* Side by side comparison */
+.comparison-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+@media (max-width: 900px) { .comparison-grid { grid-template-columns: 1fr; } }
+
+.method-card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px;
+  padding: 1.5rem; position: relative; overflow: hidden;
+}
+.method-card .method-header {
+  font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem; display: flex;
+  align-items: center; gap: 0.5rem;
+}
+.method-card .method-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+/* Animation canvas */
+.anim-canvas {
+  width: 100%; height: 200px; background: rgba(0,0,0,0.2); border-radius: 8px;
+  margin: 1rem 0; position: relative; overflow: hidden;
+}
+
+/* Token blocks */
+.token-block {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 4px 10px; border-radius: 6px; font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem; font-weight: 500; margin: 2px;
+}
+
+/* Stats */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+.stat-card { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; text-align: center; }
+.stat-card .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 1.8rem; font-weight: 700; margin-bottom: 0.25rem; }
+.stat-card .stat-label { font-size: 0.75rem; color: var(--text-muted); }
+
+/* Table */
+.comp-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+.comp-table th, .comp-table td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+.comp-table th { color: var(--text-dim); font-weight: 500; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; }
+.comp-table td { color: var(--text-muted); }
+.comp-table tr:hover td { color: var(--text); background: rgba(255,255,255,0.02); }
+
+.bar-mini { display: inline-block; height: 8px; border-radius: 4px; transition: width 1s ease; }
+
+@media (max-width: 768px) {
+  section { padding: 80px 1rem 1rem; }
+  .comparison-grid { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div class="glow-orb green"></div>
+<div class="glow-orb cyan"></div>
+
+<nav>
+  <div class="logo"><span class="gradient-text">Vizuara</span> Inference Engineering</div>
+  <div class="nav-links">
+    <a href="#hero">Overview</a>
+    <a href="#methods">Methods</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#trees">Token Trees</a>
+    <a href="#benchmark">Benchmarks</a>
+    <a href="#summary">Summary</a>
+  </div>
+</nav>
+
+<div class="progress-bar" id="progressBar"></div>
+<div class="section-dots" id="sectionDots"></div>
+
+<!-- Section 1: Hero -->
+<section id="hero">
+  <div class="section-inner hero">
+    <div class="badge">Module 17</div>
+    <h1><span class="gradient-text">EAGLE vs Medusa</span> vs Draft-Target</h1>
+    <p>Three approaches to speculative decoding, each with unique tradeoffs. Compare how Draft-Target, Medusa, and EAGLE generate and verify candidate tokens for faster inference.</p>
+    <div style="display: flex; gap: 1rem; margin-top: 2rem; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 8px; background: rgba(0,212,106,0.1); border: 1px solid rgba(0,212,106,0.3);">
+        <div style="width: 10px; height: 10px; border-radius: 50%; background: var(--primary);"></div>
+        <span style="font-size: 0.85rem; color: var(--primary);">Draft-Target</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 8px; background: rgba(0,200,230,0.1); border: 1px solid rgba(0,200,230,0.3);">
+        <div style="width: 10px; height: 10px; border-radius: 50%; background: var(--secondary);"></div>
+        <span style="font-size: 0.85rem; color: var(--secondary);">Medusa</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 8px; background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.3);">
+        <div style="width: 10px; height: 10px; border-radius: 50%; background: var(--tertiary);"></div>
+        <span style="font-size: 0.85rem; color: var(--tertiary);">EAGLE</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 2: Methods Overview -->
+<section id="methods">
+  <div class="section-inner">
+    <div class="section-tag">Comparison</div>
+    <h2 class="section-title"><span class="gradient-text">Three Speculation Strategies</span></h2>
+    <div class="section-desc">Each method takes a fundamentally different approach to generating draft tokens.</div>
+
+    <div class="comparison-grid">
+      <div class="method-card" id="dtCard" style="border-color: rgba(0,212,106,0.3);">
+        <div class="method-header"><div class="method-dot" style="background: var(--primary);"></div> Draft-Target</div>
+        <div class="anim-canvas" id="dtAnim"></div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
+          A <strong style="color: var(--primary);">separate small model</strong> generates draft tokens autoregressively. The large target model verifies them in one forward pass.
+        </p>
+        <div style="margin-top: 1rem; font-size: 0.8rem;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;">
+            <span style="color: var(--text-dim);">Extra Parameters</span>
+            <span style="color: var(--primary);" class="mono">~68M-7B</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;">
+            <span style="color: var(--text-dim);">Training Required</span>
+            <span style="color: var(--primary);" class="mono">None</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-dim);">Acceptance Rate</span>
+            <span style="color: var(--primary);" class="mono">~70-85%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="method-card" style="border-color: rgba(0,200,230,0.3);">
+        <div class="method-header"><div class="method-dot" style="background: var(--secondary);"></div> Medusa</div>
+        <div class="anim-canvas" id="medusaAnim"></div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
+          <strong style="color: var(--secondary);">Extra prediction heads</strong> are added to the target model itself. Each head predicts a future token position in parallel.
+        </p>
+        <div style="margin-top: 1rem; font-size: 0.8rem;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;">
+            <span style="color: var(--text-dim);">Extra Parameters</span>
+            <span style="color: var(--secondary);" class="mono">~0.5-2%</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;">
+            <span style="color: var(--text-dim);">Training Required</span>
+            <span style="color: var(--secondary);" class="mono">Fine-tune heads</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-dim);">Acceptance Rate</span>
+            <span style="color: var(--secondary);" class="mono">~60-80%</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="method-card" style="border-color: rgba(168,85,247,0.3);">
+        <div class="method-header"><div class="method-dot" style="background: var(--tertiary);"></div> EAGLE</div>
+        <div class="anim-canvas" id="eagleAnim"></div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
+          Uses <strong style="color: var(--tertiary);">hidden state regression</strong> to predict the next token's features. An autoregressive head operates on predicted hidden states.
+        </p>
+        <div style="margin-top: 1rem; font-size: 0.8rem;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;">
+            <span style="color: var(--text-dim);">Extra Parameters</span>
+            <span style="color: var(--tertiary);" class="mono">~1-3%</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 0.3rem;">
+            <span style="color: var(--text-dim);">Training Required</span>
+            <span style="color: var(--tertiary);" class="mono">Train FC layers</span>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-dim);">Acceptance Rate</span>
+            <span style="color: var(--tertiary);" class="mono">~80-95%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 3: Architecture Deep Dive -->
+<section id="architecture">
+  <div class="section-inner">
+    <div class="section-tag">Architecture</div>
+    <h2 class="section-title"><span class="gradient-text">How Each Method Works</span></h2>
+    <div class="section-desc">Toggle between methods to see their internal architecture and data flow.</div>
+
+    <div class="method-tabs">
+      <div class="method-tab active-dt" data-method="dt" onclick="switchMethod('dt')">Draft-Target</div>
+      <div class="method-tab" data-method="medusa" onclick="switchMethod('medusa')">Medusa</div>
+      <div class="method-tab" data-method="eagle" onclick="switchMethod('eagle')">EAGLE</div>
+    </div>
+
+    <div class="card" style="min-height: 500px; position: relative;">
+      <!-- Draft-Target Architecture -->
+      <div id="arch-dt" class="arch-view">
+        <div style="display: flex; gap: 2rem; align-items: flex-start; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 300px;">
+            <h3 style="color: var(--primary); font-size: 1.1rem; margin-bottom: 1rem;">Draft-Target Pipeline</h3>
+            <div style="position: relative; background: rgba(0,0,0,0.3); border-radius: 12px; padding: 1.5rem; min-height: 350px;">
+              <!-- Draft model -->
+              <div style="background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.3); border-radius: 10px; padding: 1rem; margin-bottom: 1rem;">
+                <div style="font-size: 0.8rem; font-weight: 600; color: var(--tertiary); margin-bottom: 0.5rem;">Draft Model (Small, ~68M-7B)</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Autoregressive generation of K tokens</div>
+                <div id="dtDraftTokens" style="display: flex; gap: 4px; margin-top: 0.5rem; flex-wrap: wrap;"></div>
+              </div>
+              <div style="text-align: center; color: var(--text-dim); margin: 0.5rem 0; font-size: 1.2rem;">&#8595; Send K draft tokens</div>
+              <!-- Target model -->
+              <div style="background: rgba(0,212,106,0.1); border: 1px solid rgba(0,212,106,0.3); border-radius: 10px; padding: 1rem; margin-bottom: 1rem;">
+                <div style="font-size: 0.8rem; font-weight: 600; color: var(--primary); margin-bottom: 0.5rem;">Target Model (Large, ~70B)</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Single forward pass: verify all K tokens</div>
+                <div id="dtVerifyTokens" style="display: flex; gap: 4px; margin-top: 0.5rem; flex-wrap: wrap;"></div>
+              </div>
+              <div style="text-align: center; color: var(--text-dim); margin: 0.5rem 0; font-size: 1.2rem;">&#8595; Output</div>
+              <div style="background: rgba(0,200,230,0.1); border: 1px solid rgba(0,200,230,0.3); border-radius: 10px; padding: 1rem;">
+                <div style="font-size: 0.8rem; font-weight: 600; color: var(--secondary); margin-bottom: 0.5rem;">Accepted Tokens</div>
+                <div id="dtAccepted" style="display: flex; gap: 4px; margin-top: 0.5rem; flex-wrap: wrap;"></div>
+              </div>
+            </div>
+            <button class="btn" style="margin-top: 1rem;" onclick="animateDT()">Animate Flow</button>
+          </div>
+          <div style="flex: 1; min-width: 300px;">
+            <h3 style="color: var(--primary); font-size: 1.1rem; margin-bottom: 1rem;">Key Properties</h3>
+            <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.8;">
+              <p><strong style="color: var(--text);">Separate Models:</strong> Two completely independent models. The draft model can be any smaller model from the same family or even a different architecture.</p>
+              <p style="margin-top: 0.75rem;"><strong style="color: var(--text);">No Training Needed:</strong> Any small model can serve as the draft. Just pick one that approximates the target's distribution.</p>
+              <p style="margin-top: 0.75rem;"><strong style="color: var(--text);">Memory Overhead:</strong> Must fit both models in GPU memory. The draft model adds ~1-10% of the target's memory footprint.</p>
+              <p style="margin-top: 0.75rem;"><strong style="color: var(--text);">Sequential Drafting:</strong> Draft tokens are generated one by one (autoregressively) by the small model, which is fast due to its size.</p>
+              <p style="margin-top: 0.75rem;"><strong style="color: var(--text);">Exact Distribution:</strong> With proper rejection sampling, the output distribution is mathematically identical to the target model's distribution.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Medusa Architecture -->
+      <div id="arch-medusa" class="arch-view" style="display: none;">
+        <div style="display: flex; gap: 2rem; align-items: flex-start; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 300px;">
+            <h3 style="color: var(--secondary); font-size: 1.1rem; margin-bottom: 1rem;">Medusa Head Architecture</h3>
+            <div style="position: relative; background: rgba(0,0,0,0.3); border-radius: 12px; padding: 1.5rem; min-height: 350px;">
+              <div style="background: rgba(0,200,230,0.05); border: 1px solid rgba(0,200,230,0.2); border-radius: 10px; padding: 1rem; margin-bottom: 1rem;">
+                <div style="font-size: 0.8rem; font-weight: 600; color: var(--secondary); margin-bottom: 0.5rem;">Base Model (Frozen)</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Transformer layers &rarr; Hidden State h<sub>t</sub></div>
+                <div style="margin-top: 0.5rem; height: 30px; background: linear-gradient(90deg, rgba(0,200,230,0.2), rgba(0,200,230,0.05)); border-radius: 6px; display: flex; align-items: center; padding: 0 0.75rem; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: var(--secondary);">Hidden state: [4096 dims]</div>
+              </div>
+
+              <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 80px; background: rgba(0,200,230,0.1); border: 1px solid rgba(0,200,230,0.3); border-radius: 8px; padding: 0.75rem; text-align: center;">
+                  <div style="font-size: 0.65rem; color: var(--secondary); font-weight: 600;">Original Head</div>
+                  <div style="font-size: 0.7rem; color: var(--text-dim); margin-top: 0.25rem;">t+1</div>
+                  <div id="medHead0" style="margin-top: 0.25rem;"></div>
+                </div>
+                <div style="flex: 1; min-width: 80px; background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.3); border-radius: 8px; padding: 0.75rem; text-align: center;">
+                  <div style="font-size: 0.65rem; color: var(--tertiary); font-weight: 600;">Medusa Head 1</div>
+                  <div style="font-size: 0.7rem; color: var(--text-dim); margin-top: 0.25rem;">t+2</div>
+                  <div id="medHead1" style="margin-top: 0.25rem;"></div>
+                </div>
+                <div style="flex: 1; min-width: 80px; background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.3); border-radius: 8px; padding: 0.75rem; text-align: center;">
+                  <div style="font-size: 0.65rem; color: var(--tertiary); font-weight: 600;">Medusa Head 2</div>
+                  <div style="font-size: 0.7rem; color: var(--text-dim); margin-top: 0.25rem;">t+3</div>
+                  <div id="medHead2" style="margin-top: 0.25rem;"></div>
+                </div>
+                <div style="flex: 1; min-width: 80px; background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.3); border-radius: 8px; padding: 0.75rem; text-align: center;">
+                  <div style="font-size: 0.65rem; color: var(--tertiary); font-weight: 600;">Medusa Head 3</div>
+                  <div style="font-size: 0.7rem; color: var(--text-dim); margin-top: 0.25rem;">t+4</div>
+                  <div id="medHead3" style="margin-top: 0.25rem;"></div>
+                </div>
+              </div>
+
+              <div style="text-align: center; color: var(--text-dim); font-size: 0.8rem; margin: 0.5rem 0;">&#8595; Tree attention verification</div>
+
+              <div style="background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); border-radius: 10px; padding: 1rem;">
+                <div style="font-size: 0.8rem; font-weight: 600; color: var(--success); margin-bottom: 0.5rem;">Candidate Tree &rarr; Verified Path</div>
+                <div id="medVerified" style="display: flex; gap: 4px; flex-wrap: wrap;"></div>
+              </div>
+            </div>
+            <button class="btn" style="margin-top: 1rem;" onclick="animateMedusa()">Animate Flow</button>
+          </div>
+          <div style="flex: 1; min-width: 300px;">
+            <h3 style="color: var(--secondary); font-size: 1.1rem; margin-bottom: 1rem;">Key Properties</h3>
+            <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.8;">
+              <p><strong style="color: var(--text);">Same Model, Extra Heads:</strong> Medusa adds lightweight MLP heads on top of the existing model's hidden states. Each head predicts a different future position.</p>
+              <p style="margin-top: 0.75rem;"><strong style="color: var(--text);">Parallel Prediction:</strong> All heads predict simultaneously from the same hidden state &mdash; no sequential draft generation needed.</p>
+              <p style="margin-top: 0.75rem;"><strong style="color: var(--text);">Tree-Based Candidates:</strong> Top-k from each head creates a tree of candidates. Tree attention verifies the best path efficiently.</p>
+              <p style="margin-top: 0.75rem;"><strong style="color: var(--text);">Fine-Tuning Required:</strong> The Medusa heads must be trained on representative data. Medusa-1 freezes the backbone; Medusa-2 jointly trains.</p>
+              <p style="margin-top: 0.75rem;"><strong style="color: var(--text);">Approximate Distribution:</strong> Medusa-1 uses a truncated sampling scheme that slightly alters the distribution. Medusa-2 with typical acceptance can be exact.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- EAGLE Architecture -->
+      <div id="arch-eagle" class="arch-view" style="display: none;">
+        <div style="display: flex; gap: 2rem; align-items: flex-start; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 300px;">
+            <h3 style="color: var(--tertiary); font-size: 1.1rem; margin-bottom: 1rem;">EAGLE Feature Regression</h3>
+            <div style="position: relative; background: rgba(0,0,0,0.3); border-radius: 12px; padding: 1.5rem; min-height: 350px;">
+              <div style="background: rgba(168,85,247,0.05); border: 1px solid rgba(168,85,247,0.2); border-radius: 10px; padding: 1rem; margin-bottom: 1rem;">
+                <div style="font-size: 0.8rem; font-weight: 600; color: var(--tertiary); margin-bottom: 0.5rem;">Base Model (Frozen)</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Last hidden state h<sub>t</sub> + token embedding e<sub>t+1</sub></div>
+                <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem;">
+                  <div style="flex: 1; height: 26px; background: linear-gradient(90deg, rgba(168,85,247,0.2), rgba(168,85,247,0.05)); border-radius: 6px; display: flex; align-items: center; padding: 0 0.5rem; font-size: 0.65rem; color: var(--tertiary);" class="mono">h<sub>t</sub>: [4096]</div>
+                  <div style="flex: 1; height: 26px; background: linear-gradient(90deg, rgba(0,200,230,0.2), rgba(0,200,230,0.05)); border-radius: 6px; display: flex; align-items: center; padding: 0 0.5rem; font-size: 0.65rem; color: var(--secondary);" class="mono">e<sub>t+1</sub>: [4096]</div>
+                </div>
+              </div>
+
+              <div style="text-align: center; color: var(--text-dim); font-size: 0.8rem; margin: 0.5rem 0;">&#8595; Concat + FC Layer</div>
+
+              <div style="background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.3); border-radius: 10px; padding: 1rem; margin-bottom: 1rem;">
+                <div style="font-size: 0.8rem; font-weight: 600; color: var(--tertiary); margin-bottom: 0.5rem;">EAGLE Autoregressive Head</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Predicts next hidden state &rarr; generates draft tokens</div>
+                <div id="eagleDraft" style="display: flex; gap: 4px; margin-top: 0.5rem; flex-wrap: wrap;"></div>
+              </div>
+
+              <div style="text-align: center; color: var(--text-dim); font-size: 0.8rem; margin: 0.5rem 0;">&#8595; Tree-structured drafts</div>
+
+              <div style="background: rgba(0,212,106,0.1); border: 1px solid rgba(0,212,106,0.3); border-radius: 10px; padding: 1rem;">
+                <div style="font-size: 0.8rem; font-weight: 600; color: var(--primary); margin-bottom: 0.5rem;">Target Verification + Accepted</div>
+                <div id="eagleAccepted" style="display: flex; gap: 4px; flex-wrap: wrap;"></div>
+              </div>
+            </div>
+            <button class="btn" style="margin-top: 1rem;" onclick="animateEagle()">Animate Flow</button>
+          </div>
+          <div style="flex: 1; min-width: 300px;">
+            <h3 style="color: var(--tertiary); font-size: 1.1rem; margin-bottom: 1rem;">Key Properties</h3>
+            <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.8;">
+              <p><strong style="color: var(--text);">Feature-Level Prediction:</strong> Instead of predicting tokens directly, EAGLE regresses the hidden state features of the next token. This is more predictable than token-level prediction.</p>
+              <p style="margin-top: 0.75rem;"><strong style="color: var(--text);">Autoregressive Drafting:</strong> Unlike Medusa's parallel heads, EAGLE drafts autoregressively using predicted features, giving it context from earlier draft positions.</p>
+              <p style="margin-top: 0.75rem;"><strong style="color: var(--text);">Higher Acceptance Rate:</strong> Because features are more stable than token distributions, EAGLE achieves significantly higher acceptance rates (80-95%).</p>
+              <p style="margin-top: 0.75rem;"><strong style="color: var(--text);">Tree-Structured Drafts:</strong> EAGLE-2 uses dynamic tree structures that adapt based on confidence, exploring more branches where the model is uncertain.</p>
+              <p style="margin-top: 0.75rem;"><strong style="color: var(--text);">Training Cost:</strong> Requires training the FC layers and draft head on a moderate dataset, but this is relatively cheap (hours, not days).</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 4: Token Trees -->
+<section id="trees">
+  <div class="section-inner">
+    <div class="section-tag">Token Trees</div>
+    <h2 class="section-title"><span class="gradient-text">Draft Token Tree Structures</span></h2>
+    <div class="section-desc">Medusa and EAGLE use tree-structured drafts to explore multiple candidate paths simultaneously.</div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+      <div class="card">
+        <h3 style="color: var(--primary); font-size: 1rem; margin-bottom: 1rem;">Linear Draft (Draft-Target)</h3>
+        <div style="position: relative; height: 180px; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1rem;" id="linearTree"></div>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.75rem;">Single path: each token depends on the previous. First rejection stops the chain.</p>
+      </div>
+      <div class="card">
+        <h3 style="color: var(--secondary); font-size: 1rem; margin-bottom: 1rem;">Tree Draft (Medusa/EAGLE)</h3>
+        <div style="position: relative; height: 180px; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 1rem;" id="branchTree"></div>
+        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.75rem;">Multiple branches: explore alternative tokens at each position. Best path is selected via tree attention.</p>
+      </div>
+    </div>
+
+    <div class="explain-panel">
+      <strong>Why Trees?</strong> A linear draft gambles everything on one sequence. If any token is wrong, all subsequent tokens are wasted. A tree hedges its bets: if "jumps" is rejected, maybe "leaps" on another branch succeeds. Tree attention lets you verify all branches in a single forward pass with only ~2x the cost of verifying a single path.
+    </div>
+
+    <div class="card" style="margin-top: 1.5rem;">
+      <h3 style="font-size: 1rem; margin-bottom: 1rem;">Interactive: Tree Depth vs Width Tradeoff</h3>
+      <div style="display: flex; gap: 2rem; flex-wrap: wrap; align-items: center;">
+        <div>
+          <label style="font-size: 0.8rem; color: var(--text-muted);">Tree Width (branches per node): <span id="treeWidthVal" class="mono" style="color: var(--secondary);">3</span></label><br>
+          <input type="range" id="treeWidth" min="1" max="5" value="3" oninput="updateTreeStats()" style="width: 200px; margin-top: 0.5rem; -webkit-appearance: none; height: 6px; border-radius: 3px; background: var(--border); outline: none;">
+        </div>
+        <div>
+          <label style="font-size: 0.8rem; color: var(--text-muted);">Tree Depth: <span id="treeDepthVal" class="mono" style="color: var(--tertiary);">4</span></label><br>
+          <input type="range" id="treeDepth" min="2" max="6" value="4" oninput="updateTreeStats()" style="width: 200px; margin-top: 0.5rem; -webkit-appearance: none; height: 6px; border-radius: 3px; background: var(--border); outline: none;">
+        </div>
+        <div class="stats-grid" style="flex: 1; margin-top: 0;">
+          <div class="stat-card">
+            <div class="stat-value" id="totalNodes" style="font-size: 1.4rem; color: var(--primary);">40</div>
+            <div class="stat-label">Total Candidates</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="totalPaths" style="font-size: 1.4rem; color: var(--secondary);">27</div>
+            <div class="stat-label">Unique Paths</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="verifyOverhead" style="font-size: 1.4rem; color: var(--tertiary);">1.8x</div>
+            <div class="stat-label">Verify Overhead</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 5: Benchmarks -->
+<section id="benchmark">
+  <div class="section-inner">
+    <div class="section-tag">Performance</div>
+    <h2 class="section-title"><span class="gradient-text">Benchmark Comparison</span></h2>
+    <div class="section-desc">How do the methods stack up on real models?</div>
+
+    <div class="card">
+      <h3 style="font-size: 1rem; margin-bottom: 1rem;">Speedup on Vicuna-7B / 13B / 33B (MT-Bench)</h3>
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th>Method</th>
+            <th>Vicuna-7B</th>
+            <th>Vicuna-13B</th>
+            <th>Vicuna-33B</th>
+            <th>Avg Tokens/Iter</th>
+            <th>Overhead</th>
+          </tr>
+        </thead>
+        <tbody id="benchTable">
+        </tbody>
+      </table>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin-top: 1.5rem;">
+      <div class="card">
+        <h3 style="font-size: 1rem; color: var(--primary); margin-bottom: 1rem;">Speedup Comparison</h3>
+        <div id="speedupBars" style="display: flex; flex-direction: column; gap: 1rem;"></div>
+      </div>
+      <div class="card">
+        <h3 style="font-size: 1rem; color: var(--secondary); margin-bottom: 1rem;">When to Use Each</h3>
+        <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.8;">
+          <p><strong style="color: var(--primary);">Draft-Target:</strong> When you have an existing small model available and don't want any training overhead. Simplest to deploy.</p>
+          <p style="margin-top: 0.5rem;"><strong style="color: var(--secondary);">Medusa:</strong> When you can afford to fine-tune extra heads. Good for fixed deployment where the model won't change.</p>
+          <p style="margin-top: 0.5rem;"><strong style="color: var(--tertiary);">EAGLE:</strong> When you want the best speedup and can invest in training the feature predictor. State-of-the-art performance.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 6: Summary -->
+<section id="summary">
+  <div class="section-inner" style="text-align: center;">
+    <div class="section-tag">Summary</div>
+    <h2 class="section-title"><span class="gradient-text">Method Comparison Summary</span></h2>
+    <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr); max-width: 800px; margin: 0 auto 2rem;">
+      <div class="stat-card">
+        <div class="stat-value" style="font-size: 1.3rem; color: var(--primary);">Draft-Target</div>
+        <div class="stat-label">Simplest, No Training</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="font-size: 1.3rem; color: var(--secondary);">Medusa</div>
+        <div class="stat-label">Parallel Heads, Low Overhead</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="font-size: 1.3rem; color: var(--tertiary);">EAGLE</div>
+        <div class="stat-label">Highest Acceptance Rate</div>
+      </div>
+    </div>
+    <div class="explain-panel" style="text-align: left; max-width: 800px; margin: 0 auto;">
+      <strong>The Evolution of Speculation:</strong> Draft-Target established the framework. Medusa eliminated the need for a separate model. EAGLE pushed acceptance rates even higher by predicting at the feature level. All three guarantee (or closely approximate) the target model's output quality while delivering 2-4x speedups.
+    </div>
+    <div style="margin-top: 2rem; color: var(--text-dim); font-size: 0.85rem;">
+      Module 17 of Inference Engineering &mdash; <span class="gradient-text" style="font-weight: 600;">VizuaraAI</span>
+    </div>
+  </div>
+</section>
+
+<script>
+// Sections + progress
+const sections = document.querySelectorAll('section');
+const sectionIds = Array.from(sections).map(s => s.id);
+const dotsContainer = document.getElementById('sectionDots');
+sectionIds.forEach((id, i) => {
+  const dot = document.createElement('div');
+  dot.className = 'dot';
+  dot.onclick = () => document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
+  dotsContainer.appendChild(dot);
+});
+const dots = dotsContainer.querySelectorAll('.dot');
+
+function updateProgress() {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  document.getElementById('progressBar').style.width = ((scrollTop / docHeight) * 100) + '%';
+  sections.forEach((section, i) => {
+    const rect = section.getBoundingClientRect();
+    const inner = section.querySelector('.section-inner');
+    if (rect.top < window.innerHeight * 0.75 && rect.bottom > 0) {
+      if (inner) inner.classList.add('visible');
+      dots[i].classList.add('active');
+    } else { dots[i].classList.remove('active'); }
+  });
+}
+window.addEventListener('scroll', updateProgress);
+window.addEventListener('load', updateProgress);
+
+// Method switching
+function switchMethod(method) {
+  document.querySelectorAll('.arch-view').forEach(v => v.style.display = 'none');
+  document.querySelectorAll('.method-tab').forEach(t => { t.className = 'method-tab'; });
+  document.getElementById('arch-' + method).style.display = 'block';
+  document.querySelector(`.method-tab[data-method="${method}"]`).className = 'method-tab active-' + method;
+}
+
+// Animation helpers
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function makeToken(text, cls) {
+  const span = document.createElement('span');
+  span.className = 'token-block';
+  span.textContent = text;
+  if (cls === 'draft') { span.style.cssText = 'background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.3);color:#a855f7;'; }
+  else if (cls === 'accept') { span.style.cssText = 'background:rgba(0,212,106,0.15);border:1px solid rgba(0,212,106,0.3);color:#00d46a;'; }
+  else if (cls === 'reject') { span.style.cssText = 'background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#ef4444;text-decoration:line-through;'; }
+  else if (cls === 'verify') { span.style.cssText = 'background:rgba(0,200,230,0.15);border:1px solid rgba(0,200,230,0.3);color:#00c8e6;'; }
+  span.style.opacity = '0'; span.style.transition = 'opacity 0.3s';
+  setTimeout(() => span.style.opacity = '1', 50);
+  return span;
+}
+
+const words = ['jumps', 'over', 'the', 'lazy', 'dog', 'and', 'runs', 'away'];
+
+async function animateDT() {
+  const draft = document.getElementById('dtDraftTokens');
+  const verify = document.getElementById('dtVerifyTokens');
+  const accepted = document.getElementById('dtAccepted');
+  draft.innerHTML = ''; verify.innerHTML = ''; accepted.innerHTML = '';
+
+  // Draft phase
+  for (let i = 0; i < 5; i++) {
+    draft.appendChild(makeToken(words[i], 'draft'));
+    await sleep(200);
+  }
+  await sleep(400);
+  // Verify
+  for (let i = 0; i < 5; i++) {
+    const isAccepted = i < 3 || i === 4;
+    verify.appendChild(makeToken(words[i], isAccepted ? 'verify' : 'reject'));
+    await sleep(150);
+  }
+  await sleep(400);
+  // Accepted
+  for (let i = 0; i < 3; i++) {
+    accepted.appendChild(makeToken(words[i], 'accept'));
+    await sleep(100);
+  }
+  accepted.appendChild(makeToken('sleepy', 'accept'));
+}
+
+async function animateMedusa() {
+  const heads = [document.getElementById('medHead0'), document.getElementById('medHead1'), document.getElementById('medHead2'), document.getElementById('medHead3')];
+  const verified = document.getElementById('medVerified');
+  heads.forEach(h => h.innerHTML = ''); verified.innerHTML = '';
+
+  const preds = [['jumps','leaps'], ['over','above'], ['the','a'], ['lazy','old']];
+  // All heads predict simultaneously
+  for (let h = 0; h < 4; h++) {
+    preds[h].forEach(w => heads[h].appendChild(makeToken(w, 'draft')));
+  }
+  await sleep(800);
+  // Verified path
+  const path = ['jumps', 'over', 'the', 'lazy'];
+  for (let i = 0; i < path.length; i++) {
+    verified.appendChild(makeToken(path[i], 'accept'));
+    await sleep(200);
+  }
+}
+
+async function animateEagle() {
+  const draft = document.getElementById('eagleDraft');
+  const accepted = document.getElementById('eagleAccepted');
+  draft.innerHTML = ''; accepted.innerHTML = '';
+
+  const drafts = ['jumps', 'over', 'the', 'lazy', 'dog', 'and'];
+  for (let i = 0; i < drafts.length; i++) {
+    draft.appendChild(makeToken(drafts[i], 'draft'));
+    await sleep(150);
+  }
+  await sleep(500);
+  // Higher acceptance rate for EAGLE
+  for (let i = 0; i < 5; i++) {
+    accepted.appendChild(makeToken(drafts[i], 'accept'));
+    await sleep(120);
+  }
+  accepted.appendChild(makeToken('happily', 'accept'));
+}
+
+// Draw trees
+function drawLinearTree() {
+  const container = document.getElementById('linearTree');
+  container.innerHTML = '';
+  const tokens = ['fox', 'jumps', 'over', 'the', 'lazy'];
+  const colors = ['var(--primary)', 'var(--primary)', 'var(--primary)', 'var(--danger)', 'var(--text-dim)'];
+  let x = 20;
+  tokens.forEach((t, i) => {
+    const node = document.createElement('div');
+    node.style.cssText = `position:absolute;left:${x}px;top:70px;padding:6px 14px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:0.75rem;font-weight:500;border:1px solid ${colors[i]};color:${colors[i]};background:rgba(0,0,0,0.3);opacity:0;transition:all 0.5s;`;
+    node.textContent = t;
+    container.appendChild(node);
+    if (i > 0) {
+      const line = document.createElement('div');
+      line.style.cssText = `position:absolute;left:${x - 15}px;top:82px;width:15px;height:2px;background:${colors[i]};opacity:0;transition:all 0.5s;`;
+      container.appendChild(line);
+      setTimeout(() => line.style.opacity = '1', i * 200);
+    }
+    setTimeout(() => node.style.opacity = '1', i * 200);
+    x += 90;
+  });
+}
+
+function drawBranchTree() {
+  const container = document.getElementById('branchTree');
+  container.innerHTML = '';
+  const levels = [
+    [{ t: 'fox', x: 200, y: 10, c: 'var(--secondary)' }],
+    [{ t: 'jumps', x: 120, y: 55, c: 'var(--secondary)' }, { t: 'leaps', x: 200, y: 55, c: 'var(--text-dim)' }, { t: 'runs', x: 280, y: 55, c: 'var(--text-dim)' }],
+    [{ t: 'over', x: 80, y: 100, c: 'var(--secondary)' }, { t: 'past', x: 160, y: 100, c: 'var(--text-dim)' }, { t: 'above', x: 240, y: 100, c: 'var(--text-dim)' }],
+    [{ t: 'the', x: 60, y: 145, c: 'var(--secondary)' }, { t: 'a', x: 130, y: 145, c: 'var(--text-dim)' }]
+  ];
+  let delay = 0;
+  levels.forEach((level) => {
+    level.forEach(n => {
+      const node = document.createElement('div');
+      node.style.cssText = `position:absolute;left:${n.x}px;top:${n.y}px;padding:4px 10px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:0.7rem;font-weight:500;border:1px solid ${n.c};color:${n.c};background:rgba(0,0,0,0.3);opacity:0;transition:all 0.5s;`;
+      node.textContent = n.t;
+      container.appendChild(node);
+      setTimeout(() => node.style.opacity = '1', delay);
+      delay += 120;
+    });
+  });
+}
+
+// Tree stats
+function updateTreeStats() {
+  const w = parseInt(document.getElementById('treeWidth').value);
+  const d = parseInt(document.getElementById('treeDepth').value);
+  document.getElementById('treeWidthVal').textContent = w;
+  document.getElementById('treeDepthVal').textContent = d;
+  let total = 0;
+  for (let i = 0; i < d; i++) total += Math.pow(w, i);
+  const paths = Math.pow(w, d - 1);
+  document.getElementById('totalNodes').textContent = total;
+  document.getElementById('totalPaths').textContent = paths;
+  document.getElementById('verifyOverhead').textContent = (total / d).toFixed(1) + 'x';
+}
+
+// Benchmark data
+function populateBenchmarks() {
+  const data = [
+    { method: 'Standard', v7: '1.0x', v13: '1.0x', v33: '1.0x', avg: '1.0', overhead: '-', color: 'var(--text-dim)' },
+    { method: 'Draft-Target', v7: '1.8x', v13: '2.2x', v33: '2.5x', avg: '3.2', overhead: 'Separate model', color: 'var(--primary)' },
+    { method: 'Medusa', v7: '2.1x', v13: '2.4x', v33: '2.7x', avg: '3.6', overhead: '~1% params', color: 'var(--secondary)' },
+    { method: 'EAGLE', v7: '2.6x', v13: '3.0x', v33: '3.5x', avg: '4.2', overhead: '~2% params', color: 'var(--tertiary)' },
+  ];
+  const table = document.getElementById('benchTable');
+  data.forEach(d => {
+    const row = document.createElement('tr');
+    row.innerHTML = `<td style="color:${d.color};font-weight:600;">${d.method}</td><td class="mono">${d.v7}</td><td class="mono">${d.v13}</td><td class="mono">${d.v33}</td><td class="mono">${d.avg}</td><td>${d.overhead}</td>`;
+    table.appendChild(row);
+  });
+
+  const barsContainer = document.getElementById('speedupBars');
+  const barData = [
+    { label: 'Draft-Target (33B)', value: 62, text: '2.5x', color: 'rgba(0,212,106,0.5)' },
+    { label: 'Medusa (33B)', value: 67, text: '2.7x', color: 'rgba(0,200,230,0.5)' },
+    { label: 'EAGLE (33B)', value: 87, text: '3.5x', color: 'rgba(168,85,247,0.5)' },
+  ];
+  barData.forEach(b => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:1rem;';
+    row.innerHTML = `
+      <div style="width:140px;font-size:0.8rem;color:var(--text-muted);flex-shrink:0;">${b.label}</div>
+      <div style="flex:1;height:28px;background:rgba(255,255,255,0.03);border-radius:6px;overflow:hidden;">
+        <div class="speedup-bar" style="width:0;height:100%;background:${b.color};border-radius:6px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;font-family:'JetBrains Mono',monospace;font-size:0.75rem;transition:width 1.5s ease;" data-width="${b.value}">${b.text}</div>
+      </div>`;
+    barsContainer.appendChild(row);
+  });
+}
+
+// Animate bars on scroll
+function animateBars() {
+  document.querySelectorAll('.speedup-bar').forEach(bar => {
+    const rect = bar.getBoundingClientRect();
+    if (rect.top < window.innerHeight * 0.9) {
+      bar.style.width = bar.dataset.width + '%';
+    }
+  });
+}
+
+// Canvas animations for method cards
+function initMethodAnimations() {
+  const canvases = ['dtAnim', 'medusaAnim', 'eagleAnim'];
+  const methods = ['Draft-Target', 'Medusa', 'EAGLE'];
+  const colors = ['#00d46a', '#00c8e6', '#a855f7'];
+
+  canvases.forEach((id, idx) => {
+    const container = document.getElementById(id);
+    container.innerHTML = '';
+
+    // Create simple animated SVG
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '100%');
+    svg.setAttribute('height', '100%');
+    svg.setAttribute('viewBox', '0 0 400 200');
+    container.appendChild(svg);
+
+    if (idx === 0) {
+      // Draft-Target: two boxes with arrow
+      svg.innerHTML = `
+        <rect x="20" y="60" width="120" height="50" rx="10" fill="rgba(168,85,247,0.15)" stroke="#a855f7" stroke-width="1"/>
+        <text x="80" y="88" text-anchor="middle" fill="#a855f7" font-size="11" font-family="Inter">Draft (68M)</text>
+        <line x1="145" y1="85" x2="230" y2="85" stroke="#737373" stroke-width="1" stroke-dasharray="4"/>
+        <polygon points="228,80 238,85 228,90" fill="#737373"/>
+        <text x="187" y="75" text-anchor="middle" fill="#737373" font-size="9" font-family="Inter">K tokens</text>
+        <rect x="240" y="60" width="140" height="50" rx="10" fill="rgba(0,212,106,0.15)" stroke="#00d46a" stroke-width="1"/>
+        <text x="310" y="88" text-anchor="middle" fill="#00d46a" font-size="11" font-family="Inter">Target (70B)</text>
+        <text x="200" y="145" text-anchor="middle" fill="#a3a3a3" font-size="10" font-family="Inter">Sequential draft, parallel verify</text>
+      `;
+    } else if (idx === 1) {
+      // Medusa: one box with multiple heads
+      svg.innerHTML = `
+        <rect x="100" y="20" width="200" height="45" rx="10" fill="rgba(0,200,230,0.1)" stroke="#00c8e6" stroke-width="1"/>
+        <text x="200" y="47" text-anchor="middle" fill="#00c8e6" font-size="11" font-family="Inter">Base Model + Medusa Heads</text>
+        <line x1="150" y1="65" x2="150" y2="95" stroke="#a855f7" stroke-width="1"/>
+        <line x1="200" y1="65" x2="200" y2="95" stroke="#a855f7" stroke-width="1"/>
+        <line x1="250" y1="65" x2="250" y2="95" stroke="#a855f7" stroke-width="1"/>
+        <rect x="130" y="95" width="40" height="30" rx="6" fill="rgba(168,85,247,0.15)" stroke="#a855f7" stroke-width="1"/>
+        <text x="150" y="114" text-anchor="middle" fill="#a855f7" font-size="9" font-family="Inter">H1</text>
+        <rect x="180" y="95" width="40" height="30" rx="6" fill="rgba(168,85,247,0.15)" stroke="#a855f7" stroke-width="1"/>
+        <text x="200" y="114" text-anchor="middle" fill="#a855f7" font-size="9" font-family="Inter">H2</text>
+        <rect x="230" y="95" width="40" height="30" rx="6" fill="rgba(168,85,247,0.15)" stroke="#a855f7" stroke-width="1"/>
+        <text x="250" y="114" text-anchor="middle" fill="#a855f7" font-size="9" font-family="Inter">H3</text>
+        <text x="200" y="155" text-anchor="middle" fill="#a3a3a3" font-size="10" font-family="Inter">Parallel heads, tree candidates</text>
+      `;
+    } else {
+      // EAGLE: feature regression
+      svg.innerHTML = `
+        <rect x="80" y="15" width="240" height="35" rx="10" fill="rgba(168,85,247,0.08)" stroke="#a855f7" stroke-width="1"/>
+        <text x="200" y="37" text-anchor="middle" fill="#a855f7" font-size="10" font-family="Inter">Base Model Hidden States</text>
+        <line x1="200" y1="50" x2="200" y2="70" stroke="#a855f7" stroke-width="1"/>
+        <rect x="120" y="70" width="160" height="35" rx="10" fill="rgba(168,85,247,0.15)" stroke="#a855f7" stroke-width="1"/>
+        <text x="200" y="92" text-anchor="middle" fill="#a855f7" font-size="10" font-family="Inter">FC: Predict h(t+1)</text>
+        <line x1="200" y1="105" x2="200" y2="125" stroke="#00d46a" stroke-width="1"/>
+        <rect x="100" y="125" width="200" height="35" rx="10" fill="rgba(0,212,106,0.1)" stroke="#00d46a" stroke-width="1"/>
+        <text x="200" y="147" text-anchor="middle" fill="#00d46a" font-size="10" font-family="Inter">Autoregressive Draft Head</text>
+        <text x="200" y="185" text-anchor="middle" fill="#a3a3a3" font-size="10" font-family="Inter">Feature-level prediction, tree drafts</text>
+      `;
+    }
+  });
+}
+
+window.addEventListener('load', () => {
+  updateProgress();
+  drawLinearTree();
+  drawBranchTree();
+  updateTreeStats();
+  populateBenchmarks();
+  initMethodAnimations();
+});
+window.addEventListener('scroll', () => { updateProgress(); animateBars(); });
+</script>
+</body>
+</html>

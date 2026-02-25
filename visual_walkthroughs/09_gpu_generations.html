@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPU Generations Comparison | Inference Engineering</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a;
+  --bg-card: #121212;
+  --bg-card-hover: #1a1a1a;
+  --border: #262626;
+  --primary: #00d46a;
+  --secondary: #00c8e6;
+  --tertiary: #a855f7;
+  --success: #10b981;
+  --text: #f2f2f2;
+  --text-muted: #a3a3a3;
+  --text-dim: #737373;
+  --danger: #ef4444;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); overflow-x: hidden; line-height: 1.6; }
+code, .mono { font-family: 'JetBrains Mono', monospace; }
+h1, h2 { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; }
+
+.gradient-text { background: linear-gradient(135deg, #00d46a, #00c8e6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.badge { border: 1px solid rgba(0,212,106,0.3); background: rgba(0,212,106,0.1); color: var(--primary); padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: inline-block; font-family: 'JetBrains Mono', monospace; }
+
+.bg-grid { position: fixed; inset: 0; background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 60px 60px; z-index: 0; pointer-events: none; }
+.glow-orb { position: fixed; border-radius: 50%; filter: blur(80px); pointer-events: none; z-index: 0; }
+.glow-orb.primary { width: 600px; height: 600px; background: rgba(0,212,106,0.08); top: -200px; left: -200px; }
+.glow-orb.secondary { width: 500px; height: 500px; background: rgba(0,200,230,0.06); bottom: -150px; right: -150px; }
+
+nav { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; background: rgba(10,10,10,0.85); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); padding: 0 2rem; height: 60px; display: flex; align-items: center; justify-content: space-between; }
+nav .nav-title { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.2rem; }
+.nav-dots { display: flex; gap: 8px; }
+.nav-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); cursor: pointer; transition: all 0.3s; }
+.nav-dot.active { background: var(--primary); box-shadow: 0 0 10px rgba(0,212,106,0.5); }
+
+.progress-bar { position: fixed; top: 60px; left: 0; height: 3px; background: linear-gradient(90deg, var(--primary), var(--secondary)); z-index: 1001; transition: width 0.3s; }
+
+section { min-height: 100vh; padding: 100px 2rem 60px; position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.section-inner { max-width: 1200px; width: 100%; opacity: 0; transform: translateY(40px); transition: opacity 0.8s ease, transform 0.8s ease; }
+.section-inner.visible { opacity: 1; transform: translateY(0); }
+.section-desc { color: var(--text-muted); font-size: 1.1rem; max-width: 700px; margin-bottom: 2rem; }
+h2 { font-size: 2.8rem; margin-bottom: 1rem; line-height: 1.2; }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; transition: all 0.3s ease; }
+.card:hover { background: var(--bg-card-hover); box-shadow: 0 0 20px rgba(0,212,106,0.15); border-color: rgba(0,212,106,0.3); }
+
+.metrics-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin: 2rem 0; }
+.metric-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; text-align: center; transition: all 0.3s; }
+.metric-card:hover { border-color: rgba(0,212,106,0.3); box-shadow: 0 0 15px rgba(0,212,106,0.1); }
+.metric-val { font-size: 1.5rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.metric-val.primary { color: var(--primary); }
+.metric-val.secondary { color: var(--secondary); }
+.metric-val.tertiary { color: var(--tertiary); }
+.metric-label { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+.info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin: 2rem 0; }
+
+.toggle-group { display: inline-flex; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.toggle-btn { padding: 8px 20px; background: transparent; border: none; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; cursor: pointer; transition: all 0.3s; }
+.toggle-btn.active { background: var(--primary); color: var(--bg); font-weight: 600; }
+
+/* GPU Spec Cards */
+.gpu-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.gpu-spec-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  cursor: pointer;
+  transition: all 0.4s;
+  position: relative;
+  overflow: hidden;
+}
+
+.gpu-spec-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+}
+
+.gpu-spec-card.hopper::before { background: linear-gradient(90deg, #00d46a, #00c8e6); }
+.gpu-spec-card.blackwell::before { background: linear-gradient(90deg, #a855f7, #ec4899); }
+.gpu-spec-card.blackwell-ultra::before { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+.gpu-spec-card.rubin::before { background: linear-gradient(90deg, #00c8e6, #6366f1); }
+
+.gpu-spec-card:hover {
+  border-color: rgba(0,212,106,0.3);
+  box-shadow: 0 0 25px rgba(0,212,106,0.15);
+  transform: translateY(-4px);
+}
+
+.gpu-spec-card.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 30px rgba(0,212,106,0.2);
+}
+
+.gpu-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+
+.gpu-card-name {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.gpu-card-gen {
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.gpu-card-gen.hopper { background: rgba(0,212,106,0.15); color: var(--primary); }
+.gpu-card-gen.blackwell { background: rgba(168,85,247,0.15); color: var(--tertiary); }
+.gpu-card-gen.blackwell-ultra { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.gpu-card-gen.rubin { background: rgba(0,200,230,0.15); color: var(--secondary); }
+
+.gpu-card-year {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 1rem;
+}
+
+.gpu-spec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.gpu-spec-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid rgba(38,38,38,0.5);
+}
+
+.gpu-spec-row .spec-key {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.gpu-spec-row .spec-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* Animated bar chart */
+.comparison-chart {
+  margin: 2rem 0;
+}
+
+.chart-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.chart-label {
+  min-width: 80px;
+  font-size: 0.8rem;
+  text-align: right;
+  font-weight: 600;
+}
+
+.chart-bars {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chart-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chart-bar-name {
+  min-width: 60px;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+  text-align: right;
+}
+
+.chart-bar-track {
+  flex: 1;
+  height: 20px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.chart-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 1.2s ease;
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+  font-size: 0.65rem;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--bg);
+  font-weight: 700;
+  min-width: fit-content;
+  padding-right: 8px;
+}
+
+/* Timeline */
+.gen-timeline {
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+  margin: 3rem 0 2rem;
+  padding: 0 2rem;
+}
+
+.gen-timeline::before {
+  content: '';
+  position: absolute;
+  top: 20px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary), var(--tertiary), #f59e0b);
+  border-radius: 2px;
+}
+
+.gen-point {
+  position: relative;
+  text-align: center;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.gen-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  margin: 12px auto 0.5rem;
+  transition: all 0.3s;
+  border: 3px solid var(--bg);
+}
+
+.gen-point:hover .gen-dot {
+  transform: scale(1.3);
+  box-shadow: 0 0 15px currentColor;
+}
+
+.gen-point.active .gen-dot {
+  transform: scale(1.4);
+  box-shadow: 0 0 20px currentColor;
+}
+
+.gen-year {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+.gen-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
+}
+
+/* Comparison table */
+.comp-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 2rem 0;
+  font-size: 0.85rem;
+}
+
+.comp-table th {
+  padding: 1rem 0.75rem;
+  text-align: left;
+  border-bottom: 2px solid var(--border);
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.comp-table td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+}
+
+.comp-table tr:hover td {
+  background: rgba(0,212,106,0.03);
+}
+
+.comp-table .best {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+/* Precision comparison grid */
+.prec-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.prec-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  text-align: center;
+  transition: all 0.3s;
+  cursor: pointer;
+}
+
+.prec-card:hover {
+  border-color: rgba(0,212,106,0.3);
+  box-shadow: 0 0 15px rgba(0,212,106,0.1);
+}
+
+.prec-card.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 20px rgba(0,212,106,0.2);
+}
+
+.prec-name {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  font-size: 1.1rem;
+  margin-bottom: 0.25rem;
+}
+
+.prec-bits {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+@media (max-width: 768px) {
+  h2 { font-size: 2rem; }
+  section { padding: 80px 1rem 40px; }
+  .gpu-cards-grid { grid-template-columns: 1fr; }
+  .gen-timeline { flex-direction: column; gap: 1rem; padding: 0; }
+  .gen-timeline::before { display: none; }
+  .comp-table { font-size: 0.7rem; }
+}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="glow-orb primary"></div>
+<div class="glow-orb secondary"></div>
+
+<nav>
+  <div class="nav-title">GPU Generations Comparison</div>
+  <div class="nav-dots">
+    <div class="nav-dot active" data-section="0"></div>
+    <div class="nav-dot" data-section="1"></div>
+    <div class="nav-dot" data-section="2"></div>
+    <div class="nav-dot" data-section="3"></div>
+    <div class="nav-dot" data-section="4"></div>
+    <div class="nav-dot" data-section="5"></div>
+  </div>
+</nav>
+<div class="progress-bar" id="progressBar"></div>
+
+<!-- Section 0: Hero -->
+<section id="sec0">
+  <div class="section-inner">
+    <span class="badge">MODULE 09</span>
+    <h2><span class="gradient-text">GPU Generations</span></h2>
+    <p class="section-desc">Compare NVIDIA datacenter GPU generations: Hopper (H100), Blackwell (B100/B200/GB200), and the upcoming Rubin architecture. Each leap brings massive gains for AI inference.</p>
+    <div class="gen-timeline">
+      <div class="gen-point active" data-gen="hopper">
+        <div class="gen-dot" style="background:var(--primary); color:var(--primary);"></div>
+        <div class="gen-year">2022</div>
+        <div class="gen-name" style="color:var(--primary);">Hopper</div>
+      </div>
+      <div class="gen-point" data-gen="blackwell">
+        <div class="gen-dot" style="background:var(--tertiary); color:var(--tertiary);"></div>
+        <div class="gen-year">2024</div>
+        <div class="gen-name" style="color:var(--tertiary);">Blackwell</div>
+      </div>
+      <div class="gen-point" data-gen="gb200">
+        <div class="gen-dot" style="background:#f59e0b; color:#f59e0b;"></div>
+        <div class="gen-year">2024-25</div>
+        <div class="gen-name" style="color:#f59e0b;">GB200 NVL</div>
+      </div>
+      <div class="gen-point" data-gen="rubin">
+        <div class="gen-dot" style="background:var(--secondary); color:var(--secondary);"></div>
+        <div class="gen-year">2026</div>
+        <div class="gen-name" style="color:var(--secondary);">Rubin</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 1: GPU Cards -->
+<section id="sec1">
+  <div class="section-inner">
+    <span class="badge">SPEC CARDS</span>
+    <h2>GPU <span class="gradient-text">Specification Cards</span></h2>
+    <p class="section-desc">Click each GPU to select it for detailed comparison. Specs shown for the top-end SXM/NVL variant of each generation.</p>
+    <div class="gpu-cards-grid" id="gpuCardsGrid">
+      <div class="gpu-spec-card hopper selected" data-gpu="h100">
+        <div class="gpu-card-header">
+          <div class="gpu-card-name">H100 SXM</div>
+          <div class="gpu-card-gen hopper">HOPPER</div>
+        </div>
+        <div class="gpu-card-year">Released: 2022 | 4nm TSMC</div>
+        <div class="gpu-spec-list">
+          <div class="gpu-spec-row"><span class="spec-key">FP16 TFLOPS</span><span class="spec-val" style="color:var(--primary);">989</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">FP8 TFLOPS</span><span class="spec-val" style="color:var(--secondary);">1,979</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">Memory</span><span class="spec-val">80 GB HBM3</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">Bandwidth</span><span class="spec-val">3.35 TB/s</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">NVLink</span><span class="spec-val">900 GB/s</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">TDP</span><span class="spec-val">700W</span></div>
+        </div>
+      </div>
+      <div class="gpu-spec-card blackwell" data-gpu="b200">
+        <div class="gpu-card-header">
+          <div class="gpu-card-name">B200</div>
+          <div class="gpu-card-gen blackwell">BLACKWELL</div>
+        </div>
+        <div class="gpu-card-year">Released: 2024 | 4NP TSMC</div>
+        <div class="gpu-spec-list">
+          <div class="gpu-spec-row"><span class="spec-key">FP16 TFLOPS</span><span class="spec-val" style="color:var(--primary);">2,250</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">FP8 TFLOPS</span><span class="spec-val" style="color:var(--secondary);">4,500</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">FP4 TFLOPS</span><span class="spec-val" style="color:var(--tertiary);">9,000</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">Memory</span><span class="spec-val">192 GB HBM3e</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">Bandwidth</span><span class="spec-val">8.0 TB/s</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">NVLink</span><span class="spec-val">1,800 GB/s</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">TDP</span><span class="spec-val">1000W</span></div>
+        </div>
+      </div>
+      <div class="gpu-spec-card blackwell-ultra" data-gpu="gb200">
+        <div class="gpu-card-header">
+          <div class="gpu-card-name">GB200 NVL72</div>
+          <div class="gpu-card-gen blackwell-ultra">SUPERCHIP</div>
+        </div>
+        <div class="gpu-card-year">Released: 2024-25 | Grace + Blackwell</div>
+        <div class="gpu-spec-list">
+          <div class="gpu-spec-row"><span class="spec-key">FP8 (per GPU)</span><span class="spec-val" style="color:var(--secondary);">4,500</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">FP4 (per GPU)</span><span class="spec-val" style="color:var(--tertiary);">9,000</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">Mem (per GPU)</span><span class="spec-val">192 GB HBM3e</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">NVL72 Total Mem</span><span class="spec-val" style="color:var(--primary);">13.8 TB</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">NVLink Domain</span><span class="spec-val">130 TB/s</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">GPUs per Rack</span><span class="spec-val">72</span></div>
+        </div>
+      </div>
+      <div class="gpu-spec-card rubin" data-gpu="rubin">
+        <div class="gpu-card-header">
+          <div class="gpu-card-name">Rubin Ultra</div>
+          <div class="gpu-card-gen rubin">RUBIN</div>
+        </div>
+        <div class="gpu-card-year">Expected: 2026 | Next-gen</div>
+        <div class="gpu-spec-list">
+          <div class="gpu-spec-row"><span class="spec-key">FP8 TFLOPS</span><span class="spec-val" style="color:var(--secondary);">~9,000+</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">FP4 TFLOPS</span><span class="spec-val" style="color:var(--tertiary);">~18,000+</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">Memory</span><span class="spec-val">HBM4</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">Bandwidth</span><span class="spec-val">>12 TB/s (est.)</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">NVLink</span><span class="spec-val">Next-gen</span></div>
+          <div class="gpu-spec-row"><span class="spec-key">CPU</span><span class="spec-val">Vera (ARM)</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 2: Comparison Charts -->
+<section id="sec2">
+  <div class="section-inner">
+    <span class="badge">COMPARISON</span>
+    <h2>Performance <span class="gradient-text">Comparison</span></h2>
+    <p class="section-desc">Animated bar charts comparing key metrics across GPU generations. Toggle between precision formats.</p>
+    <div style="margin-bottom:1.5rem;">
+      <div class="toggle-group" id="precToggle">
+        <button class="toggle-btn active" data-prec="fp16">FP16</button>
+        <button class="toggle-btn" data-prec="fp8">FP8</button>
+        <button class="toggle-btn" data-prec="fp4">FP4</button>
+        <button class="toggle-btn" data-prec="int8">INT8</button>
+      </div>
+    </div>
+    <div class="comparison-chart" id="compChart">
+      <div style="font-weight:600; margin-bottom:1rem;">Compute Performance (TFLOPS)</div>
+      <div class="chart-row">
+        <div class="chart-label" style="color:var(--primary);">TFLOPS</div>
+        <div class="chart-bars">
+          <div class="chart-bar-wrap">
+            <div class="chart-bar-name">H100</div>
+            <div class="chart-bar-track">
+              <div class="chart-bar-fill" id="flopsH100" style="width:0; background:linear-gradient(90deg, var(--primary), var(--secondary));">989</div>
+            </div>
+          </div>
+          <div class="chart-bar-wrap">
+            <div class="chart-bar-name">B200</div>
+            <div class="chart-bar-track">
+              <div class="chart-bar-fill" id="flopsB200" style="width:0; background:linear-gradient(90deg, var(--tertiary), #ec4899);">2,250</div>
+            </div>
+          </div>
+          <div class="chart-bar-wrap">
+            <div class="chart-bar-name">Rubin</div>
+            <div class="chart-bar-track">
+              <div class="chart-bar-fill" id="flopsRubin" style="width:0; background:linear-gradient(90deg, var(--secondary), #6366f1);">~4,500</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="comparison-chart" id="bwChart">
+      <div style="font-weight:600; margin-bottom:1rem;">Memory Bandwidth (TB/s)</div>
+      <div class="chart-row">
+        <div class="chart-label" style="color:var(--secondary);">TB/s</div>
+        <div class="chart-bars">
+          <div class="chart-bar-wrap">
+            <div class="chart-bar-name">H100</div>
+            <div class="chart-bar-track">
+              <div class="chart-bar-fill" id="bwH100" style="width:0; background:var(--primary);">3.35</div>
+            </div>
+          </div>
+          <div class="chart-bar-wrap">
+            <div class="chart-bar-name">B200</div>
+            <div class="chart-bar-track">
+              <div class="chart-bar-fill" id="bwB200" style="width:0; background:var(--tertiary);">8.0</div>
+            </div>
+          </div>
+          <div class="chart-bar-wrap">
+            <div class="chart-bar-name">Rubin</div>
+            <div class="chart-bar-track">
+              <div class="chart-bar-fill" id="bwRubin" style="width:0; background:var(--secondary);">~12+</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="comparison-chart" id="memChart">
+      <div style="font-weight:600; margin-bottom:1rem;">HBM Capacity (GB)</div>
+      <div class="chart-row">
+        <div class="chart-label" style="color:var(--tertiary);">GB</div>
+        <div class="chart-bars">
+          <div class="chart-bar-wrap">
+            <div class="chart-bar-name">H100</div>
+            <div class="chart-bar-track">
+              <div class="chart-bar-fill" id="memH100" style="width:0; background:var(--primary);">80</div>
+            </div>
+          </div>
+          <div class="chart-bar-wrap">
+            <div class="chart-bar-name">B200</div>
+            <div class="chart-bar-track">
+              <div class="chart-bar-fill" id="memB200" style="width:0; background:var(--tertiary);">192</div>
+            </div>
+          </div>
+          <div class="chart-bar-wrap">
+            <div class="chart-bar-name">Rubin</div>
+            <div class="chart-bar-track">
+              <div class="chart-bar-fill" id="memRubin" style="width:0; background:var(--secondary);">288+</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 3: Precision Comparison -->
+<section id="sec3">
+  <div class="section-inner">
+    <span class="badge">PRECISION</span>
+    <h2>Precision <span class="gradient-text">Format Evolution</span></h2>
+    <p class="section-desc">Each GPU generation adds lower-precision formats, doubling throughput. Click each format to see supported GPUs and performance.</p>
+    <div class="prec-grid" id="precGrid">
+      <div class="prec-card active" data-prec="fp32">
+        <div class="prec-name" style="color:var(--text-muted);">FP32</div>
+        <div class="prec-bits">32 bits</div>
+      </div>
+      <div class="prec-card" data-prec="tf32">
+        <div class="prec-name" style="color:var(--text-muted);">TF32</div>
+        <div class="prec-bits">19 bits</div>
+      </div>
+      <div class="prec-card" data-prec="fp16">
+        <div class="prec-name" style="color:var(--primary);">FP16</div>
+        <div class="prec-bits">16 bits</div>
+      </div>
+      <div class="prec-card" data-prec="bf16">
+        <div class="prec-name" style="color:var(--primary);">BF16</div>
+        <div class="prec-bits">16 bits</div>
+      </div>
+      <div class="prec-card" data-prec="fp8">
+        <div class="prec-name" style="color:var(--secondary);">FP8</div>
+        <div class="prec-bits">8 bits</div>
+      </div>
+      <div class="prec-card" data-prec="int8">
+        <div class="prec-name" style="color:var(--secondary);">INT8</div>
+        <div class="prec-bits">8 bits</div>
+      </div>
+      <div class="prec-card" data-prec="fp4">
+        <div class="prec-name" style="color:var(--tertiary);">FP4</div>
+        <div class="prec-bits">4 bits</div>
+      </div>
+      <div class="prec-card" data-prec="int4">
+        <div class="prec-name" style="color:var(--tertiary);">INT4</div>
+        <div class="prec-bits">4 bits</div>
+      </div>
+    </div>
+    <div class="card" id="precDetail">
+      <h3 style="color:var(--primary); margin-bottom:0.5rem;">FP32 (Single Precision)</h3>
+      <p style="font-size:0.85rem; color:var(--text-muted);">The baseline precision. 1 sign bit, 8 exponent bits, 23 mantissa bits. All GPUs support FP32 CUDA cores. Tensor Core support on Ampere+.</p>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-top:1rem;text-align:center;">
+        <div><div class="mono" style="color:var(--primary);">67</div><div style="font-size:0.7rem;color:var(--text-dim);">H100 TFLOPS</div></div>
+        <div><div class="mono" style="color:var(--tertiary);">~150</div><div style="font-size:0.7rem;color:var(--text-dim);">B200 TFLOPS</div></div>
+        <div><div class="mono" style="color:var(--secondary);">~300</div><div style="font-size:0.7rem;color:var(--text-dim);">Rubin TFLOPS (est.)</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 4: Comparison Table -->
+<section id="sec4">
+  <div class="section-inner">
+    <span class="badge">FULL TABLE</span>
+    <h2>Complete <span class="gradient-text">Specifications Table</span></h2>
+    <p class="section-desc">Side-by-side comparison of all key specifications. Green values indicate the best in each category.</p>
+    <div style="overflow-x:auto;">
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th>Specification</th>
+            <th style="color:var(--primary);">H100 SXM</th>
+            <th style="color:var(--tertiary);">B200</th>
+            <th style="color:#f59e0b;">GB200 NVL72</th>
+            <th style="color:var(--secondary);">Rubin (est.)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="color:var(--text-muted);">Architecture</td>
+            <td>Hopper</td>
+            <td>Blackwell</td>
+            <td>Blackwell</td>
+            <td class="best">Rubin</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-muted);">Process Node</td>
+            <td>4nm</td>
+            <td>4NP (dual-die)</td>
+            <td>4NP</td>
+            <td class="best">3nm (est.)</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-muted);">Transistors</td>
+            <td>80B</td>
+            <td>208B</td>
+            <td>208B</td>
+            <td class="best">>300B (est.)</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-muted);">SMs</td>
+            <td>132</td>
+            <td>192</td>
+            <td>192</td>
+            <td class="best">>200 (est.)</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-muted);">FP16 Tensor TFLOPS</td>
+            <td>989</td>
+            <td>2,250</td>
+            <td>2,250 / GPU</td>
+            <td class="best">~4,500</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-muted);">FP8 Tensor TFLOPS</td>
+            <td>1,979</td>
+            <td>4,500</td>
+            <td>4,500 / GPU</td>
+            <td class="best">~9,000</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-muted);">FP4 Tensor TFLOPS</td>
+            <td style="color:var(--text-dim);">N/A</td>
+            <td>9,000</td>
+            <td>9,000 / GPU</td>
+            <td class="best">~18,000</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-muted);">HBM</td>
+            <td>80 GB HBM3</td>
+            <td>192 GB HBM3e</td>
+            <td>13.8 TB total</td>
+            <td class="best">HBM4</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-muted);">Memory BW</td>
+            <td>3.35 TB/s</td>
+            <td>8.0 TB/s</td>
+            <td>8.0 TB/s / GPU</td>
+            <td class="best">>12 TB/s</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-muted);">NVLink BW</td>
+            <td>900 GB/s</td>
+            <td>1,800 GB/s</td>
+            <td>130 TB/s total</td>
+            <td class="best">Next-gen</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-muted);">TDP</td>
+            <td>700W</td>
+            <td>1000W</td>
+            <td>~120kW rack</td>
+            <td>TBD</td>
+          </tr>
+          <tr>
+            <td style="color:var(--text-muted);">Key Feature</td>
+            <td style="color:var(--primary);">FP8, Transformer Engine</td>
+            <td style="color:var(--tertiary);">FP4, Dual-die, 2nd gen TE</td>
+            <td style="color:#f59e0b;">Grace CPU + NVLink domain</td>
+            <td style="color:var(--secondary);">HBM4, Vera CPU</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- Section 5: Impact -->
+<section id="sec5">
+  <div class="section-inner">
+    <span class="badge">IMPACT</span>
+    <h2>What This Means for <span class="gradient-text">Inference</span></h2>
+    <p class="section-desc">Each GPU generation unlocks new capabilities for serving larger models faster and more efficiently.</p>
+    <div class="info-grid">
+      <div class="card" style="border-left:3px solid var(--primary);">
+        <h3 style="font-size:1.1rem;color:var(--primary);margin-bottom:0.75rem;">Hopper (H100)</h3>
+        <p style="font-size:0.85rem;color:var(--text-muted);">Enabled FP8 inference and the Transformer Engine. Made serving 70B parameter models on a single node practical. Established the standard for modern LLM inference.</p>
+        <div style="margin-top:1rem;padding:0.75rem;background:rgba(0,212,106,0.05);border-radius:8px;">
+          <div style="font-size:0.8rem;color:var(--text-dim);">Llama-2 70B: ~2 GPUs needed</div>
+          <div style="font-size:0.8rem;color:var(--text-dim);">Inference: ~100 tok/s (batch=1)</div>
+        </div>
+      </div>
+      <div class="card" style="border-left:3px solid var(--tertiary);">
+        <h3 style="font-size:1.1rem;color:var(--tertiary);margin-bottom:0.75rem;">Blackwell (B200/GB200)</h3>
+        <p style="font-size:0.85rem;color:var(--text-muted);">Introduces FP4 precision (2x throughput vs FP8). Dual-die design with 192 GB HBM3e. GB200 NVL72 creates a 13.8 TB memory domain for trillion-parameter models.</p>
+        <div style="margin-top:1rem;padding:0.75rem;background:rgba(168,85,247,0.05);border-radius:8px;">
+          <div style="font-size:0.8rem;color:var(--text-dim);">Llama-3 405B: single NVL72 rack</div>
+          <div style="font-size:0.8rem;color:var(--text-dim);">2.5x BW, 2.4x HBM vs H100</div>
+        </div>
+      </div>
+      <div class="card" style="border-left:3px solid var(--secondary);">
+        <h3 style="font-size:1.1rem;color:var(--secondary);margin-bottom:0.75rem;">Rubin (2026)</h3>
+        <p style="font-size:0.85rem;color:var(--text-muted);">HBM4 memory with unprecedented bandwidth. Vera ARM CPU replaces Grace. Designed for 10T+ parameter MoE models and real-time multimodal reasoning at scale.</p>
+        <div style="margin-top:1rem;padding:0.75rem;background:rgba(0,200,230,0.05);border-radius:8px;">
+          <div style="font-size:0.8rem;color:var(--text-dim);">Target: 10T+ parameter models</div>
+          <div style="font-size:0.8rem;color:var(--text-dim);">HBM4: >12 TB/s bandwidth</div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:2rem;">
+      <h3 style="font-size:1rem;color:var(--primary);margin-bottom:0.75rem;">Key Trend: Memory Bandwidth Grows Faster Than Compute</h3>
+      <p style="font-size:0.85rem;color:var(--text-muted);">Each generation roughly doubles compute TFLOPS, but memory bandwidth grows at an even faster rate (2-2.5x). This is intentional -- NVIDIA recognizes that LLM inference is memory-bandwidth-bound and is prioritizing bandwidth scaling to close the gap.</p>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-top:1rem;text-align:center;">
+        <div style="padding:1rem;background:rgba(0,212,106,0.05);border-radius:8px;">
+          <div class="mono" style="color:var(--primary);font-size:1.3rem;">2.3x</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);">FP8 TFLOPS (H100 vs B200)</div>
+        </div>
+        <div style="padding:1rem;background:rgba(0,200,230,0.05);border-radius:8px;">
+          <div class="mono" style="color:var(--secondary);font-size:1.3rem;">2.4x</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);">HBM Bandwidth (H100 vs B200)</div>
+        </div>
+        <div style="padding:1rem;background:rgba(168,85,247,0.05);border-radius:8px;">
+          <div class="mono" style="color:var(--tertiary);font-size:1.3rem;">2.4x</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);">HBM Capacity (H100 vs B200)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+// === Navigation & Scroll ===
+const sections = document.querySelectorAll('section');
+const navDots = document.querySelectorAll('.nav-dot');
+const progressBar = document.getElementById('progressBar');
+
+function updateScroll() {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  progressBar.style.width = (scrollTop / docHeight * 100) + '%';
+  sections.forEach((sec, i) => {
+    const rect = sec.getBoundingClientRect();
+    const inner = sec.querySelector('.section-inner');
+    if (rect.top < window.innerHeight * 0.75 && rect.bottom > 0) {
+      if (inner) inner.classList.add('visible');
+      navDots.forEach(d => d.classList.remove('active'));
+      if (navDots[i]) navDots[i].classList.add('active');
+    }
+  });
+
+  // Animate bars when section 2 visible
+  const sec2 = document.getElementById('sec2');
+  if (sec2 && sec2.getBoundingClientRect().top < window.innerHeight * 0.8) {
+    animateBars();
+  }
+}
+
+window.addEventListener('scroll', updateScroll);
+window.addEventListener('load', updateScroll);
+navDots.forEach(dot => {
+  dot.addEventListener('click', () => sections[parseInt(dot.dataset.section)].scrollIntoView({ behavior: 'smooth' }));
+});
+
+// === Timeline clicks ===
+document.querySelectorAll('.gen-point').forEach(pt => {
+  pt.addEventListener('click', () => {
+    document.querySelectorAll('.gen-point').forEach(p => p.classList.remove('active'));
+    pt.classList.add('active');
+  });
+});
+
+// === GPU Card selection ===
+document.querySelectorAll('.gpu-spec-card').forEach(card => {
+  card.addEventListener('click', () => {
+    card.classList.toggle('selected');
+  });
+});
+
+// === Comparison Bars ===
+const precisionData = {
+  fp16: { h100: 989, b200: 2250, rubin: 4500, max: 4500 },
+  fp8: { h100: 1979, b200: 4500, rubin: 9000, max: 9000 },
+  fp4: { h100: 0, b200: 9000, rubin: 18000, max: 18000 },
+  int8: { h100: 1979, b200: 4500, rubin: 9000, max: 9000 }
+};
+
+let currentPrecision = 'fp16';
+let barsAnimated = false;
+
+function animateBars() {
+  if (barsAnimated) return;
+  barsAnimated = true;
+  updateBars();
+}
+
+function updateBars() {
+  const data = precisionData[currentPrecision];
+  const maxVal = data.max || 1;
+
+  const el = (id) => document.getElementById(id);
+
+  el('flopsH100').style.width = (data.h100 / maxVal * 100) + '%';
+  el('flopsH100').textContent = data.h100 || 'N/A';
+  el('flopsB200').style.width = (data.b200 / maxVal * 100) + '%';
+  el('flopsB200').textContent = data.b200;
+  el('flopsRubin').style.width = (data.rubin / maxVal * 100) + '%';
+  el('flopsRubin').textContent = '~' + data.rubin;
+
+  // BW bars (static)
+  const bwMax = 14;
+  el('bwH100').style.width = (3.35 / bwMax * 100) + '%';
+  el('bwB200').style.width = (8.0 / bwMax * 100) + '%';
+  el('bwRubin').style.width = (12 / bwMax * 100) + '%';
+
+  // Mem bars
+  const memMax = 300;
+  el('memH100').style.width = (80 / memMax * 100) + '%';
+  el('memB200').style.width = (192 / memMax * 100) + '%';
+  el('memRubin').style.width = (288 / memMax * 100) + '%';
+}
+
+document.querySelectorAll('#precToggle .toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#precToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentPrecision = btn.dataset.prec;
+    barsAnimated = false;
+    // Reset widths
+    document.querySelectorAll('.chart-bar-fill').forEach(b => b.style.width = '0');
+    setTimeout(() => {
+      barsAnimated = true;
+      updateBars();
+    }, 100);
+  });
+});
+
+// === Precision Detail ===
+const precDetails = {
+  fp32: { title: 'FP32 (Single Precision)', desc: 'The baseline precision. 1 sign bit, 8 exponent bits, 23 mantissa bits. All GPUs support FP32.', h100: '67', b200: '~150', rubin: '~300' },
+  tf32: { title: 'TF32 (TensorFloat-32)', desc: 'NVIDIA custom format: 1+8+10 bits. Same range as FP32 with reduced precision. Introduced in Ampere.', h100: '495', b200: '~1,125', rubin: '~2,250' },
+  fp16: { title: 'FP16 (Half Precision)', desc: '1+5+10 bits. The standard for inference. Limited dynamic range requires loss scaling for training.', h100: '989', b200: '2,250', rubin: '~4,500' },
+  bf16: { title: 'BF16 (Brain Float 16)', desc: '1+8+7 bits. Same exponent range as FP32 but reduced mantissa. Google-designed, now standard for training.', h100: '989', b200: '2,250', rubin: '~4,500' },
+  fp8: { title: 'FP8 (Quarter Precision)', desc: 'Two formats: E4M3 (more precision) and E5M2 (more range). Introduced in Hopper. 2x throughput vs FP16.', h100: '1,979', b200: '4,500', rubin: '~9,000' },
+  int8: { title: 'INT8 (Integer 8-bit)', desc: 'Integer quantization. Requires calibration. Same throughput as FP8 on Tensor Cores.', h100: '1,979', b200: '4,500', rubin: '~9,000' },
+  fp4: { title: 'FP4 (4-bit Floating Point)', desc: 'New in Blackwell. 2x throughput vs FP8. Enables serving very large models with minimal accuracy loss.', h100: 'N/A', b200: '9,000', rubin: '~18,000' },
+  int4: { title: 'INT4 (Integer 4-bit)', desc: '4-bit integer quantization. Used with GPTQ/AWQ quantization methods. Aggressive compression.', h100: '~3,958 (2xINT8)', b200: '~9,000', rubin: '~18,000' }
+};
+
+document.querySelectorAll('.prec-card').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.prec-card').forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+    const prec = card.dataset.prec;
+    const detail = precDetails[prec];
+    document.getElementById('precDetail').innerHTML = `
+      <h3 style="color:var(--primary); margin-bottom:0.5rem;">${detail.title}</h3>
+      <p style="font-size:0.85rem; color:var(--text-muted);">${detail.desc}</p>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-top:1rem;text-align:center;">
+        <div><div class="mono" style="color:var(--primary);">${detail.h100}</div><div style="font-size:0.7rem;color:var(--text-dim);">H100 TFLOPS</div></div>
+        <div><div class="mono" style="color:var(--tertiary);">${detail.b200}</div><div style="font-size:0.7rem;color:var(--text-dim);">B200 TFLOPS</div></div>
+        <div><div class="mono" style="color:var(--secondary);">${detail.rubin}</div><div style="font-size:0.7rem;color:var(--text-dim);">Rubin TFLOPS (est.)</div></div>
+      </div>
+    `;
+  });
+});
+</script>
+</body>
+</html>

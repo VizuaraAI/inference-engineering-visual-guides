@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Cloud Architecture - Inference Engineering</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0a0a;--bg-card:#121212;--bg-card-hover:#1a1a1a;--border:#262626;--primary:#00d46a;--secondary:#00c8e6;--tertiary:#a855f7;--success:#10b981;--text:#f2f2f2;--text-muted:#a3a3a3;--text-dim:#737373;--danger:#ef4444}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
+h1,h2{font-family:'Instrument Serif',serif;font-style:italic}
+code,.mono{font-family:'JetBrains Mono',monospace}
+.gradient-text{background:linear-gradient(135deg,#00d46a,#00c8e6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+nav{position:fixed;top:0;left:0;right:0;z-index:1000;background:rgba(10,10,10,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0.75rem 2rem;display:flex;align-items:center;justify-content:space-between}
+nav .logo{font-family:'Instrument Serif',serif;font-style:italic;font-size:1.25rem}
+nav .badge{border:1px solid rgba(0,212,106,0.3);background:rgba(0,212,106,0.1);color:var(--primary);padding:0.25rem 0.75rem;border-radius:9999px;font-size:0.75rem;font-weight:500}
+.progress-bar{position:fixed;top:0;left:0;height:3px;z-index:1001;background:linear-gradient(90deg,var(--primary),var(--secondary));transition:width 0.3s ease}
+.dot-nav{position:fixed;right:2rem;top:50%;transform:translateY(-50%);z-index:999;display:flex;flex-direction:column;gap:12px}
+.dot-nav .dot{width:10px;height:10px;border-radius:50%;background:var(--border);cursor:pointer;transition:all 0.3s;border:2px solid transparent}
+.dot-nav .dot.active{background:var(--primary);border-color:var(--primary);box-shadow:0 0 10px rgba(0,212,106,0.5)}
+.dot-nav .dot:hover{background:var(--text-muted)}
+section{min-height:100vh;padding:6rem 2rem 4rem;position:relative;display:flex;align-items:center;justify-content:center}
+.section-inner{max-width:1200px;width:100%;margin:0 auto}
+.grid-bg{position:absolute;inset:0;z-index:0;background-image:linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px);background-size:60px 60px}
+.glow-green{position:absolute;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(0,212,106,0.1),transparent 70%);pointer-events:none}
+.glow-cyan{position:absolute;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(0,200,230,0.08),transparent 70%);pointer-events:none}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;transition:all 0.3s}
+.card:hover{background:var(--bg-card-hover);border-color:rgba(0,212,106,0.3)}
+.fade-in{opacity:0;transform:translateY(30px);transition:all 0.8s cubic-bezier(0.16,1,0.3,1)}
+.fade-in.visible{opacity:1;transform:translateY(0)}
+.btn{padding:0.6rem 1.5rem;border:1px solid var(--primary);background:rgba(0,212,106,0.1);color:var(--primary);border-radius:8px;cursor:pointer;font-family:'Inter',sans-serif;font-weight:500;transition:all 0.3s;font-size:0.85rem}
+.btn:hover{background:rgba(0,212,106,0.2)}
+.btn.active{background:var(--primary);color:var(--bg)}
+.btn.secondary{border-color:var(--secondary);background:rgba(0,200,230,0.1);color:var(--secondary)}
+.btn.danger{border-color:var(--danger);background:rgba(239,68,68,0.1);color:var(--danger)}
+.btn.tertiary{border-color:var(--tertiary);background:rgba(168,85,247,0.1);color:var(--tertiary)}
+.controls{display:flex;gap:0.75rem;flex-wrap:wrap;margin:1.5rem 0}
+.section-title{font-size:3rem;margin-bottom:1rem;line-height:1.2}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:start}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin:1.5rem 0}
+.stat-card{background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:1rem;text-align:center}
+.stat-card .stat-value{font-size:1.4rem;font-weight:700;font-family:'JetBrains Mono',monospace}
+.stat-card .stat-label{font-size:0.7rem;color:var(--text-muted);margin-top:0.25rem}
+
+/* Map */
+.world-map{position:relative;width:100%;height:480px;background:rgba(0,0,0,0.3);border-radius:12px;border:1px solid var(--border);overflow:hidden}
+.map-bg{position:absolute;inset:0;opacity:0.08}
+
+.region-node{position:absolute;cursor:pointer;z-index:5;transition:all 0.3s}
+.region-dot{width:16px;height:16px;border-radius:50%;border:2px solid;position:relative;transition:all 0.3s}
+.region-dot.active{box-shadow:0 0 20px currentColor}
+.region-dot::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid;opacity:0.3;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:0.3}50%{transform:scale(1.5);opacity:0}}
+.region-label{position:absolute;top:20px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:0.7rem;font-weight:600;padding:0.2rem 0.5rem;border-radius:4px;background:rgba(0,0,0,0.7);border:1px solid var(--border)}
+.region-info{position:absolute;top:40px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:0.6rem;color:var(--text-dim);font-family:'JetBrains Mono',monospace}
+
+.control-plane{position:absolute;top:20px;left:50%;transform:translateX(-50%);background:rgba(0,212,106,0.1);border:2px solid var(--primary);border-radius:10px;padding:0.5rem 1.5rem;font-size:0.8rem;font-weight:600;color:var(--primary);z-index:10;text-align:center}
+
+.traffic-line{position:absolute;z-index:3;pointer-events:none;opacity:0.6}
+
+/* Cost panel */
+.cost-bar{display:flex;align-items:center;gap:0.75rem;margin:0.5rem 0}
+.cost-label{width:80px;font-size:0.8rem;color:var(--text-muted)}
+.cost-track{flex:1;height:20px;background:var(--border);border-radius:4px;overflow:hidden;position:relative}
+.cost-fill{height:100%;border-radius:4px;transition:width 0.5s ease;display:flex;align-items:center;padding:0 0.5rem;font-size:0.7rem;font-family:'JetBrains Mono',monospace}
+
+/* Failover */
+.failover-timeline{display:flex;align-items:center;gap:0;margin:1rem 0;overflow-x:auto;padding:0.5rem 0}
+.timeline-event{padding:0.5rem 1rem;border-radius:8px;font-size:0.75rem;text-align:center;min-width:120px;border:1px solid var(--border);transition:all 0.3s}
+.timeline-arrow{width:30px;height:2px;background:var(--border);flex-shrink:0;position:relative}
+.timeline-arrow::after{content:'';position:absolute;right:-3px;top:-3px;width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:6px solid var(--border)}
+
+.toggle-switch{display:flex;align-items:center;gap:0.5rem;cursor:pointer;padding:0.3rem 0}
+.toggle-track{width:36px;height:20px;border-radius:10px;background:var(--border);position:relative;transition:background 0.3s}
+.toggle-track.on{background:var(--primary)}
+.toggle-thumb{position:absolute;width:16px;height:16px;border-radius:50%;background:white;top:2px;left:2px;transition:left 0.3s}
+.toggle-track.on .toggle-thumb{left:18px}
+
+@media(max-width:768px){nav{padding:0.75rem 1rem}section{padding:5rem 1rem 3rem}.dot-nav{right:1rem}h1{font-size:2rem !important}h2{font-size:1.5rem !important}.two-col{grid-template-columns:1fr}.world-map{height:350px}}
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+<nav>
+  <div class="logo"><span class="gradient-text">VizuaraAI</span></div>
+  <div style="display:flex;align-items:center;gap:1rem;">
+    <span class="badge">Lesson 27</span>
+    <span style="color:var(--text-muted);font-size:0.85rem;">Multi-Cloud Architecture</span>
+  </div>
+</nav>
+<div class="dot-nav" id="dotNav"></div>
+
+<!-- Section 0: Hero -->
+<section id="sec0">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:-100px;left:-100px;"></div>
+  <div class="glow-cyan" style="bottom:-100px;right:-100px;"></div>
+  <div class="section-inner" style="text-align:center;">
+    <div class="fade-in">
+      <div class="badge" style="display:inline-block;margin-bottom:1.5rem;">Architecture</div>
+      <h1 class="section-title"><span class="gradient-text">Multi-Cloud</span> Architecture</h1>
+      <p style="font-size:1.1rem;color:var(--text-muted);max-width:650px;margin:1rem auto;line-height:1.6;">
+        Distributing LLM inference across multiple cloud providers and regions enables
+        high availability, cost optimization, and geographic compliance. A unified control
+        plane orchestrates workload distribution across heterogeneous infrastructure.
+      </p>
+      <div class="stats-grid" style="max-width:700px;margin:2rem auto;">
+        <div class="stat-card"><div class="stat-value" style="color:var(--primary);">99.99%</div><div class="stat-label">Availability target</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--secondary);">3+</div><div class="stat-label">Cloud providers</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--tertiary);">6</div><div class="stat-label">Global regions</div></div>
+        <div class="stat-card"><div class="stat-value" style="color:var(--danger);">~30%</div><div class="stat-label">Cost savings</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 1: Global Map -->
+<section id="sec1">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:20%;right:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Global Infrastructure</span></h2>
+      <p style="color:var(--text-muted);margin-bottom:1.5rem;">Toggle regions on and off to see how traffic redistributes. The control plane manages routing across all providers.</p>
+
+      <div class="world-map" id="worldMap">
+        <div class="control-plane">Control Plane<br><span style="font-size:0.65rem;color:var(--text-muted);font-weight:400;">Global Traffic Manager</span></div>
+        <canvas id="mapCanvas" style="position:absolute;inset:0;width:100%;height:100%;z-index:2;"></canvas>
+      </div>
+
+      <div class="controls" style="justify-content:center;">
+        <button class="btn" onclick="simulateTraffic()">Simulate Traffic Burst</button>
+        <button class="btn secondary" onclick="resetMap()">Reset</button>
+      </div>
+
+      <div class="stats-grid" id="regionStats">
+        <!-- Generated by JS -->
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 2: Routing -->
+<section id="sec2">
+  <div class="grid-bg"></div>
+  <div class="glow-cyan" style="top:10%;left:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Request Routing</span></h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">How requests flow from users to the optimal cloud provider and region.</p>
+
+      <div class="two-col">
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--primary);">Routing Decision Tree</h3>
+            <div style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:1rem;font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:var(--text-muted);line-height:1.9;">
+              <span style="color:var(--primary);">1.</span> Check data residency requirements (GDPR, etc.)<br>
+              <span style="color:var(--primary);">2.</span> Filter to allowed regions for this user<br>
+              <span style="color:var(--secondary);">3.</span> Check real-time capacity across providers<br>
+              <span style="color:var(--secondary);">4.</span> Estimate latency from user's location<br>
+              <span style="color:var(--tertiary);">5.</span> Compare spot pricing across providers<br>
+              <span style="color:var(--tertiary);">6.</span> Score: f(latency, cost, capacity, cache)<br>
+              <span style="color:var(--danger);">7.</span> Route to highest-scoring region<br>
+              <span style="color:var(--danger);">8.</span> Fallback: next-best if primary fails
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--secondary);">Provider Strengths</h3>
+            <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.8;">
+              <div style="margin-bottom:0.5rem;"><b style="color:#FF9900;">AWS</b>: Largest GPU fleet, best spot availability, Inferentia custom silicon</div>
+              <div style="margin-bottom:0.5rem;"><b style="color:#4285F4;">GCP</b>: TPU v5e access, best network (Jupiter), competitive pricing</div>
+              <div style="margin-bottom:0.5rem;"><b style="color:#0078D4;">Azure</b>: OpenAI model access, enterprise integration, reserved capacity</div>
+              <div><b style="color:var(--tertiary);">CoreWeave</b>: GPU-native cloud, lowest GPU pricing, bare metal performance</div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;color:var(--tertiary);">Architecture Layers</h3>
+            <div style="display:flex;flex-direction:column;gap:0.5rem;">
+              <div style="background:rgba(0,212,106,0.1);border:1px solid rgba(0,212,106,0.3);border-radius:8px;padding:0.75rem;text-align:center;">
+                <div style="font-weight:600;color:var(--primary);font-size:0.85rem;">Control Plane</div>
+                <div style="font-size:0.75rem;color:var(--text-dim);">Traffic management, health checks, config distribution</div>
+              </div>
+              <div style="text-align:center;color:var(--text-dim);font-size:0.8rem;">|</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;">
+                <div style="background:rgba(255,153,0,0.1);border:1px solid rgba(255,153,0,0.3);border-radius:8px;padding:0.5rem;text-align:center;">
+                  <div style="font-weight:600;color:#FF9900;font-size:0.8rem;">AWS</div>
+                  <div style="font-size:0.65rem;color:var(--text-dim);">Workload Plane</div>
+                </div>
+                <div style="background:rgba(66,133,244,0.1);border:1px solid rgba(66,133,244,0.3);border-radius:8px;padding:0.5rem;text-align:center;">
+                  <div style="font-weight:600;color:#4285F4;font-size:0.8rem;">GCP</div>
+                  <div style="font-size:0.65rem;color:var(--text-dim);">Workload Plane</div>
+                </div>
+                <div style="background:rgba(0,120,212,0.1);border:1px solid rgba(0,120,212,0.3);border-radius:8px;padding:0.5rem;text-align:center;">
+                  <div style="font-weight:600;color:#0078D4;font-size:0.8rem;">Azure</div>
+                  <div style="font-size:0.65rem;color:var(--text-dim);">Workload Plane</div>
+                </div>
+              </div>
+              <div style="text-align:center;color:var(--text-dim);font-size:0.8rem;">|</div>
+              <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:0.75rem;text-align:center;">
+                <div style="font-weight:600;color:var(--text-muted);font-size:0.85rem;">Shared Services</div>
+                <div style="font-size:0.7rem;color:var(--text-dim);">Model registry, metrics, logging, KV cache sync</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">Latency by Region</h3>
+            <div id="latencyBars">
+              <!-- Generated by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 3: Failover -->
+<section id="sec3">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="bottom:10%;right:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Failover</span> Scenarios</h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">Simulate failures and watch how the system automatically reroutes traffic.</p>
+
+      <div class="card" style="margin-bottom:1.5rem;">
+        <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:1rem;color:var(--danger);">Failover Timeline</h3>
+        <div class="controls">
+          <button class="btn danger" onclick="triggerFailover('aws-east')">Fail AWS US-East</button>
+          <button class="btn danger" onclick="triggerFailover('gcp-europe')">Fail GCP Europe</button>
+          <button class="btn" onclick="recoverAll()">Recover All</button>
+        </div>
+        <div class="failover-timeline" id="failoverTimeline">
+          <div class="timeline-event" style="border-color:var(--primary);color:var(--primary);">Normal Operation</div>
+        </div>
+        <p id="failoverStatus" style="color:var(--text-muted);font-size:0.85rem;margin-top:1rem;">All regions healthy. Click a "Fail" button to simulate an outage.</p>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">Failover Strategies</h3>
+          <div style="font-size:0.85rem;color:var(--text-muted);line-height:1.8;">
+            <div style="margin-bottom:0.75rem;">
+              <b style="color:var(--primary);">Active-Active</b><br>
+              All regions serve traffic simultaneously. On failure, remaining regions absorb the load.
+              Requires capacity headroom (typically 30-50% spare).
+            </div>
+            <div style="margin-bottom:0.75rem;">
+              <b style="color:var(--secondary);">Active-Passive</b><br>
+              Primary region serves all traffic. Standby regions activate on failure.
+              Lower cost but higher recovery time (30s-2min).
+            </div>
+            <div>
+              <b style="color:var(--tertiary);">Tiered</b><br>
+              Critical traffic on reserved capacity, best-effort on spot.
+              On failure, only critical traffic fails over.
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">Health Check Configuration</h3>
+          <div style="background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:8px;padding:1rem;font-family:'JetBrains Mono',monospace;font-size:0.73rem;color:var(--text-muted);line-height:1.8;">
+            health_check:<br>
+            &nbsp;&nbsp;interval: <span style="color:var(--primary);">10s</span><br>
+            &nbsp;&nbsp;timeout: <span style="color:var(--primary);">3s</span><br>
+            &nbsp;&nbsp;unhealthy_threshold: <span style="color:var(--danger);">3</span><br>
+            &nbsp;&nbsp;healthy_threshold: <span style="color:var(--primary);">2</span><br>
+            &nbsp;&nbsp;checks:<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;- type: <span style="color:var(--secondary);">http</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;path: <span style="color:var(--tertiary);">/health</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;- type: <span style="color:var(--secondary);">inference</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;max_latency: <span style="color:var(--danger);">5000ms</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;- type: <span style="color:var(--secondary);">gpu_utilization</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;max_util: <span style="color:var(--danger);">95%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 4: Cost Optimization -->
+<section id="sec4">
+  <div class="grid-bg"></div>
+  <div class="glow-cyan" style="top:20%;left:-100px;"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Cost Optimization</span></h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">Multi-cloud enables arbitrage across providers, optimizing for cost while meeting latency SLAs.</p>
+
+      <div class="two-col">
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:1rem;color:var(--primary);">GPU Pricing (A100 80GB/hr)</h3>
+            <div id="costBars">
+              <!-- Generated by JS -->
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:0.75rem;">Cost-Aware Routing</h3>
+            <p style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;">
+              The control plane continuously monitors spot prices across providers. When spot
+              availability drops on one cloud, traffic shifts to cheaper alternatives.
+              <br><br>
+              <b style="color:var(--primary);">Strategy</b>: Reserve 40% baseline capacity for SLA guarantees.
+              Fill remaining 60% with spot instances, shifting across providers based on real-time pricing.
+            </p>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="margin-bottom:1rem;">
+            <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:1rem;color:var(--secondary);">Monthly Cost Breakdown</h3>
+            <div id="monthlyCost" style="margin-bottom:1rem;">
+              <!-- Generated by JS -->
+            </div>
+            <div class="controls">
+              <button class="btn active" onclick="setCostMode('optimized', this)">Cost-Optimized</button>
+              <button class="btn" onclick="setCostMode('single', this)">Single Cloud</button>
+            </div>
+            <div id="costSummary" style="color:var(--text-muted);font-size:0.85rem;line-height:1.7;margin-top:1rem;">
+              Multi-cloud cost-optimized routing saves approximately 30% compared to single-cloud deployment.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 5: Region Control -->
+<section id="sec5">
+  <div class="grid-bg"></div>
+  <div class="glow-green" style="top:30%;left:50%;transform:translateX(-50%);"></div>
+  <div class="section-inner">
+    <div class="fade-in">
+      <h2 style="font-size:2.2rem;margin-bottom:0.5rem;"><span class="gradient-text">Region Control Panel</span></h2>
+      <p style="color:var(--text-muted);margin-bottom:2rem;">Toggle individual regions on and off to see how traffic and cost change in real time.</p>
+
+      <div class="card" style="margin-bottom:1.5rem;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;" id="regionToggles">
+          <!-- Generated by JS -->
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:1rem;">Traffic Distribution</h3>
+          <canvas id="trafficPie" width="300" height="300" style="width:100%;max-width:300px;display:block;margin:0 auto;"></canvas>
+        </div>
+
+        <div class="card">
+          <h3 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1.2rem;margin-bottom:1rem;">Live Metrics</h3>
+          <div class="stats-grid" style="grid-template-columns:1fr 1fr;margin:0;">
+            <div class="stat-card">
+              <div class="stat-value" style="color:var(--primary);" id="activeRegions">6</div>
+              <div class="stat-label">Active Regions</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" style="color:var(--secondary);" id="totalCapacity">100%</div>
+              <div class="stat-label">Total Capacity</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" style="color:var(--tertiary);" id="avgCost">$2.10</div>
+              <div class="stat-label">Avg GPU/hr</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" style="color:var(--danger);" id="worstLatency">45ms</div>
+              <div class="stat-label">P99 Latency</div>
+            </div>
+          </div>
+
+          <div style="margin-top:1.5rem;">
+            <h4 style="font-family:'Instrument Serif',serif;font-style:italic;font-size:1rem;margin-bottom:0.75rem;">Compliance Checks</h4>
+            <div style="font-size:0.85rem;line-height:2;">
+              <div id="gdprCheck" style="color:var(--primary);">GDPR compliance: EU region active</div>
+              <div id="latencyCheck" style="color:var(--primary);">Latency SLA: All regions within 100ms</div>
+              <div id="capacityCheck" style="color:var(--primary);">Capacity: Sufficient headroom for failover</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+// Navigation
+const sections = document.querySelectorAll('section');
+const dotNav = document.getElementById('dotNav');
+const progressBar = document.getElementById('progressBar');
+sections.forEach((_,i) => {
+  const dot = document.createElement('div');
+  dot.className = 'dot';
+  dot.onclick = () => sections[i].scrollIntoView({behavior:'smooth'});
+  dotNav.appendChild(dot);
+});
+function updateScroll() {
+  const scrollTop = window.scrollY;
+  const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+  progressBar.style.width = (scrollTop/scrollHeight*100)+'%';
+  const dots = dotNav.querySelectorAll('.dot');
+  sections.forEach((sec,i) => {
+    const rect = sec.getBoundingClientRect();
+    if (rect.top < window.innerHeight/2 && rect.bottom > window.innerHeight/2) {
+      dots.forEach(d => d.classList.remove('active'));
+      dots[i].classList.add('active');
+    }
+    sec.querySelectorAll('.fade-in').forEach(el => { if (rect.top < window.innerHeight*0.85) el.classList.add('visible'); });
+  });
+}
+window.addEventListener('scroll', updateScroll);
+updateScroll();
+
+// Regions data
+const regions = [
+  { id:'aws-east', name:'AWS US-East', provider:'AWS', x:25, y:42, color:'#FF9900', latency:12, cost:2.21, capacity:30, traffic:25, active:true },
+  { id:'aws-west', name:'AWS US-West', provider:'AWS', x:15, y:38, color:'#FF9900', latency:18, cost:2.35, capacity:20, traffic:15, active:true },
+  { id:'gcp-europe', name:'GCP Europe', provider:'GCP', x:50, y:32, color:'#4285F4', latency:25, cost:2.10, capacity:25, traffic:20, active:true },
+  { id:'azure-asia', name:'Azure Asia', provider:'Azure', x:78, y:42, color:'#0078D4', latency:35, cost:1.95, capacity:15, traffic:15, active:true },
+  { id:'gcp-asia-south', name:'GCP India', provider:'GCP', x:68, y:50, color:'#4285F4', latency:45, cost:1.80, capacity:10, traffic:10, active:true },
+  { id:'coreweave-us', name:'CoreWeave US', provider:'CoreWeave', x:22, y:48, color:'#a855f7', latency:15, cost:1.65, capacity:20, traffic:15, active:true },
+];
+
+// Draw map
+function drawMap() {
+  const map = document.getElementById('worldMap');
+  const canvas = document.getElementById('mapCanvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = map.offsetWidth;
+  canvas.height = map.offsetHeight;
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  // Draw simplified continent outlines
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  ctx.fillStyle = 'rgba(255,255,255,0.02)';
+
+  // Simple continent blobs
+  const continents = [
+    [[0.08,0.25],[0.12,0.2],[0.22,0.22],[0.32,0.3],[0.32,0.55],[0.2,0.65],[0.1,0.55],[0.08,0.25]], // Americas
+    [[0.4,0.2],[0.55,0.18],[0.6,0.25],[0.58,0.35],[0.52,0.4],[0.42,0.42],[0.38,0.75],[0.48,0.8],[0.55,0.6],[0.58,0.5],[0.62,0.55],[0.6,0.4],[0.55,0.35],[0.6,0.3],[0.58,0.22],[0.52,0.2]], // Africa+Europe
+    [[0.6,0.2],[0.85,0.22],[0.92,0.35],[0.88,0.5],[0.78,0.55],[0.65,0.48],[0.6,0.35]], // Asia
+    [[0.8,0.7],[0.88,0.65],[0.92,0.72],[0.85,0.78],[0.8,0.7]], // Australia
+  ];
+
+  continents.forEach(pts => {
+    ctx.beginPath();
+    pts.forEach((p,i) => { const fn = i===0?'moveTo':'lineTo'; ctx[fn](p[0]*w, p[1]*h); });
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  });
+
+  // Draw traffic lines from control plane to active regions
+  const cpX = w/2, cpY = 50;
+  const activeRegions = regions.filter(r => r.active);
+  const totalTraffic = activeRegions.reduce((a,r) => a + r.traffic, 0);
+
+  activeRegions.forEach(r => {
+    const rx = r.x/100*w, ry = r.y/100*h;
+    const lineWidth = Math.max(1, (r.traffic / totalTraffic) * 8);
+    ctx.beginPath();
+    ctx.moveTo(cpX, cpY + 20);
+    ctx.quadraticCurveTo((cpX+rx)/2, Math.min(cpY, ry) - 20, rx, ry);
+    ctx.strokeStyle = r.color + '60';
+    ctx.lineWidth = lineWidth;
+    ctx.stroke();
+
+    // Region dot
+    ctx.beginPath();
+    ctx.arc(rx, ry, 8, 0, Math.PI*2);
+    ctx.fillStyle = r.color + 'aa';
+    ctx.fill();
+    ctx.strokeStyle = r.color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Pulse
+    ctx.beginPath();
+    ctx.arc(rx, ry, 14, 0, Math.PI*2);
+    ctx.strokeStyle = r.color + '30';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Label
+    ctx.fillStyle = r.color;
+    ctx.font = '10px Inter';
+    ctx.textAlign = 'center';
+    ctx.fillText(r.name, rx, ry + 22);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = '9px JetBrains Mono';
+    ctx.fillText(`${r.traffic}% | ${r.latency}ms`, rx, ry + 34);
+  });
+
+  // Draw X on disabled regions
+  regions.filter(r => !r.active).forEach(r => {
+    const rx = r.x/100*w, ry = r.y/100*h;
+    ctx.beginPath();
+    ctx.arc(rx, ry, 8, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(239,68,68,0.3)';
+    ctx.fill();
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(rx-5, ry-5); ctx.lineTo(rx+5, ry+5);
+    ctx.moveTo(rx+5, ry-5); ctx.lineTo(rx-5, ry+5);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(239,68,68,0.5)';
+    ctx.font = '9px Inter';
+    ctx.textAlign = 'center';
+    ctx.fillText(r.name + ' (offline)', rx, ry + 22);
+  });
+}
+
+function redistributeTraffic() {
+  const active = regions.filter(r => r.active);
+  if (active.length === 0) return;
+  const totalCap = active.reduce((a,r) => a + r.capacity, 0);
+  active.forEach(r => { r.traffic = Math.round(r.capacity / totalCap * 100); });
+}
+
+function simulateTraffic() {
+  regions.forEach(r => {
+    if (r.active) r.traffic = Math.round(r.traffic * (0.7 + Math.random() * 0.6));
+  });
+  const total = regions.filter(r=>r.active).reduce((a,r) => a+r.traffic, 0);
+  regions.filter(r=>r.active).forEach(r => { r.traffic = Math.round(r.traffic/total*100); });
+  drawMap();
+  updateAllStats();
+}
+
+function resetMap() {
+  regions.forEach(r => { r.active = true; });
+  redistributeTraffic();
+  drawMap();
+  updateAllStats();
+  buildRegionToggles();
+  recoverAll();
+}
+
+// Region stats
+function updateRegionStats() {
+  const container = document.getElementById('regionStats');
+  container.innerHTML = '';
+  regions.forEach(r => {
+    const card = document.createElement('div');
+    card.className = 'stat-card';
+    card.style.borderColor = r.active ? r.color + '50' : 'rgba(239,68,68,0.3)';
+    card.innerHTML = `
+      <div class="stat-value" style="color:${r.active?r.color:'var(--danger)'};">${r.active?r.traffic+'%':'OFF'}</div>
+      <div class="stat-label">${r.name}</div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+// Latency bars
+function drawLatencyBars() {
+  const container = document.getElementById('latencyBars');
+  container.innerHTML = '';
+  regions.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'cost-bar';
+    div.innerHTML = `
+      <div class="cost-label" style="color:${r.color};">${r.provider}</div>
+      <div class="cost-track">
+        <div class="cost-fill" style="width:${r.latency}%;background:${r.color};">${r.latency}ms</div>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+}
+drawLatencyBars();
+
+// Cost bars
+function drawCostBars() {
+  const container = document.getElementById('costBars');
+  container.innerHTML = '';
+  const providers = [
+    { name:'AWS', cost:{ on:3.50, spot:1.40, reserved:2.21 }, color:'#FF9900' },
+    { name:'GCP', cost:{ on:3.22, spot:1.29, reserved:2.10 }, color:'#4285F4' },
+    { name:'Azure', cost:{ on:3.40, spot:1.36, reserved:1.95 }, color:'#0078D4' },
+    { name:'CoreWeave', cost:{ on:2.06, spot:1.10, reserved:1.65 }, color:'#a855f7' },
+  ];
+  providers.forEach(p => {
+    const div = document.createElement('div');
+    div.style.marginBottom = '0.75rem';
+    div.innerHTML = `
+      <div style="display:flex;justify-content:space-between;margin-bottom:0.25rem;">
+        <span style="font-size:0.8rem;color:${p.color};">${p.name}</span>
+        <span class="mono" style="font-size:0.75rem;color:var(--text-dim);">$${p.cost.reserved}/hr</span>
+      </div>
+      <div style="display:flex;gap:2px;height:12px;">
+        <div style="flex:${p.cost.spot/4*100};background:${p.color}40;border-radius:3px 0 0 3px;" title="Spot: $${p.cost.spot}"></div>
+        <div style="flex:${(p.cost.reserved-p.cost.spot)/4*100};background:${p.color}80;" title="Reserved: $${p.cost.reserved}"></div>
+        <div style="flex:${(p.cost.on-p.cost.reserved)/4*100};background:${p.color};border-radius:0 3px 3px 0;" title="On-demand: $${p.cost.on}"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:0.6rem;color:var(--text-dim);margin-top:2px;">
+        <span>Spot $${p.cost.spot}</span><span>Reserved $${p.cost.reserved}</span><span>On-Demand $${p.cost.on}</span>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+}
+drawCostBars();
+
+// Monthly cost
+function drawMonthlyCost(mode) {
+  const container = document.getElementById('monthlyCost');
+  container.innerHTML = '';
+  let costs;
+  if (mode === 'optimized') {
+    costs = [
+      { name:'AWS (spot+reserved)', amount:45000, color:'#FF9900' },
+      { name:'GCP (reserved)', amount:32000, color:'#4285F4' },
+      { name:'CoreWeave (spot)', amount:18000, color:'#a855f7' },
+      { name:'Azure (reserved)', amount:12000, color:'#0078D4' },
+    ];
+  } else {
+    costs = [
+      { name:'AWS (on-demand)', amount:125000, color:'#FF9900' },
+      { name:'Networking overhead', amount:8000, color:'var(--text-dim)' },
+    ];
+  }
+  const total = costs.reduce((a,c) => a+c.amount, 0);
+  costs.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'cost-bar';
+    div.innerHTML = `
+      <div class="cost-label" style="width:140px;">${c.name}</div>
+      <div class="cost-track">
+        <div class="cost-fill" style="width:${c.amount/total*100}%;background:${c.color};min-width:80px;">$${(c.amount/1000).toFixed(0)}K</div>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+  const totalEl = document.createElement('div');
+  totalEl.style.cssText = 'text-align:right;font-family:JetBrains Mono,monospace;font-size:0.9rem;margin-top:0.5rem;';
+  totalEl.innerHTML = `Total: <b style="color:${mode==='optimized'?'var(--primary)':'var(--danger)'}">$${(total/1000).toFixed(0)}K/mo</b>`;
+  container.appendChild(totalEl);
+
+  const summary = document.getElementById('costSummary');
+  if (mode === 'optimized') {
+    summary.innerHTML = `Multi-cloud cost-optimized routing saves approximately <b style="color:var(--primary)">~$26K/month (20%)</b> compared to single-cloud on-demand deployment, while also providing higher availability.`;
+  } else {
+    summary.innerHTML = `Single-cloud on-demand is the simplest approach but <b style="color:var(--danger)">most expensive</b>. No failover protection and you're locked into one provider's pricing.`;
+  }
+}
+
+function setCostMode(mode, btn) {
+  if (btn) {
+    btn.parentElement.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+  drawMonthlyCost(mode);
+}
+drawMonthlyCost('optimized');
+
+// Failover
+let failoverEvents = [];
+function triggerFailover(regionId) {
+  const region = regions.find(r => r.id === regionId);
+  if (!region || !region.active) return;
+  region.active = false;
+  redistributeTraffic();
+  drawMap();
+  updateAllStats();
+
+  failoverEvents.push({ type:'fail', region:region.name, time:new Date() });
+  failoverEvents.push({ type:'detect', time:new Date() });
+  failoverEvents.push({ type:'redirect', time:new Date() });
+  renderFailoverTimeline();
+
+  document.getElementById('failoverStatus').innerHTML = `<span style="color:var(--danger);">${region.name} is offline.</span> Traffic redistributed to remaining ${regions.filter(r=>r.active).length} regions.`;
+  buildRegionToggles();
+}
+
+function recoverAll() {
+  regions.forEach(r => { r.active = true; });
+  redistributeTraffic();
+  drawMap();
+  updateAllStats();
+  failoverEvents = [];
+  renderFailoverTimeline();
+  document.getElementById('failoverStatus').textContent = 'All regions healthy.';
+  buildRegionToggles();
+}
+
+function renderFailoverTimeline() {
+  const container = document.getElementById('failoverTimeline');
+  container.innerHTML = '';
+  if (failoverEvents.length === 0) {
+    container.innerHTML = '<div class="timeline-event" style="border-color:var(--primary);color:var(--primary);">Normal Operation</div>';
+    return;
+  }
+  failoverEvents.forEach((e, i) => {
+    if (i > 0) {
+      const arrow = document.createElement('div');
+      arrow.className = 'timeline-arrow';
+      container.appendChild(arrow);
+    }
+    const ev = document.createElement('div');
+    ev.className = 'timeline-event';
+    if (e.type === 'fail') {
+      ev.style.borderColor = 'var(--danger)';
+      ev.style.color = 'var(--danger)';
+      ev.innerHTML = `${e.region}<br>FAILED`;
+    } else if (e.type === 'detect') {
+      ev.style.borderColor = 'var(--tertiary)';
+      ev.style.color = 'var(--tertiary)';
+      ev.innerHTML = 'Detected<br><span style="font-size:0.65rem;">~10s</span>';
+    } else {
+      ev.style.borderColor = 'var(--primary)';
+      ev.style.color = 'var(--primary)';
+      ev.innerHTML = 'Redirected<br><span style="font-size:0.65rem;">~2s</span>';
+    }
+    container.appendChild(ev);
+  });
+}
+renderFailoverTimeline();
+
+// Region toggles
+function buildRegionToggles() {
+  const container = document.getElementById('regionToggles');
+  container.innerHTML = '';
+  regions.forEach(r => {
+    const div = document.createElement('div');
+    div.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.75rem;background:rgba(0,0,0,0.2);border-radius:8px;border:1px solid var(--border);';
+    div.innerHTML = `
+      <div>
+        <div style="font-weight:600;font-size:0.85rem;color:${r.color};">${r.name}</div>
+        <div style="font-size:0.7rem;color:var(--text-dim);">$${r.cost}/hr | ${r.latency}ms</div>
+      </div>
+      <div class="toggle-switch" onclick="toggleRegion('${r.id}', this)">
+        <div class="toggle-track ${r.active?'on':''}"><div class="toggle-thumb"></div></div>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+}
+buildRegionToggles();
+
+function toggleRegion(id, el) {
+  const r = regions.find(r => r.id === id);
+  r.active = !r.active;
+  el.querySelector('.toggle-track').classList.toggle('on');
+  redistributeTraffic();
+  drawMap();
+  updateAllStats();
+}
+
+function updateAllStats() {
+  updateRegionStats();
+  const active = regions.filter(r => r.active);
+  document.getElementById('activeRegions').textContent = active.length;
+  const totalCap = active.reduce((a,r) => a + r.capacity, 0);
+  const maxCap = regions.reduce((a,r) => a + r.capacity, 0);
+  document.getElementById('totalCapacity').textContent = Math.round(totalCap/maxCap*100) + '%';
+  const avgCost = active.length > 0 ? active.reduce((a,r) => a + r.cost, 0) / active.length : 0;
+  document.getElementById('avgCost').textContent = '$' + avgCost.toFixed(2);
+  const worst = active.length > 0 ? Math.max(...active.map(r => r.latency)) : 0;
+  document.getElementById('worstLatency').textContent = worst + 'ms';
+
+  const hasEU = active.some(r => r.name.includes('Europe'));
+  document.getElementById('gdprCheck').style.color = hasEU ? 'var(--primary)' : 'var(--danger)';
+  document.getElementById('gdprCheck').textContent = hasEU ? 'GDPR compliance: EU region active' : 'GDPR WARNING: No EU region active!';
+  document.getElementById('latencyCheck').style.color = worst <= 100 ? 'var(--primary)' : 'var(--danger)';
+  document.getElementById('capacityCheck').style.color = totalCap/maxCap > 0.5 ? 'var(--primary)' : 'var(--danger)';
+  document.getElementById('capacityCheck').textContent = totalCap/maxCap > 0.5
+    ? 'Capacity: Sufficient headroom for failover'
+    : 'Capacity WARNING: Insufficient headroom!';
+
+  drawTrafficPie();
+}
+
+// Traffic pie chart
+function drawTrafficPie() {
+  const canvas = document.getElementById('trafficPie');
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  const cx = w/2, cy = h/2, radius = Math.min(w,h)/2 - 30;
+  const active = regions.filter(r => r.active);
+  const total = active.reduce((a,r) => a + r.traffic, 0);
+  if (total === 0) return;
+
+  let startAngle = -Math.PI/2;
+  active.forEach(r => {
+    const slice = (r.traffic / total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, radius, startAngle, startAngle + slice);
+    ctx.fillStyle = r.color + 'cc';
+    ctx.fill();
+    ctx.strokeStyle = var_bg;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Label
+    const midAngle = startAngle + slice/2;
+    const lx = cx + Math.cos(midAngle) * radius * 0.65;
+    const ly = cy + Math.sin(midAngle) * radius * 0.65;
+    ctx.fillStyle = '#fff';
+    ctx.font = '10px JetBrains Mono';
+    ctx.textAlign = 'center';
+    if (slice > 0.3) ctx.fillText(r.traffic + '%', lx, ly);
+
+    startAngle += slice;
+  });
+}
+const var_bg = '#0a0a0a';
+
+// Initial draw
+setTimeout(() => {
+  redistributeTraffic();
+  drawMap();
+  updateAllStats();
+}, 100);
+
+window.addEventListener('resize', () => { drawMap(); });
+</script>
+</body>
+</html>

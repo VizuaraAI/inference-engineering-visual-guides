@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPU Architecture | Inference Engineering</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a;
+  --bg-card: #121212;
+  --bg-card-hover: #1a1a1a;
+  --border: #262626;
+  --primary: #00d46a;
+  --secondary: #00c8e6;
+  --tertiary: #a855f7;
+  --success: #10b981;
+  --text: #f2f2f2;
+  --text-muted: #a3a3a3;
+  --text-dim: #737373;
+  --danger: #ef4444;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); overflow-x: hidden; line-height: 1.6; }
+code, .mono { font-family: 'JetBrains Mono', monospace; }
+h1, h2 { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; }
+
+.gradient-text { background: linear-gradient(135deg, #00d46a, #00c8e6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.badge { border: 1px solid rgba(0,212,106,0.3); background: rgba(0,212,106,0.1); color: var(--primary); padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: inline-block; font-family: 'JetBrains Mono', monospace; }
+
+.bg-grid { position: fixed; inset: 0; background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 60px 60px; z-index: 0; pointer-events: none; }
+.glow-orb { position: fixed; border-radius: 50%; filter: blur(80px); pointer-events: none; z-index: 0; }
+.glow-orb.primary { width: 600px; height: 600px; background: rgba(0,212,106,0.08); top: -200px; left: -200px; }
+.glow-orb.secondary { width: 500px; height: 500px; background: rgba(0,200,230,0.06); bottom: -150px; right: -150px; }
+
+nav { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; background: rgba(10,10,10,0.85); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); padding: 0 2rem; height: 60px; display: flex; align-items: center; justify-content: space-between; }
+nav .nav-title { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.2rem; }
+.nav-dots { display: flex; gap: 8px; }
+.nav-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); cursor: pointer; transition: all 0.3s; }
+.nav-dot.active { background: var(--primary); box-shadow: 0 0 10px rgba(0,212,106,0.5); }
+
+.progress-bar { position: fixed; top: 60px; left: 0; height: 3px; background: linear-gradient(90deg, var(--primary), var(--secondary)); z-index: 1001; transition: width 0.3s; }
+
+section { min-height: 100vh; padding: 100px 2rem 60px; position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.section-inner { max-width: 1200px; width: 100%; opacity: 0; transform: translateY(40px); transition: opacity 0.8s ease, transform 0.8s ease; }
+.section-inner.visible { opacity: 1; transform: translateY(0); }
+.section-desc { color: var(--text-muted); font-size: 1.1rem; max-width: 700px; margin-bottom: 2rem; }
+h2 { font-size: 2.8rem; margin-bottom: 1rem; line-height: 1.2; }
+
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; transition: all 0.3s ease; }
+.card:hover { background: var(--bg-card-hover); box-shadow: 0 0 20px rgba(0,212,106,0.15); border-color: rgba(0,212,106,0.3); }
+
+.metrics-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin: 2rem 0; }
+.metric-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; text-align: center; transition: all 0.3s; }
+.metric-card:hover { border-color: rgba(0,212,106,0.3); box-shadow: 0 0 15px rgba(0,212,106,0.1); }
+.metric-val { font-size: 1.6rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.metric-val.primary { color: var(--primary); }
+.metric-val.secondary { color: var(--secondary); }
+.metric-val.tertiary { color: var(--tertiary); }
+.metric-label { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+.info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin: 2rem 0; }
+
+/* GPU Diagram */
+.gpu-diagram {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 2rem;
+  margin: 2rem 0;
+  overflow: hidden;
+}
+
+.gpu-chip {
+  position: relative;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.gpu-chip-label {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.gpu-chip-label h3 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.gpu-chip-label .sub {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* SM Grid */
+.sm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 4px;
+  padding: 1rem;
+  background: rgba(0,212,106,0.03);
+  border: 1px solid rgba(0,212,106,0.15);
+  border-radius: 12px;
+  margin: 1rem 0;
+}
+
+.sm-cell {
+  aspect-ratio: 1;
+  background: rgba(0,212,106,0.1);
+  border: 1px solid rgba(0,212,106,0.2);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.5rem;
+  color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.sm-cell:hover {
+  background: rgba(0,212,106,0.3);
+  border-color: var(--primary);
+  box-shadow: 0 0 10px rgba(0,212,106,0.3);
+  transform: scale(1.1);
+  z-index: 2;
+}
+
+.sm-cell.active {
+  background: rgba(0,212,106,0.4);
+  border-color: var(--primary);
+  box-shadow: 0 0 15px rgba(0,212,106,0.4);
+}
+
+.sm-cell.highlighted {
+  animation: smPulse 1s infinite;
+}
+
+@keyframes smPulse {
+  0%, 100% { background: rgba(0,212,106,0.2); }
+  50% { background: rgba(0,212,106,0.5); }
+}
+
+/* SM Detail View */
+.sm-detail {
+  background: var(--bg-card);
+  border: 1px solid var(--primary);
+  border-radius: 16px;
+  padding: 2rem;
+  margin: 2rem 0;
+  display: none;
+}
+
+.sm-detail.show { display: block; }
+
+.sm-detail-inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+.sm-component {
+  padding: 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.sm-component:hover {
+  border-color: var(--secondary);
+  box-shadow: 0 0 15px rgba(0,200,230,0.15);
+}
+
+.sm-component.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 20px rgba(0,212,106,0.2);
+}
+
+.sm-comp-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sm-comp-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.sm-comp-spec {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-top: 0.5rem;
+}
+
+/* Memory hierarchy */
+.mem-hierarchy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  margin: 2rem 0;
+}
+
+.mem-level {
+  width: 100%;
+  padding: 1.25rem 2rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.4s;
+  position: relative;
+}
+
+.mem-level:hover {
+  border-color: rgba(0,212,106,0.3);
+  box-shadow: 0 0 15px rgba(0,212,106,0.1);
+}
+
+.mem-level.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 20px rgba(0,212,106,0.2);
+}
+
+.mem-level .mem-name {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.mem-level .mem-specs {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.mem-arrow {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 1.2rem;
+  padding: 0.25rem 0;
+}
+
+.mem-level .mem-bar-wrap {
+  flex: 1;
+  max-width: 200px;
+  margin: 0 1rem;
+}
+
+.mem-bar {
+  height: 8px;
+  border-radius: 4px;
+  transition: width 1s ease;
+}
+
+/* Data flow animation */
+.data-flow-container {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2rem;
+  margin: 2rem 0;
+}
+
+.flow-canvas-wrap {
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.flow-canvas-wrap canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Tensor Core animation */
+.tensor-core-vis {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: center;
+  margin: 2rem 0;
+  flex-wrap: wrap;
+}
+
+.tc-matrix {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.75rem;
+  text-align: center;
+}
+
+.tc-matrix .tc-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.tc-grid {
+  display: grid;
+  gap: 2px;
+}
+
+.tc-cell {
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.5rem;
+  font-family: 'JetBrains Mono', monospace;
+  transition: all 0.3s;
+}
+
+.tc-op {
+  font-size: 2rem;
+  color: var(--text-dim);
+}
+
+.play-btn {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: var(--bg); border: none; padding: 12px 28px; border-radius: 12px;
+  font-weight: 700; font-size: 1rem; cursor: pointer; transition: all 0.3s;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+.play-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(0,212,106,0.3); }
+
+.toggle-group { display: inline-flex; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.toggle-btn { padding: 8px 20px; background: transparent; border: none; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; cursor: pointer; transition: all 0.3s; }
+.toggle-btn.active { background: var(--primary); color: var(--bg); font-weight: 600; }
+
+/* Expandable detail */
+.expand-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.5s ease;
+}
+.expand-content.open {
+  max-height: 500px;
+}
+
+@media (max-width: 768px) {
+  h2 { font-size: 2rem; }
+  section { padding: 80px 1rem 40px; }
+  .sm-detail-inner { grid-template-columns: 1fr; }
+  .tensor-core-vis { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="glow-orb primary"></div>
+<div class="glow-orb secondary"></div>
+
+<nav>
+  <div class="nav-title">GPU Architecture</div>
+  <div class="nav-dots">
+    <div class="nav-dot active" data-section="0"></div>
+    <div class="nav-dot" data-section="1"></div>
+    <div class="nav-dot" data-section="2"></div>
+    <div class="nav-dot" data-section="3"></div>
+    <div class="nav-dot" data-section="4"></div>
+    <div class="nav-dot" data-section="5"></div>
+  </div>
+</nav>
+<div class="progress-bar" id="progressBar"></div>
+
+<!-- Section 0: Hero -->
+<section id="sec0">
+  <div class="section-inner">
+    <span class="badge">MODULE 08</span>
+    <h2><span class="gradient-text">GPU Architecture</span></h2>
+    <p class="section-desc">Explore the internal structure of modern GPUs: Streaming Multiprocessors, Tensor Cores, and the memory hierarchy that powers AI inference.</p>
+    <div class="metrics-row">
+      <div class="metric-card">
+        <div class="metric-val primary">132</div>
+        <div class="metric-label">Streaming Multiprocessors</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val secondary">528</div>
+        <div class="metric-label">Tensor Cores (4th Gen)</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val tertiary">80 GB</div>
+        <div class="metric-label">HBM3 Memory</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val primary">3.35</div>
+        <div class="metric-label">TB/s Bandwidth</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val secondary">50 MB</div>
+        <div class="metric-label">L2 Cache</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val tertiary">700W</div>
+        <div class="metric-label">TDP (SXM)</div>
+      </div>
+    </div>
+    <p style="color:var(--text-dim);font-size:0.85rem;text-align:center;">Reference: NVIDIA H100 SXM GPU (Hopper Architecture)</p>
+  </div>
+</section>
+
+<!-- Section 1: GPU Overview Diagram -->
+<section id="sec1">
+  <div class="section-inner">
+    <span class="badge">OVERVIEW</span>
+    <h2>Inside the <span class="gradient-text">H100 GPU</span></h2>
+    <p class="section-desc">Click on any SM (Streaming Multiprocessor) to zoom in and explore its internal components. The H100 has 132 SMs organized into 8 GPCs.</p>
+    <div class="gpu-diagram">
+      <div class="gpu-chip">
+        <div class="gpu-chip-label">
+          <h3>H100 GH100 Die</h3>
+          <div class="sub">132 SMs | 8 GPCs | 814mm2 | 80B transistors</div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:1rem; align-items:start;">
+          <div>
+            <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:0.5rem; text-align:center;">SM Array (132 SMs)</div>
+            <div class="sm-grid" id="smGrid"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:0.5rem;padding-top:2rem;">
+            <div class="card" style="padding:0.75rem;text-align:center;cursor:pointer;" id="l2Block">
+              <div style="font-size:0.8rem;font-weight:600;color:var(--secondary);">L2 Cache</div>
+              <div style="font-size:0.65rem;color:var(--text-dim);">50 MB</div>
+            </div>
+            <div class="card" style="padding:0.75rem;text-align:center;cursor:pointer;" id="nvlinkBlock">
+              <div style="font-size:0.8rem;font-weight:600;color:var(--tertiary);">NVLink</div>
+              <div style="font-size:0.65rem;color:var(--text-dim);">900 GB/s</div>
+            </div>
+            <div class="card" style="padding:0.75rem;text-align:center;cursor:pointer;" id="pcieBlock">
+              <div style="font-size:0.8rem;font-weight:600;color:var(--primary);">PCIe 5</div>
+              <div style="font-size:0.65rem;color:var(--text-dim);">128 GB/s</div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:0.5rem; text-align:center;">HBM3 Memory (80 GB)</div>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;">
+              <div class="card" style="padding:0.5rem;text-align:center;" id="hbm0"><div style="font-size:0.65rem;color:var(--secondary);">HBM</div><div style="font-size:0.5rem;color:var(--text-dim);">Stack 0</div></div>
+              <div class="card" style="padding:0.5rem;text-align:center;"><div style="font-size:0.65rem;color:var(--secondary);">HBM</div><div style="font-size:0.5rem;color:var(--text-dim);">Stack 1</div></div>
+              <div class="card" style="padding:0.5rem;text-align:center;"><div style="font-size:0.65rem;color:var(--secondary);">HBM</div><div style="font-size:0.5rem;color:var(--text-dim);">Stack 2</div></div>
+              <div class="card" style="padding:0.5rem;text-align:center;"><div style="font-size:0.65rem;color:var(--secondary);">HBM</div><div style="font-size:0.5rem;color:var(--text-dim);">Stack 3</div></div>
+              <div class="card" style="padding:0.5rem;text-align:center;"><div style="font-size:0.65rem;color:var(--secondary);">HBM</div><div style="font-size:0.5rem;color:var(--text-dim);">Stack 4</div></div>
+            </div>
+            <div style="margin-top:0.5rem;text-align:center;">
+              <div style="font-size:0.7rem;color:var(--text-dim);">5 stacks x 16 GB each</div>
+              <div style="font-size:0.7rem;color:var(--secondary);">3.35 TB/s total bandwidth</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sm-detail" id="smDetail">
+      <h3 style="color:var(--primary); margin-bottom:1rem;">Streaming Multiprocessor (SM) - Zoom View</h3>
+      <div class="sm-detail-inner">
+        <div class="sm-component" data-comp="cuda" id="compCuda">
+          <div class="sm-comp-title"><span style="color:var(--primary);">&#9632;</span> CUDA Cores</div>
+          <div class="sm-comp-desc">128 FP32 CUDA cores per SM for general-purpose parallel computation.</div>
+          <div class="sm-comp-spec">128 cores x 132 SMs = 16,896 total</div>
+          <div class="expand-content" id="expandCuda">
+            <div style="margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border); font-size:0.8rem; color:var(--text-muted);">
+              CUDA cores handle scalar FP32/FP64 and integer operations. Each SM has 4 processing blocks with 32 CUDA cores each. They process element-wise operations, activation functions, and non-matrix computations.
+            </div>
+          </div>
+        </div>
+        <div class="sm-component" data-comp="tensor" id="compTensor">
+          <div class="sm-comp-title"><span style="color:var(--secondary);">&#9632;</span> Tensor Cores (4th Gen)</div>
+          <div class="sm-comp-desc">4 Tensor Cores per SM for matrix multiply-accumulate (MMA) operations.</div>
+          <div class="sm-comp-spec">4 TCs x 132 SMs = 528 total</div>
+          <div class="expand-content" id="expandTensor">
+            <div style="margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border); font-size:0.8rem; color:var(--text-muted);">
+              4th gen Tensor Cores support FP8 (new in Hopper), FP16, BF16, TF32, and INT8. Each performs 256 FMA operations per clock. They handle 99%+ of compute in transformer inference via matrix multiplications in attention and FFN layers.
+            </div>
+          </div>
+        </div>
+        <div class="sm-component" data-comp="smem" id="compSmem">
+          <div class="sm-comp-title"><span style="color:var(--tertiary);">&#9632;</span> Shared Memory / L1 Cache</div>
+          <div class="sm-comp-desc">228 KB combined shared memory and L1 cache per SM. Configurable split.</div>
+          <div class="sm-comp-spec">228 KB per SM | Configurable partition</div>
+          <div class="expand-content" id="expandSmem">
+            <div style="margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border); font-size:0.8rem; color:var(--text-muted);">
+              Shared memory is programmer-managed scratchpad memory. It enables thread cooperation within a thread block. FlashAttention uses shared memory to keep partial attention results on-chip, avoiding costly HBM round-trips. Critical for tiling strategies.
+            </div>
+          </div>
+        </div>
+        <div class="sm-component" data-comp="reg" id="compReg">
+          <div class="sm-comp-title"><span style="color:#f59e0b;">&#9632;</span> Register File</div>
+          <div class="sm-comp-desc">256 KB register file per SM. Fastest storage, private to each thread.</div>
+          <div class="sm-comp-spec">256 KB per SM | 65,536 x 32-bit registers</div>
+          <div class="expand-content" id="expandReg">
+            <div style="margin-top:0.75rem; padding-top:0.75rem; border-top:1px solid var(--border); font-size:0.8rem; color:var(--text-muted);">
+              Registers provide the fastest access (~0 cycle latency). Each thread gets a portion of the register file. Too many registers per thread reduces occupancy (fewer threads per SM). Compiler optimization critical for register allocation.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 2: Memory Hierarchy -->
+<section id="sec2">
+  <div class="section-inner">
+    <span class="badge">MEMORY</span>
+    <h2><span class="gradient-text">Memory Hierarchy</span></h2>
+    <p class="section-desc">GPU memory forms a hierarchy trading off capacity for speed. Understanding this hierarchy is essential for optimizing inference kernels.</p>
+    <div class="mem-hierarchy" id="memHierarchy">
+      <div class="mem-level" data-mem="reg" style="max-width:350px; background:rgba(0,212,106,0.08); border-color:rgba(0,212,106,0.3);">
+        <div>
+          <div class="mem-name" style="color:var(--primary);">Registers</div>
+          <div class="mem-specs">256 KB/SM | ~0 cycles</div>
+        </div>
+        <div class="mem-bar-wrap"><div class="mem-bar" style="width:100%; background:var(--primary); height:8px;"></div></div>
+        <div style="font-size:0.8rem;color:var(--primary);">~20 TB/s</div>
+      </div>
+      <div class="mem-arrow">&#8595;</div>
+      <div class="mem-level" data-mem="smem" style="max-width:500px; background:rgba(0,200,230,0.06); border-color:rgba(0,200,230,0.2);">
+        <div>
+          <div class="mem-name" style="color:var(--secondary);">Shared Memory / L1</div>
+          <div class="mem-specs">228 KB/SM | ~30 cycles</div>
+        </div>
+        <div class="mem-bar-wrap"><div class="mem-bar" style="width:60%; background:var(--secondary); height:8px;"></div></div>
+        <div style="font-size:0.8rem;color:var(--secondary);">~12 TB/s</div>
+      </div>
+      <div class="mem-arrow">&#8595;</div>
+      <div class="mem-level" data-mem="l2" style="max-width:650px; background:rgba(168,85,247,0.05); border-color:rgba(168,85,247,0.2);">
+        <div>
+          <div class="mem-name" style="color:var(--tertiary);">L2 Cache</div>
+          <div class="mem-specs">50 MB total | ~200 cycles</div>
+        </div>
+        <div class="mem-bar-wrap"><div class="mem-bar" style="width:35%; background:var(--tertiary); height:8px;"></div></div>
+        <div style="font-size:0.8rem;color:var(--tertiary);">~6 TB/s</div>
+      </div>
+      <div class="mem-arrow">&#8595;</div>
+      <div class="mem-level" data-mem="hbm" style="max-width:800px; background:rgba(239,68,68,0.05); border-color:rgba(239,68,68,0.2);">
+        <div>
+          <div class="mem-name" style="color:var(--danger);">HBM3 (Global Memory)</div>
+          <div class="mem-specs">80 GB total | ~400 cycles</div>
+        </div>
+        <div class="mem-bar-wrap"><div class="mem-bar" style="width:12%; background:var(--danger); height:8px;"></div></div>
+        <div style="font-size:0.8rem;color:var(--danger);">3.35 TB/s</div>
+      </div>
+    </div>
+    <div id="memDetail" class="card" style="margin-top:1rem;">
+      <p style="color:var(--text-dim);">Click on any memory level to learn more about its role in inference.</p>
+    </div>
+    <div class="card" style="margin-top:1.5rem;">
+      <h3 style="font-size:1rem; color:var(--primary); margin-bottom:0.75rem;">Why This Matters for AI Inference</h3>
+      <p style="font-size:0.85rem; color:var(--text-muted);">Model weights live in <span style="color:var(--danger);">HBM</span>. During inference, weights must be streamed through the memory hierarchy to reach <span style="color:var(--secondary);">Tensor Cores</span>. The bottleneck is almost always HBM bandwidth (3.35 TB/s), not compute (989 TFLOPS). This is why LLM inference is memory-bound.</p>
+      <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-top:1rem;">
+        <div style="text-align:center;padding:0.75rem;background:rgba(0,212,106,0.05);border-radius:8px;">
+          <div class="mono" style="color:var(--primary);font-size:1.2rem;">30 GB</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);">Llama-2 7B (FP16)</div>
+        </div>
+        <div style="text-align:center;padding:0.75rem;background:rgba(0,200,230,0.05);border-radius:8px;">
+          <div class="mono" style="color:var(--secondary);font-size:1.2rem;">9ms</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);">Time to load weights</div>
+        </div>
+        <div style="text-align:center;padding:0.75rem;background:rgba(168,85,247,0.05);border-radius:8px;">
+          <div class="mono" style="color:var(--tertiary);font-size:1.2rem;">~110</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);">Tokens/sec (decode)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 3: Data Flow Animation -->
+<section id="sec3">
+  <div class="section-inner">
+    <span class="badge">DATA FLOW</span>
+    <h2>Data Flow <span class="gradient-text">Through the GPU</span></h2>
+    <p class="section-desc">Watch how data moves from HBM through the cache hierarchy to the compute units during a matrix multiplication.</p>
+    <div style="text-align:center; margin-bottom:1rem;">
+      <button class="play-btn" id="playFlow">&#9654; Animate Data Flow</button>
+    </div>
+    <div class="data-flow-container">
+      <div class="flow-canvas-wrap">
+        <canvas id="flowCanvas" width="800" height="400"></canvas>
+      </div>
+    </div>
+    <div class="info-grid">
+      <div class="card">
+        <h3 style="font-size:1rem; color:var(--primary); margin-bottom:0.5rem;">Step 1: Load from HBM</h3>
+        <p style="font-size:0.85rem; color:var(--text-muted);">Weight matrices and activations are loaded from HBM into L2 cache. Coalesced memory access patterns maximize bandwidth utilization.</p>
+        <div class="mono" style="font-size:0.75rem; color:var(--text-dim); margin-top:0.5rem;">Bandwidth: 3.35 TB/s | Latency: ~400 cycles</div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:1rem; color:var(--secondary); margin-bottom:0.5rem;">Step 2: Cache & Tile</h3>
+        <p style="font-size:0.85rem; color:var(--text-muted);">Data is tiled and loaded into shared memory. Tiling enables data reuse -- each element is used multiple times before being evicted.</p>
+        <div class="mono" style="font-size:0.75rem; color:var(--text-dim); margin-top:0.5rem;">Bandwidth: ~12 TB/s | Latency: ~30 cycles</div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:1rem; color:var(--tertiary); margin-bottom:0.5rem;">Step 3: Compute (Tensor Cores)</h3>
+        <p style="font-size:0.85rem; color:var(--text-muted);">Tensor Cores perform 4x4 matrix multiply-accumulate in a single clock. Results accumulate in registers before writing back.</p>
+        <div class="mono" style="font-size:0.75rem; color:var(--text-dim); margin-top:0.5rem;">989 TFLOPS (FP16) | 1,979 TFLOPS (FP8)</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 4: Tensor Core Operation -->
+<section id="sec4">
+  <div class="section-inner">
+    <span class="badge">TENSOR CORES</span>
+    <h2><span class="gradient-text">Tensor Core</span> Operation</h2>
+    <p class="section-desc">Tensor Cores perform D = A x B + C matrix multiply-accumulate operations. One instruction computes a 4x4 matrix multiply in a single clock cycle.</p>
+    <div style="margin-bottom:1rem;">
+      <div class="toggle-group" id="precisionToggle">
+        <button class="toggle-btn active" data-prec="fp16">FP16</button>
+        <button class="toggle-btn" data-prec="fp8">FP8</button>
+        <button class="toggle-btn" data-prec="int8">INT8</button>
+        <button class="toggle-btn" data-prec="tf32">TF32</button>
+      </div>
+    </div>
+    <div style="text-align:center; margin-bottom:1rem;">
+      <button class="play-btn" id="playTC">&#9654; Animate Tensor Core MMA</button>
+    </div>
+    <div class="tensor-core-vis" id="tcVis">
+      <div class="tc-matrix" id="matA">
+        <div class="tc-label">Matrix A (4x4)</div>
+        <div class="tc-grid" style="grid-template-columns:repeat(4,1fr);" id="tcGridA"></div>
+      </div>
+      <div class="tc-op">&times;</div>
+      <div class="tc-matrix" id="matB">
+        <div class="tc-label">Matrix B (4x4)</div>
+        <div class="tc-grid" style="grid-template-columns:repeat(4,1fr);" id="tcGridB"></div>
+      </div>
+      <div class="tc-op">+</div>
+      <div class="tc-matrix" id="matC">
+        <div class="tc-label">Matrix C (4x4)</div>
+        <div class="tc-grid" style="grid-template-columns:repeat(4,1fr);" id="tcGridC"></div>
+      </div>
+      <div class="tc-op">=</div>
+      <div class="tc-matrix" id="matD">
+        <div class="tc-label">Matrix D (4x4)</div>
+        <div class="tc-grid" style="grid-template-columns:repeat(4,1fr);" id="tcGridD"></div>
+      </div>
+    </div>
+    <div id="precisionInfo" class="card" style="margin-top:1rem;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.5rem;text-align:center;">
+        <div>
+          <div style="font-size:0.8rem;color:var(--text-dim);">Precision</div>
+          <div class="mono" style="font-size:1.3rem;color:var(--primary);" id="precName">FP16</div>
+        </div>
+        <div>
+          <div style="font-size:0.8rem;color:var(--text-dim);">Peak TFLOPS</div>
+          <div class="mono" style="font-size:1.3rem;color:var(--secondary);" id="precTflops">989</div>
+        </div>
+        <div>
+          <div style="font-size:0.8rem;color:var(--text-dim);">Bits per Element</div>
+          <div class="mono" style="font-size:1.3rem;color:var(--tertiary);" id="precBits">16</div>
+        </div>
+      </div>
+    </div>
+    <div class="info-grid" style="margin-top:1.5rem;">
+      <div class="card">
+        <h3 style="font-size:1rem; color:var(--primary); margin-bottom:0.5rem;">Warp-Level Operation</h3>
+        <p style="font-size:0.85rem; color:var(--text-muted);">Tensor Core operations are warp-cooperative: all 32 threads in a warp collectively provide the inputs and receive outputs of the MMA instruction. The actual hardware computes a larger tile (e.g., 16x8x16 for FP16).</p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:1rem; color:var(--secondary); margin-bottom:0.5rem;">FP8: The New Default</h3>
+        <p style="font-size:0.85rem; color:var(--text-muted);">Hopper introduced FP8 Tensor Cores, doubling throughput vs FP16. Two formats: E4M3 (training) and E5M2 (inference). Combined with the Transformer Engine for automatic mixed-precision.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 5: Summary -->
+<section id="sec5">
+  <div class="section-inner">
+    <span class="badge">SUMMARY</span>
+    <h2>Architecture <span class="gradient-text">Key Takeaways</span></h2>
+    <p class="section-desc">Understanding GPU architecture helps you write and optimize inference kernels that fully utilize the hardware.</p>
+    <div class="info-grid">
+      <div class="card" style="border-left:3px solid var(--primary);">
+        <h3 style="font-size:1.1rem;color:var(--primary);margin-bottom:0.75rem;">Parallelism is Everything</h3>
+        <p style="font-size:0.85rem;color:var(--text-muted);">GPUs achieve high throughput through massive parallelism: 132 SMs, each running thousands of threads simultaneously. Occupancy (active warps / max warps) determines utilization.</p>
+        <div style="margin-top:1rem;padding:0.75rem;background:rgba(0,212,106,0.05);border-radius:8px;">
+          <code style="font-size:0.8rem;color:var(--primary);">16,896 CUDA cores + 528 Tensor Cores</code>
+        </div>
+      </div>
+      <div class="card" style="border-left:3px solid var(--secondary);">
+        <h3 style="font-size:1.1rem;color:var(--secondary);margin-bottom:0.75rem;">Memory is the Bottleneck</h3>
+        <p style="font-size:0.85rem;color:var(--text-muted);">For LLM inference, HBM bandwidth (3.35 TB/s) limits performance more than compute (989 TFLOPS). Optimizations focus on reducing memory movement: quantization, kernel fusion, FlashAttention.</p>
+        <div style="margin-top:1rem;padding:0.75rem;background:rgba(0,200,230,0.05);border-radius:8px;">
+          <code style="font-size:0.8rem;color:var(--secondary);">Compute:Memory ratio = 295:1</code>
+        </div>
+      </div>
+      <div class="card" style="border-left:3px solid var(--tertiary);">
+        <h3 style="font-size:1.1rem;color:var(--tertiary);margin-bottom:0.75rem;">Tensor Cores Drive AI</h3>
+        <p style="font-size:0.85rem;color:var(--text-muted);">Matrix multiplications (95%+ of transformer compute) run on Tensor Cores, not CUDA cores. FP8 precision doubles throughput with minimal accuracy loss for inference workloads.</p>
+        <div style="margin-top:1rem;padding:0.75rem;background:rgba(168,85,247,0.05);border-radius:8px;">
+          <code style="font-size:0.8rem;color:var(--tertiary);">FP8: 1,979 TFLOPS (2x FP16)</code>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+// === Navigation & Scroll ===
+const sections = document.querySelectorAll('section');
+const navDots = document.querySelectorAll('.nav-dot');
+const progressBar = document.getElementById('progressBar');
+
+function updateScroll() {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  progressBar.style.width = (scrollTop / docHeight * 100) + '%';
+  sections.forEach((sec, i) => {
+    const rect = sec.getBoundingClientRect();
+    const inner = sec.querySelector('.section-inner');
+    if (rect.top < window.innerHeight * 0.75 && rect.bottom > 0) {
+      if (inner) inner.classList.add('visible');
+      navDots.forEach(d => d.classList.remove('active'));
+      if (navDots[i]) navDots[i].classList.add('active');
+    }
+  });
+}
+window.addEventListener('scroll', updateScroll);
+window.addEventListener('load', updateScroll);
+navDots.forEach(dot => {
+  dot.addEventListener('click', () => sections[parseInt(dot.dataset.section)].scrollIntoView({ behavior: 'smooth' }));
+});
+
+// === SM Grid ===
+const smGrid = document.getElementById('smGrid');
+for (let i = 0; i < 132; i++) {
+  const cell = document.createElement('div');
+  cell.className = 'sm-cell';
+  cell.textContent = i;
+  cell.dataset.sm = i;
+  cell.addEventListener('click', () => {
+    document.querySelectorAll('.sm-cell').forEach(c => c.classList.remove('active'));
+    cell.classList.add('active');
+    const detail = document.getElementById('smDetail');
+    detail.classList.add('show');
+    detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+  smGrid.appendChild(cell);
+}
+
+// Highlight SM groups on hover over GPC
+let smHighlightInterval;
+function highlightGPC(start, count) {
+  clearInterval(smHighlightInterval);
+  const cells = document.querySelectorAll('.sm-cell');
+  cells.forEach(c => c.classList.remove('highlighted'));
+  for (let i = start; i < start + count && i < 132; i++) {
+    cells[i].classList.add('highlighted');
+  }
+}
+
+// === SM Component expand ===
+document.querySelectorAll('.sm-component').forEach(comp => {
+  comp.addEventListener('click', () => {
+    const expandId = 'expand' + comp.dataset.comp.charAt(0).toUpperCase() + comp.dataset.comp.slice(1);
+    // Map comp names
+    const idMap = { cuda: 'expandCuda', tensor: 'expandTensor', smem: 'expandSmem', reg: 'expandReg' };
+    const expandEl = document.getElementById(idMap[comp.dataset.comp]);
+    if (expandEl) {
+      const isOpen = expandEl.classList.contains('open');
+      document.querySelectorAll('.expand-content').forEach(e => e.classList.remove('open'));
+      document.querySelectorAll('.sm-component').forEach(c => c.classList.remove('active'));
+      if (!isOpen) {
+        expandEl.classList.add('open');
+        comp.classList.add('active');
+      }
+    }
+  });
+});
+
+// === Memory Hierarchy clicks ===
+const memDetails = {
+  reg: { title: 'Registers', html: 'The fastest storage on the GPU. Each thread has private registers with zero-latency access. The register file is 256 KB per SM. Critical for keeping intermediate values close to compute units. <span style="color:var(--primary);">Register pressure</span> (needing too many registers per thread) reduces occupancy.' },
+  smem: { title: 'Shared Memory / L1 Cache', html: 'Programmer-managed fast memory shared among threads in a thread block. 228 KB per SM in H100, configurable between shared memory and L1 cache. <span style="color:var(--secondary);">FlashAttention</span> heavily uses shared memory to keep attention tiles on-chip, avoiding HBM access for intermediate attention matrices.' },
+  l2: { title: 'L2 Cache', html: '50 MB of cache shared across all SMs. Automatically caches HBM accesses. In H100, the L2 can be partitioned for <span style="color:var(--tertiary);">persistent caching</span> of frequently accessed data. KV cache entries can benefit from L2 residency for repeated attention lookups.' },
+  hbm: { title: 'HBM3 (High Bandwidth Memory)', html: '80 GB of HBM3 across 5 stacks. This is where model weights, KV caches, and activations live. Bandwidth of 3.35 TB/s sets the <span style="color:var(--danger);">throughput ceiling</span> for memory-bound operations. A 7B FP16 model (14 GB weights) needs ~4.2ms just to read all weights once.' }
+};
+
+document.querySelectorAll('.mem-level').forEach(level => {
+  level.addEventListener('click', () => {
+    document.querySelectorAll('.mem-level').forEach(l => l.classList.remove('active'));
+    level.classList.add('active');
+    const info = memDetails[level.dataset.mem];
+    document.getElementById('memDetail').innerHTML = `<h3 style="color:var(--primary);margin-bottom:0.5rem;">${info.title}</h3><p style="font-size:0.9rem;color:var(--text-muted);">${info.html}</p>`;
+  });
+});
+
+// === Data Flow Animation ===
+function drawDataFlow(canvas, phase) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  // Define boxes
+  const boxes = [
+    { label: 'HBM3', sub: '80 GB', x: 50, y: 300, w: 120, h: 60, color: '#ef4444' },
+    { label: 'L2 Cache', sub: '50 MB', x: 250, y: 300, w: 120, h: 60, color: '#a855f7' },
+    { label: 'Shared Mem', sub: '228 KB', x: 450, y: 300, w: 120, h: 60, color: '#00c8e6' },
+    { label: 'Registers', sub: '256 KB', x: 450, y: 150, w: 120, h: 60, color: '#00d46a' },
+    { label: 'Tensor Core', sub: 'D=AxB+C', x: 650, y: 150, w: 120, h: 60, color: '#f59e0b' },
+    { label: 'Output', sub: 'Result', x: 650, y: 300, w: 120, h: 60, color: '#00d46a' }
+  ];
+
+  // Draw connections
+  const connections = [
+    { from: 0, to: 1, label: '3.35 TB/s' },
+    { from: 1, to: 2, label: '~6 TB/s' },
+    { from: 2, to: 3, label: '~12 TB/s' },
+    { from: 3, to: 4, label: 'Register read' },
+    { from: 4, to: 5, label: 'Write back' }
+  ];
+
+  connections.forEach((conn, i) => {
+    const from = boxes[conn.from];
+    const to = boxes[conn.to];
+    const fx = from.x + from.w;
+    const fy = from.y + from.h / 2;
+    const tx = to.x;
+    const ty = to.y + to.h / 2;
+
+    ctx.strokeStyle = phase > i ? 'rgba(0,212,106,0.6)' : 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = phase > i ? 3 : 1;
+    ctx.setLineDash(phase > i ? [] : [4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(fx, fy);
+
+    if (from.y !== to.y) {
+      const midX = (fx + tx) / 2;
+      ctx.lineTo(midX, fy);
+      ctx.lineTo(midX, ty);
+      ctx.lineTo(tx, ty);
+    } else {
+      ctx.lineTo(tx, ty);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Arrow
+    if (phase > i) {
+      ctx.fillStyle = 'rgba(0,212,106,0.8)';
+      ctx.beginPath();
+      ctx.moveTo(tx - 8, ty - 5);
+      ctx.lineTo(tx, ty);
+      ctx.lineTo(tx - 8, ty + 5);
+      ctx.fill();
+    }
+
+    // Label
+    const midX = (fx + tx) / 2;
+    const midY = from.y === to.y ? fy - 15 : (fy + ty) / 2 - 10;
+    ctx.fillStyle = phase > i ? 'rgba(0,212,106,0.7)' : 'rgba(255,255,255,0.2)';
+    ctx.font = '10px JetBrains Mono';
+    ctx.textAlign = 'center';
+    ctx.fillText(conn.label, midX, midY);
+  });
+
+  // Animated data packets
+  if (phase > 0 && phase <= 5) {
+    const conn = connections[phase - 1];
+    const from = boxes[conn.from];
+    const to = boxes[conn.to];
+    const fx = from.x + from.w;
+    const fy = from.y + from.h / 2;
+    const tx = to.x;
+    const ty = to.y + to.h / 2;
+
+    const t = (Date.now() % 1000) / 1000;
+    let px, py;
+    if (from.y === to.y) {
+      px = fx + (tx - fx) * t;
+      py = fy;
+    } else {
+      const midX = (fx + tx) / 2;
+      if (t < 0.33) {
+        px = fx + (midX - fx) * (t / 0.33);
+        py = fy;
+      } else if (t < 0.66) {
+        px = midX;
+        py = fy + (ty - fy) * ((t - 0.33) / 0.33);
+      } else {
+        px = midX + (tx - midX) * ((t - 0.66) / 0.34);
+        py = ty;
+      }
+    }
+
+    ctx.fillStyle = 'var(--primary)';
+    ctx.shadowColor = 'rgba(0,212,106,0.8)';
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.arc(px, py, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  // Draw boxes
+  boxes.forEach((box, i) => {
+    const isActive = (phase >= i) || (phase > 0 && i < phase + 1);
+    ctx.fillStyle = isActive ? box.color + '33' : 'rgba(18,18,18,0.9)';
+    ctx.strokeStyle = isActive ? box.color : 'rgba(38,38,38,1)';
+    ctx.lineWidth = isActive ? 2 : 1;
+    ctx.beginPath();
+    ctx.roundRect(box.x, box.y, box.w, box.h, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = isActive ? box.color : '#737373';
+    ctx.font = 'bold 12px Inter';
+    ctx.textAlign = 'center';
+    ctx.fillText(box.label, box.x + box.w / 2, box.y + box.h / 2 - 5);
+    ctx.font = '10px JetBrains Mono';
+    ctx.fillStyle = '#737373';
+    ctx.fillText(box.sub, box.x + box.w / 2, box.y + box.h / 2 + 12);
+  });
+}
+
+let flowPhase = 0;
+let flowAnimating = false;
+let flowAnimFrame;
+
+function animateFlow() {
+  drawDataFlow(document.getElementById('flowCanvas'), flowPhase);
+  if (flowAnimating) flowAnimFrame = requestAnimationFrame(animateFlow);
+}
+
+document.getElementById('playFlow').addEventListener('click', () => {
+  flowPhase = 0;
+  flowAnimating = true;
+  animateFlow();
+
+  let step = 0;
+  const interval = setInterval(() => {
+    step++;
+    flowPhase = step;
+    if (step >= 6) {
+      clearInterval(interval);
+      setTimeout(() => { flowAnimating = false; }, 2000);
+    }
+  }, 1200);
+});
+
+drawDataFlow(document.getElementById('flowCanvas'), 0);
+
+// === Tensor Core Visualization ===
+function fillTCGrid(gridId, color, values) {
+  const grid = document.getElementById(gridId);
+  grid.innerHTML = '';
+  for (let i = 0; i < 16; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'tc-cell';
+    cell.style.background = color;
+    cell.textContent = values ? values[i] : '';
+    cell.style.opacity = '0.3';
+    grid.appendChild(cell);
+  }
+}
+
+function generateValues(seed, format) {
+  const vals = [];
+  let s = seed;
+  function rng() { s = (s * 16807) % 2147483647; return s / 2147483647; }
+
+  for (let i = 0; i < 16; i++) {
+    const v = rng();
+    if (format === 'fp16') vals.push((v * 4 - 2).toFixed(1));
+    else if (format === 'fp8') vals.push((v * 2 - 1).toFixed(1));
+    else if (format === 'int8') vals.push(Math.floor(v * 255 - 128));
+    else vals.push((v * 4 - 2).toFixed(1));
+  }
+  return vals;
+}
+
+const precSpecs = {
+  fp16: { name: 'FP16', tflops: 989, bits: 16 },
+  fp8: { name: 'FP8', tflops: 1979, bits: 8 },
+  int8: { name: 'INT8', tflops: 1979, bits: 8 },
+  tf32: { name: 'TF32', tflops: 495, bits: 19 }
+};
+
+let currentPrec = 'fp16';
+
+function updateTCVis() {
+  const aVals = generateValues(42, currentPrec);
+  const bVals = generateValues(77, currentPrec);
+  const cVals = generateValues(13, currentPrec);
+
+  fillTCGrid('tcGridA', 'rgba(0,212,106,0.15)', aVals);
+  fillTCGrid('tcGridB', 'rgba(0,200,230,0.15)', bVals);
+  fillTCGrid('tcGridC', 'rgba(168,85,247,0.15)', cVals);
+  fillTCGrid('tcGridD', 'rgba(245,158,11,0.15)', null);
+
+  const spec = precSpecs[currentPrec];
+  document.getElementById('precName').textContent = spec.name;
+  document.getElementById('precTflops').textContent = spec.tflops;
+  document.getElementById('precBits').textContent = spec.bits;
+}
+
+document.querySelectorAll('#precisionToggle .toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#precisionToggle .toggle-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentPrec = btn.dataset.prec;
+    updateTCVis();
+  });
+});
+
+document.getElementById('playTC').addEventListener('click', () => {
+  const gridA = document.getElementById('tcGridA').children;
+  const gridB = document.getElementById('tcGridB').children;
+  const gridC = document.getElementById('tcGridC').children;
+  const gridD = document.getElementById('tcGridD').children;
+
+  // Animate: light up A and B rows/cols, then compute D
+  let step = 0;
+  const interval = setInterval(() => {
+    // Reset all
+    Array.from(gridA).forEach(c => c.style.opacity = '0.3');
+    Array.from(gridB).forEach(c => c.style.opacity = '0.3');
+    Array.from(gridD).forEach(c => c.style.opacity = '0.3');
+
+    if (step < 4) {
+      // Highlight row of A
+      for (let j = 0; j < 4; j++) {
+        gridA[step * 4 + j].style.opacity = '1';
+        gridA[step * 4 + j].style.boxShadow = '0 0 8px rgba(0,212,106,0.5)';
+      }
+      // Highlight col of B
+      for (let j = 0; j < 4; j++) {
+        gridB[j * 4 + step].style.opacity = '1';
+        gridB[j * 4 + step].style.boxShadow = '0 0 8px rgba(0,200,230,0.5)';
+      }
+      // Show results computed so far
+      for (let i = 0; i <= step; i++) {
+        for (let j = 0; j < 4; j++) {
+          gridD[i * 4 + j].style.opacity = '1';
+          gridD[i * 4 + j].textContent = (Math.random() * 8 - 4).toFixed(1);
+          gridD[i * 4 + j].style.background = 'rgba(245,158,11,0.3)';
+        }
+      }
+      step++;
+    } else {
+      clearInterval(interval);
+      // Final: all D cells fully lit
+      Array.from(gridA).forEach(c => { c.style.opacity = '1'; c.style.boxShadow = 'none'; });
+      Array.from(gridB).forEach(c => { c.style.opacity = '1'; c.style.boxShadow = 'none'; });
+      Array.from(gridC).forEach(c => c.style.opacity = '1');
+      Array.from(gridD).forEach(c => {
+        c.style.opacity = '1';
+        c.style.background = 'rgba(245,158,11,0.4)';
+        c.style.boxShadow = '0 0 8px rgba(245,158,11,0.3)';
+      });
+    }
+  }, 600);
+});
+
+updateTCVis();
+</script>
+</body>
+</html>

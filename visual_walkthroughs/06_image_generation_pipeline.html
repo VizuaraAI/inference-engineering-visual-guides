@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Generation Pipeline | Inference Engineering</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0a0a;
+  --bg-card: #121212;
+  --bg-card-hover: #1a1a1a;
+  --border: #262626;
+  --primary: #00d46a;
+  --secondary: #00c8e6;
+  --tertiary: #a855f7;
+  --success: #10b981;
+  --text: #f2f2f2;
+  --text-muted: #a3a3a3;
+  --text-dim: #737373;
+  --danger: #ef4444;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow-x: hidden;
+  line-height: 1.6;
+}
+
+code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+h1, h2 { font-family: 'Instrument Serif', serif; font-style: italic; font-weight: 400; }
+
+.gradient-text {
+  background: linear-gradient(135deg, #00d46a, #00c8e6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.badge {
+  border: 1px solid rgba(0,212,106,0.3);
+  background: rgba(0,212,106,0.1);
+  color: var(--primary);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Background */
+.bg-grid {
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.glow-orb {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.glow-orb.primary {
+  width: 600px; height: 600px;
+  background: rgba(0,212,106,0.08);
+  top: -200px; left: -200px;
+}
+
+.glow-orb.secondary {
+  width: 500px; height: 500px;
+  background: rgba(0,200,230,0.06);
+  bottom: -150px; right: -150px;
+}
+
+/* Nav */
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: rgba(10,10,10,0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 2rem;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+nav .nav-title {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 1.2rem;
+  color: var(--text);
+}
+
+.nav-dots {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.nav-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--border);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.nav-dot.active {
+  background: var(--primary);
+  box-shadow: 0 0 10px rgba(0,212,106,0.5);
+}
+
+/* Progress bar */
+.progress-bar {
+  position: fixed;
+  top: 60px;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  z-index: 1001;
+  transition: width 0.3s;
+}
+
+/* Sections */
+section {
+  min-height: 100vh;
+  padding: 100px 2rem 60px;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.section-inner {
+  max-width: 1200px;
+  width: 100%;
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+
+.section-inner.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.section-badge {
+  margin-bottom: 1rem;
+}
+
+h2 {
+  font-size: 2.8rem;
+  margin-bottom: 1rem;
+  line-height: 1.2;
+}
+
+.section-desc {
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  max-width: 700px;
+  margin-bottom: 2rem;
+}
+
+/* Cards */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2rem;
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  background: var(--bg-card-hover);
+  box-shadow: 0 0 20px rgba(0,212,106,0.15);
+  border-color: rgba(0,212,106,0.3);
+}
+
+/* Pipeline visualization */
+.pipeline-container {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin: 2rem 0;
+  overflow-x: auto;
+  padding: 1rem 0;
+}
+
+.pipeline-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 200px;
+  flex-shrink: 0;
+}
+
+.pipeline-box {
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  text-align: center;
+  min-width: 180px;
+  transition: all 0.5s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.pipeline-box:hover {
+  border-color: var(--primary);
+  box-shadow: 0 0 25px rgba(0,212,106,0.2);
+  transform: translateY(-4px);
+}
+
+.pipeline-box.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 30px rgba(0,212,106,0.25);
+}
+
+.pipeline-box .icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.pipeline-box .label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.pipeline-box .sublabel {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.pipeline-arrow {
+  display: flex;
+  align-items: center;
+  padding: 0 0.5rem;
+  color: var(--primary);
+  font-size: 1.5rem;
+  min-width: 50px;
+  justify-content: center;
+  opacity: 0.5;
+  transition: opacity 0.5s;
+}
+
+.pipeline-arrow.active {
+  opacity: 1;
+}
+
+/* Noise canvas */
+.noise-display {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 2rem 0;
+}
+
+.noise-canvas-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.noise-canvas-container canvas {
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.noise-canvas-container .canvas-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Slider */
+.slider-container {
+  margin: 2rem 0;
+  padding: 1.5rem 2rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.slider-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.slider-label span {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.slider-label .value {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+input[type="range"] {
+  width: 100%;
+  -webkit-appearance: none;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  background: var(--primary);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(0,212,106,0.4);
+}
+
+/* Denoising steps grid */
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+}
+
+.step-cell {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  position: relative;
+  transition: all 0.3s;
+}
+
+.step-cell canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.step-cell .step-num {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 0.6rem;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-dim);
+}
+
+/* Embedding visualization */
+.embedding-vis {
+  display: flex;
+  gap: 2rem;
+  align-items: stretch;
+  margin: 2rem 0;
+  flex-wrap: wrap;
+}
+
+.embed-column {
+  flex: 1;
+  min-width: 250px;
+}
+
+.embed-column h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: var(--text-muted);
+}
+
+.token-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.token {
+  background: rgba(0,212,106,0.1);
+  border: 1px solid rgba(0,212,106,0.3);
+  color: var(--primary);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.token:hover, .token.active {
+  background: rgba(0,212,106,0.2);
+  box-shadow: 0 0 10px rgba(0,212,106,0.2);
+}
+
+.embedding-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.embed-bar {
+  height: 4px;
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+/* Guidance scale */
+.guidance-demo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.guidance-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s;
+  cursor: pointer;
+}
+
+.guidance-card:hover {
+  box-shadow: 0 0 20px rgba(0,212,106,0.15);
+  border-color: rgba(0,212,106,0.3);
+}
+
+.guidance-card.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 25px rgba(0,212,106,0.2);
+}
+
+.guidance-canvas-wrap {
+  aspect-ratio: 1;
+  position: relative;
+}
+
+.guidance-canvas-wrap canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.guidance-info {
+  padding: 1rem;
+}
+
+.guidance-info .cfg-val {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.guidance-info .cfg-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+/* VAE section */
+.vae-visual {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 2rem 0;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.vae-block {
+  text-align: center;
+}
+
+.vae-block canvas {
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  display: block;
+  margin: 0 auto 0.5rem;
+}
+
+.vae-block .vae-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.vae-arrow {
+  font-size: 2rem;
+  color: var(--tertiary);
+}
+
+/* Metrics */
+.metrics-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin: 2rem 0;
+}
+
+.metric-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  text-align: center;
+  transition: all 0.3s;
+}
+
+.metric-card:hover {
+  border-color: rgba(0,212,106,0.3);
+  box-shadow: 0 0 15px rgba(0,212,106,0.1);
+}
+
+.metric-val {
+  font-size: 1.8rem;
+  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.metric-val.primary { color: var(--primary); }
+.metric-val.secondary { color: var(--secondary); }
+.metric-val.tertiary { color: var(--tertiary); }
+
+.metric-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+/* Timeline animation */
+.timeline {
+  position: relative;
+  margin: 2rem 0;
+  padding-left: 2rem;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border);
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 1.5rem;
+  padding-left: 1.5rem;
+  opacity: 0;
+  transform: translateX(-20px);
+  transition: all 0.5s ease;
+}
+
+.timeline-item.visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -2rem;
+  top: 6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 3px solid var(--bg);
+  z-index: 1;
+}
+
+.timeline-item .tl-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.timeline-item .tl-desc {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+/* Play button */
+.play-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: var(--bg);
+  border: none;
+  padding: 12px 28px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.play-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0,212,106,0.3);
+}
+
+.play-btn:active { transform: translateY(0); }
+
+/* Info grid */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  h2 { font-size: 2rem; }
+  section { padding: 80px 1rem 40px; }
+  .pipeline-container { flex-direction: column; }
+  .pipeline-arrow { transform: rotate(90deg); }
+}
+</style>
+</head>
+<body>
+<div class="bg-grid"></div>
+<div class="glow-orb primary"></div>
+<div class="glow-orb secondary"></div>
+
+<nav>
+  <div class="nav-title">Image Generation Pipeline</div>
+  <div class="nav-dots">
+    <div class="nav-dot active" data-section="0"></div>
+    <div class="nav-dot" data-section="1"></div>
+    <div class="nav-dot" data-section="2"></div>
+    <div class="nav-dot" data-section="3"></div>
+    <div class="nav-dot" data-section="4"></div>
+    <div class="nav-dot" data-section="5"></div>
+    <div class="nav-dot" data-section="6"></div>
+  </div>
+</nav>
+<div class="progress-bar" id="progressBar"></div>
+
+<!-- Section 0: Hero -->
+<section id="sec0">
+  <div class="section-inner">
+    <span class="badge">MODULE 06</span>
+    <h2><span class="gradient-text">Image Generation Pipeline</span></h2>
+    <p class="section-desc">A visual walkthrough of how modern diffusion models transform text prompts into stunning images: Text Encoder, Denoiser (U-Net/DiT), and VAE Decoder working in concert.</p>
+    <div class="metrics-row">
+      <div class="metric-card">
+        <div class="metric-val primary">3</div>
+        <div class="metric-label">Core Stages</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val secondary">20-50</div>
+        <div class="metric-label">Denoising Steps</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val tertiary">8x</div>
+        <div class="metric-label">VAE Compression</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val primary">~3s</div>
+        <div class="metric-label">Typical Latency</div>
+      </div>
+    </div>
+    <p style="color:var(--text-dim); font-size:0.9rem; margin-top:1rem;">Scroll down to explore each stage of the pipeline.</p>
+  </div>
+</section>
+
+<!-- Section 1: Full Pipeline Overview -->
+<section id="sec1">
+  <div class="section-inner">
+    <span class="badge">OVERVIEW</span>
+    <h2>The Full <span class="gradient-text">Pipeline</span></h2>
+    <p class="section-desc">Click each stage to see details. The pipeline operates in latent space for efficiency -- 8x smaller than pixel space.</p>
+    <div class="pipeline-container" id="pipelineVis">
+      <div class="pipeline-stage">
+        <div class="pipeline-box" data-stage="prompt" id="stagePrompt">
+          <div class="icon">&#9997;</div>
+          <div class="label">Text Prompt</div>
+          <div class="sublabel">"a cat on Mars"</div>
+        </div>
+      </div>
+      <div class="pipeline-arrow" id="arrow1">&#10132;</div>
+      <div class="pipeline-stage">
+        <div class="pipeline-box" data-stage="encoder" id="stageEncoder">
+          <div class="icon">&#128300;</div>
+          <div class="label">Text Encoder</div>
+          <div class="sublabel">CLIP / T5</div>
+        </div>
+      </div>
+      <div class="pipeline-arrow" id="arrow2">&#10132;</div>
+      <div class="pipeline-stage">
+        <div class="pipeline-box" data-stage="noise" id="stageNoise">
+          <div class="icon">&#127912;</div>
+          <div class="label">Random Noise</div>
+          <div class="sublabel">Latent z ~ N(0,1)</div>
+        </div>
+      </div>
+      <div class="pipeline-arrow" id="arrow3">&#10132;</div>
+      <div class="pipeline-stage">
+        <div class="pipeline-box" data-stage="denoiser" id="stageDenoiser">
+          <div class="icon">&#9881;</div>
+          <div class="label">Denoiser</div>
+          <div class="sublabel">U-Net / DiT</div>
+        </div>
+      </div>
+      <div class="pipeline-arrow" id="arrow4">&#10132;</div>
+      <div class="pipeline-stage">
+        <div class="pipeline-box" data-stage="vae" id="stageVAE">
+          <div class="icon">&#128248;</div>
+          <div class="label">VAE Decoder</div>
+          <div class="sublabel">Latent → Pixels</div>
+        </div>
+      </div>
+      <div class="pipeline-arrow" id="arrow5">&#10132;</div>
+      <div class="pipeline-stage">
+        <div class="pipeline-box" data-stage="image" id="stageImage">
+          <div class="icon">&#128444;</div>
+          <div class="label">Final Image</div>
+          <div class="sublabel">512x512 / 1024x1024</div>
+        </div>
+      </div>
+    </div>
+    <div id="stageDetail" class="card" style="margin-top:1rem; min-height:120px;">
+      <p style="color:var(--text-dim);">Click on any pipeline stage above to see detailed information.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Section 2: Text Encoder -->
+<section id="sec2">
+  <div class="section-inner">
+    <span class="badge">STAGE 1</span>
+    <h2><span class="gradient-text">Text Encoder</span></h2>
+    <p class="section-desc">The text encoder converts your prompt into a rich embedding vector that guides the denoising process. Modern systems use CLIP or T5-XXL encoders.</p>
+    <div class="embedding-vis">
+      <div class="embed-column card">
+        <h3>Input Tokens</h3>
+        <p style="font-size:0.85rem; color:var(--text-dim); margin-bottom:1rem;">Click a token to see its embedding:</p>
+        <div class="token-list" id="tokenList">
+          <span class="token" data-idx="0">a</span>
+          <span class="token" data-idx="1">beautiful</span>
+          <span class="token" data-idx="2">sunset</span>
+          <span class="token" data-idx="3">over</span>
+          <span class="token" data-idx="4">mountains</span>
+          <span class="token" data-idx="5">with</span>
+          <span class="token" data-idx="6">snow</span>
+        </div>
+        <div style="margin-top:1rem;">
+          <div style="font-size:0.8rem; color:var(--text-dim); margin-bottom:0.5rem;">Tokenizer output:</div>
+          <code style="font-size:0.75rem; color:var(--secondary);" id="tokenizerOut">[49406, 320, 1629, ...]</code>
+        </div>
+      </div>
+      <div class="embed-column card">
+        <h3>Embedding Vector <span style="font-size:0.75rem; color:var(--text-dim);">(768-dim)</span></h3>
+        <div class="embedding-bars" id="embeddingBars"></div>
+        <div style="margin-top:1rem; font-size:0.8rem; color:var(--text-dim);">
+          <span id="embTokenLabel">Select a token</span> &rarr; <span style="color:var(--secondary);">768-dimensional vector</span>
+        </div>
+      </div>
+    </div>
+    <div class="info-grid">
+      <div class="card">
+        <h3 style="font-size:1rem; color:var(--primary); margin-bottom:0.5rem;">CLIP Text Encoder</h3>
+        <p style="font-size:0.85rem; color:var(--text-muted);">Trained with contrastive learning on image-text pairs. Maps text to a shared embedding space with images. 77 token max context.</p>
+        <div style="margin-top:0.75rem;"><code style="font-size:0.75rem; color:var(--text-dim);">Output: [77, 768] tensor</code></div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:1rem; color:var(--secondary); margin-bottom:0.5rem;">T5-XXL Encoder</h3>
+        <p style="font-size:0.85rem; color:var(--text-muted);">11B parameter text encoder used in SDXL and Flux. Provides much richer text understanding with 256 token context window.</p>
+        <div style="margin-top:0.75rem;"><code style="font-size:0.75rem; color:var(--text-dim);">Output: [256, 4096] tensor</code></div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:1rem; color:var(--tertiary); margin-bottom:0.5rem;">Dual Encoding</h3>
+        <p style="font-size:0.85rem; color:var(--text-muted);">Modern models like SDXL use both CLIP and T5 encoders. Embeddings are concatenated for richer prompt understanding.</p>
+        <div style="margin-top:0.75rem;"><code style="font-size:0.75rem; color:var(--text-dim);">Combined: [77, 768] + [256, 4096]</code></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 3: Denoising Process -->
+<section id="sec3">
+  <div class="section-inner">
+    <span class="badge">STAGE 2</span>
+    <h2>The <span class="gradient-text">Denoising Process</span></h2>
+    <p class="section-desc">The denoiser (U-Net or DiT) iteratively removes noise, guided by the text embedding. Each step predicts and subtracts noise.</p>
+    <div class="slider-container">
+      <div class="slider-label">
+        <span>Number of Denoising Steps</span>
+        <span class="value" id="stepsValue">20</span>
+      </div>
+      <input type="range" id="stepsSlider" min="1" max="50" value="20">
+    </div>
+    <div style="text-align:center; margin:1rem 0;">
+      <button class="play-btn" id="playDenoise">&#9654; Run Denoising</button>
+    </div>
+    <div class="steps-grid" id="stepsGrid"></div>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem;">
+      <div style="font-size:0.85rem; color:var(--text-dim);">Step <span id="currentStep" style="color:var(--primary); font-family:'JetBrains Mono',monospace;">0</span> / <span id="totalSteps">20</span></div>
+      <div style="font-size:0.85rem; color:var(--text-dim);">Noise level: <span id="noiseLevel" style="color:var(--secondary); font-family:'JetBrains Mono',monospace;">100%</span></div>
+    </div>
+    <div class="info-grid" style="margin-top:2rem;">
+      <div class="card">
+        <h3 style="font-size:1rem; color:var(--primary); margin-bottom:0.5rem;">U-Net Architecture</h3>
+        <p style="font-size:0.85rem; color:var(--text-muted);">Encoder-decoder with skip connections and cross-attention for text conditioning. ~860M parameters in SD 1.5.</p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:1rem; color:var(--secondary); margin-bottom:0.5rem;">DiT (Diffusion Transformer)</h3>
+        <p style="font-size:0.85rem; color:var(--text-muted);">Replaces U-Net with a Transformer backbone. Used in DALL-E 3, Flux, and Stable Diffusion 3. Better scaling.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 4: Guidance Scale -->
+<section id="sec4">
+  <div class="section-inner">
+    <span class="badge">PARAMETER</span>
+    <h2><span class="gradient-text">Classifier-Free Guidance</span></h2>
+    <p class="section-desc">The guidance scale (CFG) controls how strongly the generation follows the text prompt. Higher values = more faithful to prompt but less diverse.</p>
+    <div class="slider-container">
+      <div class="slider-label">
+        <span>Guidance Scale (CFG)</span>
+        <span class="value" id="cfgValue">7.5</span>
+      </div>
+      <input type="range" id="cfgSlider" min="1" max="30" value="15" step="1">
+    </div>
+    <div class="noise-display">
+      <div class="noise-canvas-container">
+        <canvas id="cfgCanvas" width="300" height="300"></canvas>
+        <div class="canvas-label">Output at CFG = <span id="cfgCanvasLabel">7.5</span></div>
+      </div>
+    </div>
+    <div class="guidance-demo" id="guidanceDemo">
+      <div class="guidance-card" data-cfg="1">
+        <div class="guidance-canvas-wrap"><canvas id="cfgDemo1" width="200" height="200"></canvas></div>
+        <div class="guidance-info">
+          <div class="cfg-val">CFG = 1</div>
+          <div class="cfg-desc">No guidance -- random, unfocused</div>
+        </div>
+      </div>
+      <div class="guidance-card selected" data-cfg="7.5">
+        <div class="guidance-canvas-wrap"><canvas id="cfgDemo2" width="200" height="200"></canvas></div>
+        <div class="guidance-info">
+          <div class="cfg-val">CFG = 7.5</div>
+          <div class="cfg-desc">Balanced -- good quality & diversity</div>
+        </div>
+      </div>
+      <div class="guidance-card" data-cfg="15">
+        <div class="guidance-canvas-wrap"><canvas id="cfgDemo3" width="200" height="200"></canvas></div>
+        <div class="guidance-info">
+          <div class="cfg-val">CFG = 15</div>
+          <div class="cfg-desc">Strong guidance -- sharp but less varied</div>
+        </div>
+      </div>
+      <div class="guidance-card" data-cfg="30">
+        <div class="guidance-canvas-wrap"><canvas id="cfgDemo4" width="200" height="200"></canvas></div>
+        <div class="guidance-info">
+          <div class="cfg-val">CFG = 30</div>
+          <div class="cfg-desc">Over-saturated -- artifacts appear</div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:1.5rem;">
+      <h3 style="font-size:1rem; margin-bottom:0.5rem;">How CFG Works</h3>
+      <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:0.75rem;">Two forward passes per step: one conditioned, one unconditioned. The final noise prediction is:</p>
+      <code style="font-size:0.85rem; color:var(--primary); display:block; text-align:center; padding:1rem; background:rgba(0,212,106,0.05); border-radius:8px;">
+        noise_pred = noise_uncond + cfg_scale * (noise_cond - noise_uncond)
+      </code>
+      <p style="font-size:0.8rem; color:var(--text-dim); margin-top:0.75rem;">This doubles compute per step but dramatically improves text-image alignment. Distilled models eliminate this overhead.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Section 5: VAE Decoder -->
+<section id="sec5">
+  <div class="section-inner">
+    <span class="badge">STAGE 3</span>
+    <h2><span class="gradient-text">VAE Decoder</span></h2>
+    <p class="section-desc">The Variational Autoencoder decodes the denoised latent back to pixel space. It upscales by 8x in each dimension.</p>
+    <div class="vae-visual">
+      <div class="vae-block">
+        <canvas id="vaeLatent" width="80" height="80"></canvas>
+        <div class="vae-label">Latent (64x64x4)</div>
+      </div>
+      <div class="vae-arrow">&#10132;</div>
+      <div class="vae-block" style="text-align:center;">
+        <div class="card" style="padding:1rem 2rem; display:inline-block;">
+          <div style="font-size:1.5rem;">&#9881;</div>
+          <div style="font-weight:600; font-size:0.9rem;">VAE Decoder</div>
+          <div style="font-size:0.75rem; color:var(--text-dim); font-family:'JetBrains Mono',monospace;">~80M params</div>
+        </div>
+      </div>
+      <div class="vae-arrow">&#10132;</div>
+      <div class="vae-block">
+        <canvas id="vaeOutput" width="200" height="200"></canvas>
+        <div class="vae-label">Image (512x512x3)</div>
+      </div>
+    </div>
+    <div style="text-align:center; margin:1rem 0;">
+      <button class="play-btn" id="playVAE">&#9654; Animate VAE Decode</button>
+    </div>
+    <div class="info-grid">
+      <div class="card">
+        <h3 style="font-size:1rem; color:var(--primary); margin-bottom:0.5rem;">Latent Space</h3>
+        <p style="font-size:0.85rem; color:var(--text-muted);">Working in 64x64 latent space instead of 512x512 pixels reduces memory by 64x and compute by ~48x.</p>
+        <div class="metrics-row" style="margin:1rem 0 0;">
+          <div class="metric-card" style="padding:0.75rem;">
+            <div class="metric-val primary" style="font-size:1.2rem;">64x64</div>
+            <div class="metric-label">Latent Size</div>
+          </div>
+          <div class="metric-card" style="padding:0.75rem;">
+            <div class="metric-val secondary" style="font-size:1.2rem;">4</div>
+            <div class="metric-label">Channels</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:1rem; color:var(--secondary); margin-bottom:0.5rem;">Decode Cost</h3>
+        <p style="font-size:0.85rem; color:var(--text-muted);">VAE decode is a single forward pass -- far cheaper than the iterative denoising. Typically takes ~50ms on H100.</p>
+        <div class="metrics-row" style="margin:1rem 0 0;">
+          <div class="metric-card" style="padding:0.75rem;">
+            <div class="metric-val primary" style="font-size:1.2rem;">~50ms</div>
+            <div class="metric-label">Decode Time</div>
+          </div>
+          <div class="metric-card" style="padding:0.75rem;">
+            <div class="metric-val secondary" style="font-size:1.2rem;">~2%</div>
+            <div class="metric-label">Of Total Time</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 6: Summary -->
+<section id="sec6">
+  <div class="section-inner">
+    <span class="badge">SUMMARY</span>
+    <h2>Pipeline <span class="gradient-text">Latency Breakdown</span></h2>
+    <p class="section-desc">Understanding where time is spent helps optimize inference. The denoiser dominates total latency.</p>
+    <div class="card" style="margin-bottom:2rem;">
+      <div style="margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+          <span style="font-size:0.9rem;">Text Encoder</span>
+          <span class="mono" style="color:var(--primary); font-size:0.85rem;">~30ms (1%)</span>
+        </div>
+        <div style="height:24px; background:var(--border); border-radius:6px; overflow:hidden;">
+          <div id="bar1" style="height:100%; width:0; background:linear-gradient(90deg, var(--primary), var(--secondary)); border-radius:6px; transition:width 1.5s ease;"></div>
+        </div>
+      </div>
+      <div style="margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+          <span style="font-size:0.9rem;">Denoiser (20 steps)</span>
+          <span class="mono" style="color:var(--primary); font-size:0.85rem;">~2500ms (93%)</span>
+        </div>
+        <div style="height:24px; background:var(--border); border-radius:6px; overflow:hidden;">
+          <div id="bar2" style="height:100%; width:0; background:linear-gradient(90deg, var(--primary), var(--tertiary)); border-radius:6px; transition:width 1.5s ease 0.3s;"></div>
+        </div>
+      </div>
+      <div style="margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+          <span style="font-size:0.9rem;">VAE Decoder</span>
+          <span class="mono" style="color:var(--primary); font-size:0.85rem;">~50ms (2%)</span>
+        </div>
+        <div style="height:24px; background:var(--border); border-radius:6px; overflow:hidden;">
+          <div id="bar3" style="height:100%; width:0; background:linear-gradient(90deg, var(--secondary), var(--tertiary)); border-radius:6px; transition:width 1.5s ease 0.6s;"></div>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+          <span style="font-size:0.9rem;">Post-processing</span>
+          <span class="mono" style="color:var(--primary); font-size:0.85rem;">~20ms (1%)</span>
+        </div>
+        <div style="height:24px; background:var(--border); border-radius:6px; overflow:hidden;">
+          <div id="bar4" style="height:100%; width:0; background:linear-gradient(90deg, var(--tertiary), var(--primary)); border-radius:6px; transition:width 1.5s ease 0.9s;"></div>
+        </div>
+      </div>
+    </div>
+    <div class="timeline" id="summaryTimeline">
+      <div class="timeline-item">
+        <div class="tl-title" style="color:var(--primary);">Step 1: Encode Text</div>
+        <div class="tl-desc">CLIP/T5 converts prompt to embedding vectors. One-time cost, no iteration needed.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-title" style="color:var(--secondary);">Step 2: Sample Noise</div>
+        <div class="tl-desc">Initialize random Gaussian noise in latent space (64x64x4). Seed controls reproducibility.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-title" style="color:var(--tertiary);">Step 3: Iterative Denoising</div>
+        <div class="tl-desc">U-Net/DiT predicts and removes noise over 20-50 steps. Uses scheduler (DDPM, Euler, DPM++) for step sizing.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-title" style="color:var(--primary);">Step 4: VAE Decode</div>
+        <div class="tl-desc">Single forward pass to upscale 64x64 latent to 512x512 pixel image. Final output.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-title" style="color:var(--secondary);">Optimization Opportunities</div>
+        <div class="tl-desc">Fewer steps via distillation (LCM/Turbo), batched CFG, TensorRT compilation, and FP8 quantization.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+// === Scroll and Navigation ===
+const sections = document.querySelectorAll('section');
+const navDots = document.querySelectorAll('.nav-dot');
+const progressBar = document.getElementById('progressBar');
+
+function updateScroll() {
+  const scrollTop = window.scrollY;
+  const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+  const progress = (scrollTop / docHeight) * 100;
+  progressBar.style.width = progress + '%';
+
+  sections.forEach((sec, i) => {
+    const rect = sec.getBoundingClientRect();
+    const inner = sec.querySelector('.section-inner');
+    if (rect.top < window.innerHeight * 0.75 && rect.bottom > 0) {
+      if (inner) inner.classList.add('visible');
+      navDots.forEach(d => d.classList.remove('active'));
+      if (navDots[i]) navDots[i].classList.add('active');
+    }
+  });
+
+  // Animate summary bars
+  const sec6 = document.getElementById('sec6');
+  if (sec6) {
+    const r = sec6.getBoundingClientRect();
+    if (r.top < window.innerHeight * 0.8) {
+      document.getElementById('bar1').style.width = '3%';
+      document.getElementById('bar2').style.width = '93%';
+      document.getElementById('bar3').style.width = '3%';
+      document.getElementById('bar4').style.width = '1%';
+    }
+  }
+
+  // Animate timeline
+  document.querySelectorAll('.timeline-item').forEach((item, i) => {
+    const r = item.getBoundingClientRect();
+    if (r.top < window.innerHeight * 0.85) {
+      setTimeout(() => item.classList.add('visible'), i * 150);
+    }
+  });
+}
+
+window.addEventListener('scroll', updateScroll);
+window.addEventListener('load', updateScroll);
+
+navDots.forEach(dot => {
+  dot.addEventListener('click', () => {
+    const idx = parseInt(dot.dataset.section);
+    sections[idx].scrollIntoView({ behavior: 'smooth' });
+  });
+});
+
+// === Pipeline Stage Detail ===
+const stageDetails = {
+  prompt: {
+    title: 'Text Prompt',
+    html: '<p>The user-provided text description. Modern models handle prompts up to 77-256 tokens. <span style="color:var(--secondary);">Prompt engineering</span> significantly impacts output quality.</p><p style="margin-top:0.5rem;color:var(--text-dim);font-size:0.85rem;">Example: "a beautiful sunset over snow-capped mountains, photorealistic, golden hour lighting, 8k"</p>'
+  },
+  encoder: {
+    title: 'Text Encoder (CLIP / T5)',
+    html: '<p>Converts text tokens into dense embedding vectors. <span style="color:var(--primary);">CLIP ViT-L/14</span> produces [77, 768] tensors. <span style="color:var(--secondary);">T5-XXL</span> produces [256, 4096] tensors.</p><p style="margin-top:0.5rem;color:var(--text-dim);font-size:0.85rem;">Latency: ~30ms on H100 | Memory: ~1-5GB depending on encoder</p>'
+  },
+  noise: {
+    title: 'Random Noise Initialization',
+    html: '<p>Pure Gaussian noise sampled in <span style="color:var(--primary);">latent space</span> (64x64x4 for SD 1.5). The random seed determines the initial noise pattern, enabling reproducible generation.</p><p style="margin-top:0.5rem;color:var(--text-dim);font-size:0.85rem;">z ~ N(0, I) where z is in R^(64x64x4)</p>'
+  },
+  denoiser: {
+    title: 'Denoiser (U-Net / DiT)',
+    html: '<p>The core model that predicts noise to remove at each timestep. Uses <span style="color:var(--tertiary);">cross-attention</span> to condition on text embeddings. Runs 20-50 iterative steps.</p><p style="margin-top:0.5rem;color:var(--text-dim);font-size:0.85rem;">~860M params (SD 1.5) | ~2.6B params (SDXL) | ~12B params (Flux)</p>'
+  },
+  vae: {
+    title: 'VAE Decoder',
+    html: '<p>Upscales the denoised 64x64 latent to a 512x512 pixel image. Uses transposed convolutions for upsampling. <span style="color:var(--primary);">Single forward pass</span> -- not iterative.</p><p style="margin-top:0.5rem;color:var(--text-dim);font-size:0.85rem;">~80M params | ~50ms on H100 | 8x spatial upscaling</p>'
+  },
+  image: {
+    title: 'Final Image Output',
+    html: '<p>The decoded RGB image at the target resolution. Can be 512x512, 768x768, or 1024x1024 depending on the model. Post-processing may include <span style="color:var(--secondary);">face restoration</span> or <span style="color:var(--primary);">upscaling</span>.</p>'
+  }
+};
+
+document.querySelectorAll('.pipeline-box').forEach(box => {
+  box.addEventListener('click', () => {
+    document.querySelectorAll('.pipeline-box').forEach(b => b.classList.remove('active'));
+    box.classList.add('active');
+    const stage = box.dataset.stage;
+    const detail = stageDetails[stage];
+    document.getElementById('stageDetail').innerHTML = `<h3 style="color:var(--primary);margin-bottom:0.5rem;">${detail.title}</h3>${detail.html}`;
+  });
+});
+
+// === Auto-animate pipeline ===
+let pipelineAnimTimer;
+function animatePipeline() {
+  const boxes = document.querySelectorAll('.pipeline-box');
+  const arrows = document.querySelectorAll('.pipeline-arrow');
+  let step = 0;
+  clearInterval(pipelineAnimTimer);
+  boxes.forEach(b => b.classList.remove('active'));
+  arrows.forEach(a => a.classList.remove('active'));
+
+  pipelineAnimTimer = setInterval(() => {
+    if (step < boxes.length) {
+      boxes[step].classList.add('active');
+      if (step > 0) arrows[step - 1].classList.add('active');
+      boxes[step].click();
+      step++;
+    } else {
+      clearInterval(pipelineAnimTimer);
+    }
+  }, 800);
+}
+
+// Auto-trigger when section 1 becomes visible
+const sec1Observer = new IntersectionObserver((entries) => {
+  if (entries[0].isIntersecting) {
+    setTimeout(animatePipeline, 500);
+    sec1Observer.disconnect();
+  }
+}, { threshold: 0.5 });
+sec1Observer.observe(document.getElementById('sec1'));
+
+// === Embedding Visualization ===
+const embeddingData = {};
+const tokenWords = ['a','beautiful','sunset','over','mountains','with','snow'];
+tokenWords.forEach((word, i) => {
+  const seed = i * 17 + 42;
+  const bars = [];
+  for (let j = 0; j < 60; j++) {
+    const val = Math.sin(seed + j * 0.7) * 0.5 + Math.cos(seed * 0.3 + j * 1.1) * 0.3 + (Math.random() - 0.5) * 0.2;
+    bars.push(val);
+  }
+  embeddingData[i] = bars;
+});
+
+function renderEmbedding(idx) {
+  const container = document.getElementById('embeddingBars');
+  container.innerHTML = '';
+  const bars = embeddingData[idx];
+  bars.forEach((val, j) => {
+    const bar = document.createElement('div');
+    bar.className = 'embed-bar';
+    const absVal = Math.abs(val);
+    const width = absVal * 100;
+    const hue = val > 0 ? '160' : '340';
+    bar.style.width = '0';
+    bar.style.background = `hsl(${hue}, 70%, 50%)`;
+    container.appendChild(bar);
+    setTimeout(() => { bar.style.width = width + '%'; }, j * 15);
+  });
+  document.getElementById('embTokenLabel').textContent = `"${tokenWords[idx]}"`;
+  document.getElementById('embTokenLabel').style.color = 'var(--primary)';
+}
+
+document.querySelectorAll('.token').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.token').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    renderEmbedding(parseInt(t.dataset.idx));
+  });
+});
+
+// === Denoising Steps ===
+const stepsSlider = document.getElementById('stepsSlider');
+const stepsValue = document.getElementById('stepsValue');
+const stepsGrid = document.getElementById('stepsGrid');
+const totalStepsSpan = document.getElementById('totalSteps');
+
+function generateNoise(canvas, noiseRatio, seed) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  const imgData = ctx.createImageData(w, h);
+
+  // Simple seeded RNG
+  let s = seed;
+  function rng() { s = (s * 16807 + 0) % 2147483647; return s / 2147483647; }
+
+  // Base pattern (image structure)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      // Create a simple gradient/structure pattern
+      const cx = w / 2, cy = h / 2;
+      const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2) / (w * 0.7);
+      const angle = Math.atan2(y - cy, x - cx);
+
+      // Base colors: sunset-like
+      let r = 180 + 60 * Math.sin(angle * 2 + 1) - dist * 100;
+      let g = 100 + 80 * Math.cos(angle * 3) * (1 - dist);
+      let b = 60 + 120 * dist + 40 * Math.sin(angle * 5);
+
+      // Add mountain-like structures
+      const mountainLine = cy + 10 * Math.sin(x * 0.05 + seed * 0.1) + 5 * Math.cos(x * 0.12);
+      if (y > mountainLine) {
+        r = r * 0.3 + 20;
+        g = g * 0.3 + 30;
+        b = b * 0.3 + 40;
+      }
+
+      // Mix with noise
+      const noise_r = rng() * 255;
+      const noise_g = rng() * 255;
+      const noise_b = rng() * 255;
+
+      imgData.data[i] = r * (1 - noiseRatio) + noise_r * noiseRatio;
+      imgData.data[i + 1] = g * (1 - noiseRatio) + noise_g * noiseRatio;
+      imgData.data[i + 2] = b * (1 - noiseRatio) + noise_b * noiseRatio;
+      imgData.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+function buildStepsGrid(numSteps) {
+  stepsGrid.innerHTML = '';
+  const showSteps = Math.min(numSteps, 25);
+  const stepIndices = [];
+  for (let i = 0; i < showSteps; i++) {
+    stepIndices.push(Math.round(i * numSteps / showSteps));
+  }
+
+  stepIndices.forEach((stepIdx, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'step-cell';
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const noiseRatio = 1 - (stepIdx / numSteps);
+    generateNoise(canvas, noiseRatio, 42);
+    const label = document.createElement('div');
+    label.className = 'step-num';
+    label.textContent = stepIdx;
+    cell.appendChild(canvas);
+    cell.appendChild(label);
+    cell.style.opacity = '0.3';
+    stepsGrid.appendChild(cell);
+  });
+}
+
+stepsSlider.addEventListener('input', () => {
+  stepsValue.textContent = stepsSlider.value;
+  totalStepsSpan.textContent = stepsSlider.value;
+  buildStepsGrid(parseInt(stepsSlider.value));
+});
+
+buildStepsGrid(20);
+
+// Play denoising animation
+document.getElementById('playDenoise').addEventListener('click', () => {
+  const cells = stepsGrid.querySelectorAll('.step-cell');
+  const numSteps = parseInt(stepsSlider.value);
+  let current = 0;
+
+  cells.forEach(c => c.style.opacity = '0.3');
+
+  function animateStep() {
+    if (current >= cells.length) return;
+    cells[current].style.opacity = '1';
+    cells[current].style.border = '1px solid var(--primary)';
+    document.getElementById('currentStep').textContent = current + 1;
+    const noisePercent = Math.round((1 - (current + 1) / cells.length) * 100);
+    document.getElementById('noiseLevel').textContent = noisePercent + '%';
+    current++;
+    if (current < cells.length) {
+      setTimeout(animateStep, 150);
+    }
+  }
+  animateStep();
+});
+
+// === Guidance Scale Demo ===
+function generateCFGDemo(canvas, cfg, seed) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+  const imgData = ctx.createImageData(w, h);
+
+  let s = seed || 42;
+  function rng() { s = (s * 16807 + 0) % 2147483647; return s / 2147483647; }
+
+  const sharpness = Math.min(cfg / 10, 1.5);
+  const saturation = Math.min(cfg / 7, 2.5);
+  const noiseAmount = Math.max(0, 0.4 - cfg * 0.015);
+  const artifactAmount = Math.max(0, (cfg - 20) * 0.02);
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const cx = w / 2, cy = h / 2;
+      const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2) / (w * 0.6);
+      const angle = Math.atan2(y - cy, x - cx);
+
+      // Sky/sunset
+      let r = 200 + 50 * Math.sin(angle * 2 + 1);
+      let g = 100 + 80 * Math.cos(angle * 3) * (1 - dist);
+      let b = 60 + 140 * dist;
+
+      // Mountains
+      const mLine = cy * 0.9 + 12 * Math.sin(x * 0.04 + 2) + 6 * Math.cos(x * 0.09);
+      if (y > mLine) {
+        const depth = (y - mLine) / (h - mLine);
+        r = 30 + 20 * depth;
+        g = 40 + 30 * depth;
+        b = 50 + 20 * depth;
+      }
+
+      // Apply sharpness (edge enhancement)
+      r = ((r / 128 - 1) * sharpness + 1) * 128;
+      g = ((g / 128 - 1) * sharpness + 1) * 128;
+      b = ((b / 128 - 1) * sharpness + 1) * 128;
+
+      // Saturation boost
+      const gray = (r + g + b) / 3;
+      r = gray + (r - gray) * saturation;
+      g = gray + (g - gray) * saturation;
+      b = gray + (b - gray) * saturation;
+
+      // Random noise for low CFG
+      r += (rng() - 0.5) * noiseAmount * 255;
+      g += (rng() - 0.5) * noiseAmount * 255;
+      b += (rng() - 0.5) * noiseAmount * 255;
+
+      // Artifacts for very high CFG
+      if (artifactAmount > 0) {
+        const artifact = Math.sin(x * 0.3) * Math.cos(y * 0.3) * artifactAmount * 100;
+        r += artifact;
+        g += artifact * 0.5;
+      }
+
+      imgData.data[i] = Math.max(0, Math.min(255, r));
+      imgData.data[i + 1] = Math.max(0, Math.min(255, g));
+      imgData.data[i + 2] = Math.max(0, Math.min(255, b));
+      imgData.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+// Render CFG demo cards
+generateCFGDemo(document.getElementById('cfgDemo1'), 1, 42);
+generateCFGDemo(document.getElementById('cfgDemo2'), 7.5, 42);
+generateCFGDemo(document.getElementById('cfgDemo3'), 15, 42);
+generateCFGDemo(document.getElementById('cfgDemo4'), 30, 42);
+
+// CFG slider
+const cfgSlider = document.getElementById('cfgSlider');
+const cfgValueDisplay = document.getElementById('cfgValue');
+const cfgCanvas = document.getElementById('cfgCanvas');
+const cfgCanvasLabel = document.getElementById('cfgCanvasLabel');
+
+function updateCFG() {
+  const val = parseFloat(cfgSlider.value) / 2;
+  cfgValueDisplay.textContent = val.toFixed(1);
+  cfgCanvasLabel.textContent = val.toFixed(1);
+  generateCFGDemo(cfgCanvas, val, 42);
+
+  document.querySelectorAll('.guidance-card').forEach(card => {
+    card.classList.remove('selected');
+    const cardCfg = parseFloat(card.dataset.cfg);
+    if (Math.abs(cardCfg - val) < 2) card.classList.add('selected');
+  });
+}
+
+cfgSlider.addEventListener('input', updateCFG);
+updateCFG();
+
+// === VAE Section ===
+function drawLatent(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const imgData = ctx.createImageData(w, h);
+  let s = 77;
+  function rng() { s = (s * 16807) % 2147483647; return s / 2147483647; }
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const v1 = Math.sin(x * 0.15 + y * 0.1) * 50 + 100;
+      const v2 = Math.cos(x * 0.08 - y * 0.12) * 60 + 100;
+      const v3 = Math.sin((x + y) * 0.1) * 40 + 120;
+      imgData.data[i] = v1 + rng() * 30;
+      imgData.data[i + 1] = v2 + rng() * 30;
+      imgData.data[i + 2] = v3 + rng() * 30;
+      imgData.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+function drawVAEOutput(canvas, progress) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const imgData = ctx.createImageData(w, h);
+  let s = 77;
+  function rng() { s = (s * 16807) % 2147483647; return s / 2147483647; }
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const cx = w / 2, cy = h / 2;
+      const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2) / (w * 0.6);
+      const angle = Math.atan2(y - cy, x - cx);
+
+      let r = 220 + 30 * Math.sin(angle * 2);
+      let g = 120 + 80 * Math.cos(angle * 3) * (1 - dist);
+      let b = 80 + 120 * dist;
+
+      const mLine = cy * 0.85 + 15 * Math.sin(x * 0.03 + 1) + 8 * Math.cos(x * 0.07);
+      if (y > mLine) {
+        r = 35; g = 50; b = 55;
+      }
+
+      // Blocky/blurry at low progress
+      const blockSize = Math.max(1, Math.round((1 - progress) * 16));
+      const bx = Math.floor(x / blockSize) * blockSize;
+      const by = Math.floor(y / blockSize) * blockSize;
+      if (blockSize > 1) {
+        const bDist = Math.sqrt((bx - cx) ** 2 + (by - cy) ** 2) / (w * 0.6);
+        const bAngle = Math.atan2(by - cy, bx - cx);
+        r = r * progress + (200 + 30 * Math.sin(bAngle * 2)) * (1 - progress);
+        g = g * progress + (120 + 80 * Math.cos(bAngle * 3) * (1 - bDist)) * (1 - progress);
+        b = b * progress + (80 + 120 * bDist) * (1 - progress);
+      }
+
+      imgData.data[i] = Math.max(0, Math.min(255, r));
+      imgData.data[i + 1] = Math.max(0, Math.min(255, g));
+      imgData.data[i + 2] = Math.max(0, Math.min(255, b));
+      imgData.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+drawLatent(document.getElementById('vaeLatent'));
+drawVAEOutput(document.getElementById('vaeOutput'), 1);
+
+document.getElementById('playVAE').addEventListener('click', () => {
+  let progress = 0;
+  const canvas = document.getElementById('vaeOutput');
+  function animate() {
+    progress += 0.02;
+    if (progress > 1) progress = 1;
+    drawVAEOutput(canvas, progress);
+    if (progress < 1) requestAnimationFrame(animate);
+  }
+  progress = 0;
+  animate();
+});
+</script>
+</body>
+</html>

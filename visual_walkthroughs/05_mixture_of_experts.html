@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mixture of Experts - Visual Walkthrough</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0a;--bg-card:#121212;--bg-card-hover:#1a1a1a;--border:#262626;--primary:#00d46a;--secondary:#00c8e6;--tertiary:#f59e0b;--success:#10b981;--text:#f2f2f2;--text-muted:#a3a3a3;--text-dim:#64748b;--danger:#ef4444}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;line-height:1.6;overflow-x:hidden}
+code,.mono{font-family:'JetBrains Mono',monospace}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.bg-grid{background-image:linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px);background-size:60px 60px}
+.bg-glow-1{position:fixed;top:15%;left:5%;width:600px;height:600px;background:radial-gradient(circle,rgba(0,212,106,0.08) 0%,transparent 70%);pointer-events:none;z-index:0}
+.bg-glow-2{position:fixed;bottom:10%;right:5%;width:500px;height:500px;background:radial-gradient(circle,rgba(0,200,230,0.06) 0%,transparent 70%);pointer-events:none;z-index:0}
+.progress-bar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--primary),var(--tertiary));z-index:1000;transition:width .3s}
+.nav{position:fixed;top:0;left:0;right:0;background:rgba(10,10,10,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);z-index:999;padding:0 2rem}
+.nav-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:60px}
+.nav-title{font-weight:700;font-size:.9rem}.nav-title span{color:var(--primary)}
+.nav-dots{display:flex;gap:8px}
+.nav-dot{width:10px;height:10px;border-radius:50%;background:var(--border);cursor:pointer;transition:all .3s;border:none}
+.nav-dot.active{background:var(--primary);box-shadow:0 0 10px var(--primary)}.nav-dot:hover{background:var(--primary);transform:scale(1.2)}
+.section{min-height:100vh;padding:100px 2rem 60px;display:flex;align-items:center;justify-content:center;position:relative;z-index:1}
+.section-content{max-width:1100px;width:100%;margin:0 auto;opacity:0;transform:translateY(40px);transition:all .8s cubic-bezier(.16,1,.3,1)}
+.section-content.visible{opacity:1;transform:translateY(0)}
+h1{font-size:3.5rem;font-weight:800;line-height:1.1;margin-bottom:1rem;font-family:'Instrument Serif',serif;font-style:italic;font-weight:400}
+h2{font-size:2.5rem;font-weight:700;line-height:1.2;margin-bottom:1rem;font-family:'Instrument Serif',serif;font-style:italic;font-weight:400}
+h3{font-size:1.3rem;font-weight:600;margin-bottom:.75rem}
+.gradient-text{background:linear-gradient(135deg,#00d46a,#00c8e6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.subtitle{font-size:1.15rem;color:var(--text-muted);max-width:700px;margin-bottom:2rem}
+.badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:100px;font-size:.8rem;font-weight:500;border:1px solid rgba(0,212,106,0.3);background:rgba(0,212,106,0.1);color:var(--primary);margin-bottom:1.5rem}
+.badge .pulse{width:8px;height:8px;border-radius:50%;background:var(--primary);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.3)}}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:1.5rem;transition:all .3s}
+
+/* Expert grid */
+.expert-grid{display:grid;grid-template-columns:repeat(16,1fr);gap:4px;margin:1.5rem 0;max-width:800px}
+.expert{width:100%;aspect-ratio:1;border-radius:6px;border:1px solid var(--border);background:var(--bg-card);display:flex;align-items:center;justify-content:center;font-size:.55rem;font-weight:700;color:var(--text-dim);transition:all .4s;cursor:default;position:relative}
+.expert.active{border-color:var(--tertiary);background:rgba(245,158,11,0.2);color:var(--tertiary);box-shadow:0 0 12px rgba(245,158,11,0.3);transform:scale(1.1);z-index:2}
+.expert.inactive{opacity:.3}
+
+/* Router visualization */
+.router-viz{display:flex;align-items:center;gap:2rem;margin:2rem 0;justify-content:center;flex-wrap:wrap}
+.router-box{padding:1.5rem 2rem;border-radius:16px;border:2px solid var(--primary);background:rgba(0,212,106,0.1);text-align:center;min-width:160px}
+.router-box h4{color:var(--primary);font-size:1rem}
+.router-arrow{font-size:1.5rem;color:var(--tertiary);animation:bounceRight 1.5s ease infinite}
+@keyframes bounceRight{0%,100%{transform:translateX(0)}50%{transform:translateX(8px)}}
+
+/* Token input area */
+.token-input-area{display:flex;gap:.75rem;margin:1.5rem 0;flex-wrap:wrap;justify-content:center}
+.token-btn{padding:10px 20px;border-radius:10px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);cursor:pointer;font-family:inherit;font-size:.85rem;font-weight:500;transition:all .3s}
+.token-btn:hover{border-color:var(--primary);background:rgba(0,212,106,0.1)}
+.token-btn.active{border-color:var(--tertiary);background:rgba(245,158,11,0.15);color:var(--tertiary)}
+
+/* Comparison table */
+.compare-table{width:100%;border-collapse:separate;border-spacing:0;margin:1.5rem 0;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.compare-table th{padding:12px 16px;background:var(--bg-card);font-size:.8rem;font-weight:600;text-align:left;color:var(--text-muted);border-bottom:1px solid var(--border)}
+.compare-table td{padding:12px 16px;font-size:.85rem;border-bottom:1px solid var(--border)}
+.compare-table tr:last-child td{border-bottom:none}
+.compare-table .highlight{color:var(--tertiary);font-weight:600}
+
+/* GPU layout */
+.gpu-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:1rem 0;max-width:600px}
+.gpu-chip{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:.75rem;text-align:center;transition:all .4s;position:relative;overflow:hidden}
+.gpu-chip.active-gpu{border-color:var(--success);box-shadow:0 0 15px rgba(16,185,129,0.2)}
+.gpu-label{font-size:.7rem;font-weight:700;color:var(--text-dim);margin-bottom:.5rem}
+.gpu-experts{display:flex;flex-wrap:wrap;gap:2px;justify-content:center}
+.gpu-expert{width:14px;height:14px;border-radius:3px;background:var(--bg);border:1px solid rgba(255,255,255,0.05);transition:all .3s}
+.gpu-expert.filled{background:rgba(245,158,11,0.3);border-color:rgba(245,158,11,0.5)}
+.gpu-expert.routed{background:rgba(245,158,11,0.7);border-color:var(--tertiary);box-shadow:0 0 6px rgba(245,158,11,0.4)}
+
+/* Parameter comparison */
+.param-bar{display:flex;align-items:center;gap:1rem;margin:.75rem 0}
+.param-label{min-width:120px;font-size:.85rem;font-weight:500}
+.param-track{flex:1;height:28px;background:var(--bg);border-radius:6px;overflow:hidden;position:relative}
+.param-fill{height:100%;border-radius:6px;display:flex;align-items:center;padding:0 10px;font-size:.72rem;font-weight:600;transition:width 1s cubic-bezier(.16,1,.3,1)}
+.param-val{min-width:80px;text-align:right;font-size:.85rem;font-weight:600}
+
+canvas#particles{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
+@media(max-width:768px){h1{font-size:2.2rem}h2{font-size:1.8rem}.section{padding:80px 1rem 40px}.expert-grid{grid-template-columns:repeat(8,1fr)}.gpu-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body class="bg-grid">
+<div class="progress-bar" id="progressBar"></div>
+<div class="bg-glow-1"></div><div class="bg-glow-2"></div>
+<canvas id="particles"></canvas>
+
+<nav class="nav"><div class="nav-inner">
+  <div class="nav-title"><span>05</span> / Mixture of Experts</div>
+  <div class="nav-dots" id="navDots"></div>
+</div></nav>
+
+<!-- Section 1: Title -->
+<div class="section" id="section-0">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Visual Walkthrough</div>
+    <h1>Mixture of<br><span class="gradient-text">Experts</span></h1>
+    <p class="subtitle">MoE models scale to enormous sizes while keeping compute cost manageable. Only a small fraction of parameters are activated for each token.</p>
+    <div style="display:flex;gap:1.5rem;margin-top:2rem;flex-wrap:wrap;">
+      <div style="padding:14px 20px;border-radius:12px;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);">
+        <div style="font-weight:700;font-size:1.5rem;color:var(--tertiary);">128</div>
+        <div style="font-size:.8rem;color:var(--text-muted);">Total experts</div>
+      </div>
+      <div style="padding:14px 20px;border-radius:12px;background:rgba(0,212,106,0.1);border:1px solid rgba(0,212,106,0.3);">
+        <div style="font-weight:700;font-size:1.5rem;color:var(--primary);">8</div>
+        <div style="font-size:.8rem;color:var(--text-muted);">Active per token</div>
+      </div>
+      <div style="padding:14px 20px;border-radius:12px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);">
+        <div style="font-weight:700;font-size:1.5rem;color:var(--success);">6.25%</div>
+        <div style="font-size:.8rem;color:var(--text-muted);">Sparsity ratio</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 2: What is MoE -->
+<div class="section" id="section-1">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Concept</div>
+    <h2>What is <span class="gradient-text">MoE?</span></h2>
+    <p class="subtitle">In a standard (dense) transformer, every token passes through every FFN. In MoE, a learned router selects only a few "expert" FFNs per token.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;">
+      <div class="card" onmouseenter="this.style.borderColor='var(--text-dim)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <h3 style="color:var(--text-dim);font-size:1rem;">Dense Model</h3>
+        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:1rem;">Every token uses every parameter</p>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="padding:10px;border-radius:8px;background:rgba(100,100,100,0.15);border:1px solid rgba(100,100,100,0.3);font-size:.8rem;text-align:center;">Single FFN (all parameters active)</div>
+        </div>
+        <div style="margin-top:1rem;padding:.75rem;background:var(--bg);border-radius:8px;font-size:.78rem;color:var(--text-muted);">
+          <strong>Llama 3.1 70B:</strong> 70B total = 70B active per token
+        </div>
+      </div>
+      <div class="card" style="border-color:rgba(245,158,11,0.3);" onmouseenter="this.style.borderColor='var(--tertiary)'" onmouseleave="this.style.borderColor='rgba(245,158,11,0.3)'">
+        <h3 style="color:var(--tertiary);font-size:1rem;">MoE Model</h3>
+        <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:1rem;">Each token routes to a few experts</p>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div style="padding:10px;border-radius:8px;background:rgba(0,212,106,0.15);border:1px solid rgba(0,212,106,0.3);font-size:.8rem;text-align:center;color:var(--primary);">Router (gating network)</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;">
+            <div style="padding:8px;border-radius:6px;background:rgba(245,158,11,0.2);border:1px solid rgba(245,158,11,0.4);font-size:.65rem;text-align:center;color:var(--tertiary);">E1 &#x2713;</div>
+            <div style="padding:8px;border-radius:6px;background:rgba(100,100,100,0.05);border:1px solid rgba(100,100,100,0.1);font-size:.65rem;text-align:center;color:var(--text-dim);">E2</div>
+            <div style="padding:8px;border-radius:6px;background:rgba(245,158,11,0.2);border:1px solid rgba(245,158,11,0.4);font-size:.65rem;text-align:center;color:var(--tertiary);">E3 &#x2713;</div>
+            <div style="padding:8px;border-radius:6px;background:rgba(100,100,100,0.05);border:1px solid rgba(100,100,100,0.1);font-size:.65rem;text-align:center;color:var(--text-dim);">E4</div>
+          </div>
+        </div>
+        <div style="margin-top:1rem;padding:.75rem;background:var(--bg);border-radius:8px;font-size:.78rem;color:var(--text-muted);">
+          <strong style="color:var(--tertiary);">DeepSeek V3:</strong> 671B total, only <strong style="color:var(--tertiary);">37B active</strong> per token
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 3: Interactive Router -->
+<div class="section" id="section-2">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Interactive</div>
+    <h2>The <span class="gradient-text">Router</span> in Action</h2>
+    <p class="subtitle">Select different token types below and watch the router activate different experts. Each token category tends to activate a different subset.</p>
+
+    <div class="token-input-area">
+      <button class="token-btn active" data-token="math" onclick="routeToken('math',this)">&#x1F4D0; Math Token</button>
+      <button class="token-btn" data-token="code" onclick="routeToken('code',this)">&#x1F4BB; Code Token</button>
+      <button class="token-btn" data-token="language" onclick="routeToken('language',this)">&#x1F4DD; Language Token</button>
+      <button class="token-btn" data-token="reasoning" onclick="routeToken('reasoning',this)">&#x1F9E0; Reasoning Token</button>
+      <button class="token-btn" data-token="factual" onclick="routeToken('factual',this)">&#x1F4DA; Factual Token</button>
+    </div>
+
+    <div class="router-viz">
+      <div style="text-align:center;">
+        <div style="font-size:.8rem;color:var(--text-dim);margin-bottom:.5rem;">Input Token</div>
+        <div style="padding:1rem 2rem;border-radius:12px;border:1px solid var(--secondary);background:rgba(34,211,238,0.1);font-weight:600;color:var(--secondary);" id="currentToken">&#x1F4D0; Math</div>
+      </div>
+      <div class="router-arrow">&rarr;</div>
+      <div class="router-box">
+        <h4>Router</h4>
+        <div style="font-size:.75rem;color:var(--text-muted);margin-top:.25rem;">softmax(W &middot; x)</div>
+      </div>
+      <div class="router-arrow">&rarr;</div>
+      <div style="text-align:center;">
+        <div style="font-size:.8rem;color:var(--text-dim);margin-bottom:.5rem;">Top-8 Experts</div>
+        <div style="font-weight:600;color:var(--tertiary);" id="activeExperts">E3, E17, E42, E56, E71, E89, E102, E118</div>
+      </div>
+    </div>
+
+    <div style="text-align:center;font-size:.85rem;color:var(--text-muted);margin-bottom:1rem;">128 experts &mdash; <span style="color:var(--tertiary);font-weight:600;">8 activated</span> (highlighted below)</div>
+
+    <div class="expert-grid" id="expertGrid"></div>
+  </div>
+</div>
+
+<!-- Section 4: Active vs Total params -->
+<div class="section" id="section-3">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Parameters</div>
+    <h2>Active vs Total <span class="gradient-text">Parameters</span></h2>
+    <p class="subtitle">MoE models have far more total parameters than active parameters. This means more knowledge capacity at lower inference cost.</p>
+
+    <div class="card" style="margin-bottom:1.5rem;">
+      <h3 style="font-size:1rem;color:var(--secondary);margin-bottom:1rem;">Parameter Breakdown: DeepSeek V3</h3>
+      <div class="param-bar">
+        <div class="param-label" style="color:var(--tertiary);">Total Params</div>
+        <div class="param-track"><div class="param-fill" style="width:0%;background:linear-gradient(90deg,rgba(245,158,11,0.4),rgba(245,158,11,0.2));" data-width="100" id="totalBar">671B</div></div>
+        <div class="param-val" style="color:var(--tertiary);">671B</div>
+      </div>
+      <div class="param-bar">
+        <div class="param-label" style="color:var(--primary);">Active Params</div>
+        <div class="param-track"><div class="param-fill" style="width:0%;background:linear-gradient(90deg,rgba(0,212,106,0.6),rgba(0,212,106,0.3));" data-width="5.5" id="activeBar">37B</div></div>
+        <div class="param-val" style="color:var(--primary);">37B</div>
+      </div>
+      <div class="param-bar">
+        <div class="param-label" style="color:var(--text-dim);">Shared (non-expert)</div>
+        <div class="param-track"><div class="param-fill" style="width:0%;background:linear-gradient(90deg,rgba(148,163,184,0.3),rgba(148,163,184,0.1));" data-width="4" id="sharedBar">~26B</div></div>
+        <div class="param-val" style="color:var(--text-dim);">~26B</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+      <div style="padding:1rem;background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.2);border-radius:12px;">
+        <div style="font-size:.85rem;font-weight:600;color:var(--tertiary);margin-bottom:.5rem;">What are "shared" parameters?</div>
+        <div style="font-size:.8rem;color:var(--text-muted);">Attention layers, embeddings, normalization, and the router weights are shared across all tokens. Only the FFN experts are sparse. In DeepSeek V3: ~26B shared + 8/128 * ~645B expert params = ~37B active.</div>
+      </div>
+      <div style="padding:1rem;background:rgba(0,212,106,0.05);border:1px solid rgba(0,212,106,0.2);border-radius:12px;">
+        <div style="font-size:.85rem;font-weight:600;color:var(--primary);margin-bottom:.5rem;">Why more total params helps</div>
+        <div style="font-size:.8rem;color:var(--text-muted);">More experts = more specialized knowledge stored across the model. Different experts learn different domains. The model's total knowledge capacity scales with total params, while compute scales with active params.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 5: Expert Parallelism -->
+<div class="section" id="section-4">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Parallelism</div>
+    <h2>Expert <span class="gradient-text">Parallelism (EP)</span></h2>
+    <p class="subtitle">Experts are distributed across GPUs. Each GPU holds a subset of experts. Tokens are routed to the correct GPU via all-to-all communication.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;">
+      <div>
+        <h3 style="color:var(--success);font-size:1rem;margin-bottom:1rem;">8 GPUs, 128 Experts</h3>
+        <div class="gpu-grid" id="gpuGrid"></div>
+        <div style="font-size:.78rem;color:var(--text-muted);margin-top:.75rem;">Each GPU holds 16 experts. <span style="color:var(--tertiary);font-weight:600;">Highlighted</span> = active for current token.</div>
+        <button onclick="simulateEP()" style="margin-top:1rem;padding:8px 20px;border-radius:8px;background:var(--primary);color:white;border:none;cursor:pointer;font-family:inherit;font-size:.82rem;font-weight:600;">&#x25B6; Simulate Routing</button>
+      </div>
+      <div>
+        <h3 style="color:var(--secondary);font-size:1rem;margin-bottom:1rem;">How EP Works</h3>
+        <div style="display:flex;flex-direction:column;gap:.75rem;">
+          <div class="card" style="padding:1rem;">
+            <div style="font-size:.85rem;font-weight:600;color:var(--primary);">1. All-to-All Dispatch</div>
+            <p style="font-size:.78rem;color:var(--text-muted);">Tokens are sent from their source GPU to the GPU hosting their selected expert. This requires fast interconnect (NVLink).</p>
+          </div>
+          <div class="card" style="padding:1rem;">
+            <div style="font-size:.85rem;font-weight:600;color:var(--tertiary);">2. Expert Computation</div>
+            <p style="font-size:.78rem;color:var(--text-muted);">Each GPU processes tokens through its local experts. Different GPUs may process different numbers of tokens (load imbalance).</p>
+          </div>
+          <div class="card" style="padding:1rem;">
+            <div style="font-size:.85rem;font-weight:600;color:var(--success);">3. All-to-All Combine</div>
+            <p style="font-size:.78rem;color:var(--text-muted);">Results are sent back to the source GPU. The router weights are used to combine expert outputs.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 6: Dense vs MoE comparison -->
+<div class="section" id="section-5">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Comparison</div>
+    <h2>Dense vs <span class="gradient-text">MoE</span></h2>
+    <p class="subtitle">Side-by-side comparison of leading dense and MoE models.</p>
+
+    <table class="compare-table">
+      <thead>
+        <tr>
+          <th>Property</th>
+          <th>Llama 3.1 70B (Dense)</th>
+          <th>DeepSeek V3 (MoE)</th>
+          <th>Llama 4 Maverick (MoE)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="font-weight:600;">Total Parameters</td>
+          <td>70B</td>
+          <td class="highlight">671B</td>
+          <td class="highlight">400B</td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;">Active Parameters</td>
+          <td>70B</td>
+          <td class="highlight">37B</td>
+          <td class="highlight">17B</td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;">Num Experts</td>
+          <td>N/A (dense)</td>
+          <td>256 (+ 1 shared)</td>
+          <td>128</td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;">Active Experts</td>
+          <td>N/A</td>
+          <td>8</td>
+          <td>1</td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;">Memory Required</td>
+          <td>~140 GB (FP16)</td>
+          <td>~1.3 TB (FP16)</td>
+          <td>~800 GB (FP16)</td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;">FLOPs per Token</td>
+          <td>~140 GFLOPs</td>
+          <td class="highlight">~74 GFLOPs</td>
+          <td class="highlight">~34 GFLOPs</td>
+        </tr>
+        <tr>
+          <td style="font-weight:600;">Quality</td>
+          <td>Strong</td>
+          <td style="color:var(--success);font-weight:600;">Excellent</td>
+          <td style="color:var(--success);font-weight:600;">Very Strong</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="padding:1rem;background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.2);border-radius:10px;margin-top:1rem;">
+      <strong style="color:var(--tertiary);font-size:.85rem;">Key Insight:</strong>
+      <span style="font-size:.82rem;color:var(--text-muted);"> MoE achieves similar or better quality than dense models with far fewer active FLOPs. The tradeoff: you need more total GPU memory to hold all experts, even though most are idle per token.</span>
+    </div>
+  </div>
+</div>
+
+<!-- Section 7: Challenges -->
+<div class="section" id="section-6">
+  <div class="section-content">
+    <div class="badge"><span class="pulse"></span> Challenges</div>
+    <h2>MoE <span class="gradient-text">Challenges</span></h2>
+    <p class="subtitle">MoE brings unique engineering challenges that don't exist in dense models.</p>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;">
+      <div class="card" onmouseenter="this.style.borderColor='var(--danger)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <div style="font-size:1.5rem;text-align:center;margin-bottom:.75rem;">&#x2696;</div>
+        <h3 style="color:var(--danger);font-size:.95rem;">Load Imbalance</h3>
+        <p style="font-size:.78rem;color:var(--text-muted);">Some experts may be selected far more than others, creating "hot" GPUs. Solutions: auxiliary load-balancing loss, expert capacity limits.</p>
+      </div>
+      <div class="card" onmouseenter="this.style.borderColor='var(--tertiary)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <div style="font-size:1.5rem;text-align:center;margin-bottom:.75rem;">&#x1F4E1;</div>
+        <h3 style="color:var(--tertiary);font-size:.95rem;">Communication Overhead</h3>
+        <p style="font-size:.78rem;color:var(--text-muted);">All-to-all communication for routing tokens between GPUs. Requires high-bandwidth NVLink. Multi-node EP is even harder with InfiniBand.</p>
+      </div>
+      <div class="card" onmouseenter="this.style.borderColor='var(--memory)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <div style="font-size:1.5rem;text-align:center;margin-bottom:.75rem;">&#x1F4BE;</div>
+        <h3 style="color:var(--primary);font-size:.95rem;">Memory Overhead</h3>
+        <p style="font-size:.78rem;color:var(--text-muted);">All experts must fit in GPU memory even though most are idle. A 671B MoE model needs ~10x more memory than a 70B dense model.</p>
+      </div>
+    </div>
+
+    <div style="margin-top:1.5rem;display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+      <div class="card" onmouseenter="this.style.borderColor='var(--success)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <h3 style="color:var(--success);font-size:.95rem;">Expert Offloading</h3>
+        <p style="font-size:.8rem;color:var(--text-muted);">Keep inactive experts in CPU memory or NVMe, load them on-demand. Trades latency for memory savings. Useful for inference on fewer GPUs.</p>
+      </div>
+      <div class="card" onmouseenter="this.style.borderColor='var(--secondary)'" onmouseleave="this.style.borderColor='var(--border)'">
+        <h3 style="color:var(--secondary);font-size:.95rem;">Expert Pruning / Merging</h3>
+        <p style="font-size:.8rem;color:var(--text-muted);">Identify redundant experts and merge them. Reduces total parameters while keeping quality. Active area of research.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section 8: Summary -->
+<div class="section" id="section-7">
+  <div class="section-content" style="text-align:center;">
+    <div class="badge"><span class="pulse"></span> Summary</div>
+    <h2>MoE <span class="gradient-text">Takeaways</span></h2>
+    <div style="display:inline-block;text-align:left;background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:2rem;max-width:700px;width:100%;margin-top:1rem;">
+      <div style="display:flex;flex-direction:column;gap:.75rem;">
+        <div style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;border-radius:8px;background:rgba(245,158,11,0.05);border-left:3px solid var(--tertiary);">
+          <span style="font-weight:700;color:var(--tertiary);min-width:20px;">1</span>
+          <span style="color:var(--text-muted);font-size:.9rem;">MoE replaces the dense FFN with <strong style="color:var(--text);">N experts + a router</strong>. Only top-k experts are activated per token.</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;border-radius:8px;background:rgba(0,212,106,0.05);border-left:3px solid var(--primary);">
+          <span style="font-weight:700;color:var(--primary);min-width:20px;">2</span>
+          <span style="color:var(--text-muted);font-size:.9rem;"><strong style="color:var(--text);">More capacity, less compute.</strong> 671B total params but only 37B active FLOPs per token.</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;border-radius:8px;background:rgba(16,185,129,0.05);border-left:3px solid var(--success);">
+          <span style="font-weight:700;color:var(--success);min-width:20px;">3</span>
+          <span style="color:var(--text-muted);font-size:.9rem;"><strong style="color:var(--text);">Expert Parallelism (EP)</strong> distributes experts across GPUs with all-to-all communication.</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:1rem;padding:.6rem 1rem;border-radius:8px;background:rgba(34,211,238,0.05);border-left:3px solid var(--secondary);">
+          <span style="font-weight:700;color:var(--secondary);min-width:20px;">4</span>
+          <span style="color:var(--text-muted);font-size:.9rem;"><strong style="color:var(--text);">Tradeoff:</strong> lower compute per token but higher memory footprint and communication cost.</span>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:2rem;display:flex;gap:1rem;justify-content:center;">
+      <a href="04_attention_visualization.html" style="color:var(--text-dim);text-decoration:none;font-size:.85rem;">&larr; Attention</a>
+      <a href="06_gpu_architecture.html" style="color:var(--primary);text-decoration:none;font-size:.85rem;font-weight:600;">GPU Architecture &rarr;</a>
+    </div>
+  </div>
+</div>
+
+<script>
+// Navigation
+const sections=document.querySelectorAll('.section');const navDotsContainer=document.getElementById('navDots');const progressBar=document.getElementById('progressBar');
+sections.forEach((_,i)=>{const d=document.createElement('button');d.className='nav-dot';d.onclick=()=>sections[i].scrollIntoView({behavior:'smooth'});navDotsContainer.appendChild(d)});
+const navDots=document.querySelectorAll('.nav-dot');
+const observer=new IntersectionObserver(entries=>{entries.forEach(entry=>{if(entry.isIntersecting){entry.target.querySelector('.section-content').classList.add('visible');const idx=Array.from(sections).indexOf(entry.target);navDots.forEach((d,i)=>d.classList.toggle('active',i===idx));if(idx===3)animateParamBars()}})},{threshold:.25});
+sections.forEach(s=>observer.observe(s));
+window.addEventListener('scroll',()=>{progressBar.style.width=(window.scrollY/(document.documentElement.scrollHeight-window.innerHeight))*100+'%'});
+
+// Build expert grid (128 experts)
+const expertGrid = document.getElementById('expertGrid');
+for(let i=0;i<128;i++){
+  const div=document.createElement('div');
+  div.className='expert';
+  div.id='expert-'+i;
+  div.textContent=i+1;
+  expertGrid.appendChild(div);
+}
+
+// Token routing patterns
+const routingPatterns = {
+  math: [2,16,41,55,70,88,101,117],
+  code: [5,19,33,47,62,78,95,110],
+  language: [8,24,38,52,67,82,99,121],
+  reasoning: [11,27,43,58,73,91,104,125],
+  factual: [1,14,36,50,65,85,98,113]
+};
+const tokenLabels = {
+  math:'&#x1F4D0; Math', code:'&#x1F4BB; Code', language:'&#x1F4DD; Language',
+  reasoning:'&#x1F9E0; Reasoning', factual:'&#x1F4DA; Factual'
+};
+
+function routeToken(type, btn) {
+  document.querySelectorAll('.token-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('currentToken').innerHTML = tokenLabels[type];
+
+  const active = routingPatterns[type];
+  document.getElementById('activeExperts').textContent = active.map(e=>'E'+(e+1)).join(', ');
+
+  // Animate experts
+  document.querySelectorAll('.expert').forEach((e,i) => {
+    e.classList.remove('active','inactive');
+    setTimeout(()=>{
+      if(active.includes(i)){
+        e.classList.add('active');
+      } else {
+        e.classList.add('inactive');
+      }
+    }, Math.random()*300);
+  });
+
+  // Also update GPU grid if visible
+  updateGPUGrid(active);
+}
+
+// Initialize with math
+setTimeout(()=>routeToken('math',document.querySelector('.token-btn')),500);
+
+// GPU grid
+const gpuGrid = document.getElementById('gpuGrid');
+for(let g=0;g<8;g++){
+  const chip = document.createElement('div');
+  chip.className='gpu-chip';
+  chip.id='gpu-'+g;
+  chip.innerHTML=`<div class="gpu-label">GPU ${g}</div><div class="gpu-experts" id="gpu-experts-${g}"></div>`;
+  gpuGrid.appendChild(chip);
+  const expContainer = document.getElementById('gpu-experts-'+g);
+  for(let e=0;e<16;e++){
+    const exp=document.createElement('div');
+    exp.className='gpu-expert filled';
+    exp.id=`gpu${g}-exp${e}`;
+    exp.title=`Expert ${g*16+e+1}`;
+    expContainer.appendChild(exp);
+  }
+}
+
+function updateGPUGrid(activeExperts) {
+  document.querySelectorAll('.gpu-expert').forEach(e=>e.classList.remove('routed'));
+  document.querySelectorAll('.gpu-chip').forEach(c=>c.classList.remove('active-gpu'));
+  activeExperts.forEach(idx=>{
+    const gpuIdx=Math.floor(idx/16);
+    const expIdx=idx%16;
+    const el=document.getElementById(`gpu${gpuIdx}-exp${expIdx}`);
+    if(el){el.classList.add('routed');document.getElementById('gpu-'+gpuIdx).classList.add('active-gpu')}
+  });
+}
+
+function simulateEP() {
+  const types = Object.keys(routingPatterns);
+  const type = types[Math.floor(Math.random()*types.length)];
+  const btn = document.querySelector(`.token-btn[data-token="${type}"]`);
+  routeToken(type, btn);
+}
+
+// Param bars animation
+let barsAnimated=false;
+function animateParamBars(){
+  if(barsAnimated)return;
+  barsAnimated=true;
+  setTimeout(()=>{
+    document.getElementById('totalBar').style.width='100%';
+    document.getElementById('activeBar').style.width='5.5%';
+    document.getElementById('sharedBar').style.width='4%';
+  },300);
+}
+
+// Particles
+const canvas=document.getElementById('particles');const ctx=canvas.getContext('2d');let particles=[];
+function resizeCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight}
+resizeCanvas();window.addEventListener('resize',resizeCanvas);
+class Particle{constructor(){this.reset()}reset(){this.x=Math.random()*canvas.width;this.y=Math.random()*canvas.height;this.size=Math.random()*1.5+0.5;this.speedX=(Math.random()-0.5)*0.25;this.speedY=(Math.random()-0.5)*0.25;this.opacity=Math.random()*0.2+0.05;const c=['0,212,106','245,158,11','34,211,238'];this.color=c[Math.floor(Math.random()*c.length)]}update(){this.x+=this.speedX;this.y+=this.speedY;if(this.x<0||this.x>canvas.width||this.y<0||this.y>canvas.height)this.reset()}draw(){ctx.beginPath();ctx.arc(this.x,this.y,this.size,0,Math.PI*2);ctx.fillStyle=`rgba(${this.color},${this.opacity})`;ctx.fill()}}
+for(let i=0;i<35;i++)particles.push(new Particle());
+function animP(){ctx.clearRect(0,0,canvas.width,canvas.height);particles.forEach(p=>{p.update();p.draw()});requestAnimationFrame(animP)}animP();
+setTimeout(()=>{document.querySelector('#section-0 .section-content').classList.add('visible')},100);
+</script>
+</body>
+</html>
